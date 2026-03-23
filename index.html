@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Verité editor</title>
+	<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+	<!-- Use jQuery loaded from CDN as requested for menu toggles -->
+	<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+	<script src="https://d3js.org/d3.v7.min.js"></script>
+	<style>
+		/* Base Styling for a desktop application feel */
+		:root {
+			--menu-bg: #f3f3f3;
+			--menu-hover: #0078d7;
+			--menu-hover-text: #ffffff;
+			--menu-border: #cccccc;
+			--canvas-bg: #e5e5e5;
+			--grid-color: #d4d4d4;
+		}
+
+		body,
+		html {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+			height: 100%;
+			font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+			overflow: hidden;
+			/* Prevent webpage scrolling */
+			display: flex;
+			flex-direction: column;
+		}
+
+		/* Menu Bar (Traditional Desktop Application Look) */
+		.menubar {
+			background-color: var(--menu-bg);
+			border-bottom: 1px solid var(--menu-border);
+			display: flex;
+			padding: 0 5px;
+			user-select: none;
+			position: relative;
+			z-index: 1000;
+			box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+		}
+
+		.menu-top-level {
+			padding: 4px 10px;
+			font-size: 13px;
+			cursor: default;
+			position: relative;
+			color: #000;
+		}
+
+		.menu-top-level:hover,
+		.menu-top-level.active {
+			background-color: var(--menu-hover);
+			color: var(--menu-hover-text);
+		}
+
+		/* Dropdown Windows */
+		.dropdown {
+			display: none;
+			position: absolute;
+			top: 100%;
+			left: 0;
+			background-color: var(--menu-bg);
+			border: 1px solid var(--menu-border);
+			box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+			padding: 2px 0;
+			min-width: 200px;
+			color: #000;
+		}
+
+		.menu-top-level.active>.dropdown {
+			display: block;
+		}
+
+		/* Dropdown Items */
+		.dropdown-item {
+			padding: 4px 25px 4px 35px;
+			font-size: 13px;
+			cursor: default;
+			position: relative;
+			display: flex;
+			justify-content: space-between;
+		}
+
+		.dropdown-item:hover {
+			background-color: var(--menu-hover);
+			color: var(--menu-hover-text);
+		}
+
+		.dropdown-separator {
+			height: 1px;
+			background-color: var(--menu-border);
+			margin: 3px 1px;
+		}
+
+		/* Submenus */
+		.has-submenu::after {
+			content: '▶';
+			font-size: 8px;
+			position: absolute;
+			right: 10px;
+			top: 50%;
+			transform: translateY(-50%);
+		}
+
+		.submenu {
+			display: none;
+			position: absolute;
+			top: -1px;
+			/* Align border */
+			left: 100%;
+			background-color: var(--menu-bg);
+			border: 1px solid var(--menu-border);
+			box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+			padding: 2px 0;
+			min-width: 150px;
+			color: #000;
+		}
+
+		.dropdown-item.has-submenu:hover>.submenu,
+		.dropdown-item.has-submenu.active-submenu>.submenu {
+			display: block;
+		}
+
+		/* Canvas Area Workflow */
+		.canvas-container {
+			flex-grow: 1;
+			background-color: var(--canvas-bg);
+			/* Subtle Grid Pattern */
+			background-image:
+				linear-gradient(var(--grid-color) 1px, transparent 1px),
+				linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+			background-size: 20px 20px;
+			position: relative;
+			overflow: hidden;
+		}
+
+		/* Dialog Styles */
+		.modern-dialog {
+			padding: 20px;
+			border-radius: 8px;
+			border: 1px solid #ccc;
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+			min-width: 350px;
+			font-family: inherit;
+			background: #fff;
+		}
+
+		.modern-dialog::backdrop {
+			background: rgba(0, 0, 0, 0.5);
+		}
+
+		.dialog-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 15px;
+			border-bottom: 1px solid #eee;
+			padding-bottom: 10px;
+		}
+
+		.dialog-header h2 {
+			margin: 0;
+			font-size: 18px;
+		}
+
+		.close-x {
+			background: none;
+			border: none;
+			font-size: 20px;
+			cursor: pointer;
+			color: #666;
+		}
+
+		.form-section {
+			margin-bottom: 15px;
+		}
+
+		.form-section h3 {
+			margin: 0 0 10px 0;
+			font-size: 14px;
+			color: #333;
+			border-bottom: 1px solid #eee;
+			padding-bottom: 5px;
+		}
+
+		.form-row {
+			display: flex;
+			margin-bottom: 10px;
+			align-items: flex-start;
+		}
+
+		.form-row label {
+			width: 100px;
+			font-size: 13px;
+			color: #555;
+			margin-top: 4px;
+		}
+
+		.input-wrapper {
+			flex-grow: 1;
+			display: flex;
+			flex-direction: column;
+		}
+
+		.input-wrapper input[type="text"],
+		.input-wrapper textarea {
+			width: 100%;
+			padding: 6px;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			box-sizing: border-box;
+		}
+
+		.error-msg {
+			color: #ff4444;
+			font-size: 11px;
+			margin-top: 3px;
+			min-height: 13px;
+			/* reserve space */
+		}
+
+		.section-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.icon-btn {
+			background: #eee;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			cursor: pointer;
+			padding: 2px 8px;
+		}
+
+		.rel-list {
+			border: 1px solid #eee;
+			min-height: 60px;
+			max-height: 120px;
+			overflow-y: auto;
+			margin-bottom: 10px;
+			border-radius: 4px;
+		}
+
+		.rel-item {
+			padding: 4px 8px;
+			font-size: 13px;
+			cursor: pointer;
+			border-bottom: 1px solid #f9f9f9;
+		}
+
+		.rel-item.selected {
+			background: #e0f0ff;
+		}
+
+		.dialog-footer {
+			display: flex;
+			justify-content: space-between;
+			margin-top: 20px;
+			border-top: 1px solid #eee;
+			padding-top: 15px;
+		}
+
+		.primary-actions {
+			display: flex;
+			gap: 10px;
+		}
+
+		button {
+			padding: 6px 12px;
+			border-radius: 4px;
+			border: 1px solid #ccc;
+			cursor: pointer;
+			background: #f9f9f9;
+		}
+
+		.primary-btn {
+			background: #0078d7;
+			color: white;
+			border-color: #006abc;
+		}
+
+		.danger-btn {
+			background: #d9534f;
+			color: white;
+			border-color: #d43f3a;
+		}
+	</style>
+</head>
+
+<body>
+
+	<!-- Link Banner -->
+	<div id="link-banner"
+		style="display:none; position:absolute; top:30px; left:0; right:0; background:#f0ad4e; color:white; text-align:center; padding:10px; z-index:2000; font-weight:bold;">
+		Click a node to link to, or press Escape to cancel
+	</div>
+
+	<!-- Menu Bar -->
+	<div class="menubar" id="menubar">
+		<!-- File Menu -->
+		<div class="menu-top-level">
+			File
+			<div class="dropdown">
+				<div class="dropdown-item">New</div>
+				<div class="dropdown-item">Open</div>
+				<div class="dropdown-item">Save</div>
+				<div class="dropdown-item">Save As</div>
+				<div class="dropdown-item has-submenu">
+					Export
+					<div class="submenu">
+						<div class="dropdown-item">GEDCOM</div>
+						<div class="dropdown-item">RDF</div>
+					</div>
+				</div>
+				<div class="dropdown-separator"></div>
+				<div class="dropdown-item">Exit</div>
+			</div>
+		</div>
+
+		<!-- Edit Menu -->
+		<div class="menu-top-level">
+			Edit
+			<div class="dropdown">
+				<div class="dropdown-item">Undo</div>
+				<div class="dropdown-item">Redo</div>
+				<div class="dropdown-separator"></div>
+				<div class="dropdown-item" id="menu-edit-node">Edit Node</div>
+				<div class="dropdown-item">Delete Node</div>
+			</div>
+		</div>
+
+		<!-- View Menu -->
+		<div class="menu-top-level">
+			View
+			<div class="dropdown">
+				<div class="dropdown-item">Zoom In</div>
+				<div class="dropdown-item">Zoom Out</div>
+				<div class="dropdown-item">Fit to Screen</div>
+				<div class="dropdown-item">Reset Layout</div>
+			</div>
+		</div>
+
+		<!-- Search Menu (Acts as a button for now) -->
+		<div class="menu-top-level" id="searchMenu">
+			Search
+		</div>
+	</div>
+
+	<!-- Main Canvas Area -->
+	<div class="canvas-container">
+
+	</div>
+
+	<script>
+		$(document).ready(function () {
+			// Search menu item specific behavior
+			$('#searchMenu').on('click', function (e) {
+				window.open('/verite/match/index.html', '_blank');
+				// Close any open menus
+				$('.menu-top-level').removeClass('active');
+				e.stopPropagation();
+			});
+
+			// Handle top-level menu click to toggle dropdowns
+			$('.menu-top-level:not(#searchMenu)').on('click', function (e) {
+				// Determine if this is currently active before modifying siblings
+				const isActive = $(this).hasClass('active');
+
+				// Remove active from everywhere
+				$('.menu-top-level').removeClass('active');
+
+				// Toggle this one only if it wasn't active
+				if (!isActive) {
+					$(this).addClass('active');
+				}
+
+				// Prevent bubbling to document which closes menus
+				e.stopPropagation();
+			});
+
+			// Prevent closing the menu when clicking on a dropdown item
+			$('.dropdown').on('click', function (e) {
+				// Here, normally you would execute the action for the clicked item.
+				// We let it bubble up to document so it closes the menu, mimicking desktop behavior.
+			});
+
+			// Submenu mouseenter / mouseleave
+			$('.has-submenu').on('mouseenter', function () {
+				$(this).addClass('active-submenu');
+			}).on('mouseleave', function () {
+				$(this).removeClass('active-submenu');
+			});
+
+			// Close menus when clicking outside
+			$(document).on('click', function () {
+				$('.menu-top-level').removeClass('active');
+			});
+
+			// Edit Menu Logic
+			$('#menu-edit-node').on('click', function (e) {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				if (!state.selectedPid) {
+					alert("Please select a node first");
+					return;
+				}
+				const n = getNode(state.selectedPid);
+				if (n) openModalForNode(n.pid);
+			});
+		});
+	</script>
+
+	<script id="data-model">
+		// --- Phase 2: Data Model ---
+
+		// Global state
+		let state = {
+			nodes: [],
+			triplets: [],
+			selectedPid: null
+		};
+
+		// Undo/Redo Stacks
+		let undoStack = [];
+		let redoStack = [];
+
+		// PID Counter
+		let pidCounter = 1;
+
+		// State management
+		function saveState() {
+			// Deep copy using JSON (safe since our data is simple JS objects)
+			undoStack.push(JSON.parse(JSON.stringify(state)));
+			redoStack = []; // Clear redo stack on new action
+		}
+
+		function undo() {
+			if (undoStack.length > 0) {
+				redoStack.push(JSON.parse(JSON.stringify(state)));
+				state = undoStack.pop();
+			}
+		}
+
+		function redo() {
+			if (redoStack.length > 0) {
+				undoStack.push(JSON.parse(JSON.stringify(state)));
+				state = redoStack.pop();
+			}
+		}
+
+		// Bind keyboard shortcuts for Undo/Redo
+		$(document).on('keydown', function (e) {
+			// Ctrl+Z
+			if (e.ctrlKey && e.key === 'z') {
+				e.preventDefault();
+				undo();
+				if (typeof applyLayout === 'function') applyLayout();
+				if (typeof renderNodes === 'function') { renderNodes(); renderEdges(); }
+			}
+			// Ctrl+Y
+			if (e.ctrlKey && e.key === 'y') {
+				e.preventDefault();
+				redo();
+				if (typeof applyLayout === 'function') applyLayout();
+				if (typeof renderNodes === 'function') { renderNodes(); renderEdges(); }
+			}
+		});
+
+		// Visibility Logic Map for Expand/Collapse states
+		function getVisibleNodes() {
+			const visible = new Set(state.nodes.map(n => n.pid));
+
+			function hideDirection(pid, dir) {
+				const queue = [];
+				state.triplets.forEach(t => {
+					if (dir === 'down') {
+						if (t.subject === pid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) queue.push(t.object);
+						if (t.object === pid && t.predicate === 'ChildOf') queue.push(t.subject);
+					} else if (dir === 'up') {
+						if (t.object === pid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) queue.push(t.subject);
+						if (t.subject === pid && t.predicate === 'ChildOf') queue.push(t.object);
+					} else if (dir === 'right' || dir === 'left') {
+						if (t.subject === pid && t.predicate === 'SpouseOf') {
+							const other = getNode(t.object);
+							const me = getNode(pid);
+							if (other && me) {
+								if (dir === 'right' && other.x > me.x) queue.push(t.object);
+								if (dir === 'left' && other.x < me.x) queue.push(t.object);
+							}
+						}
+					}
+				});
+
+				function hideDescendants(cpid) {
+					if (visible.has(cpid)) {
+						visible.delete(cpid);
+						state.triplets.forEach(t => {
+							if (t.subject === cpid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) hideDescendants(t.object);
+							if (t.object === cpid && t.predicate === 'ChildOf') hideDescendants(t.subject);
+							if (t.subject === cpid && t.predicate === 'SpouseOf') hideDescendants(t.object);
+						});
+					}
+				}
+
+				function hideAncestors(cpid) {
+					if (visible.has(cpid)) {
+						visible.delete(cpid);
+						state.triplets.forEach(t => {
+							if (t.object === cpid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) hideAncestors(t.subject);
+							if (t.subject === cpid && t.predicate === 'ChildOf') hideAncestors(t.object);
+							if (t.subject === cpid && t.predicate === 'SpouseOf') hideAncestors(t.object);
+						});
+					}
+				}
+
+				queue.forEach(targetPid => {
+					if (dir === 'down') hideDescendants(targetPid);
+					else if (dir === 'up') hideAncestors(targetPid);
+					else hideAncestors(targetPid); // For spouses, hiding their ancestral line is safe
+				});
+			}
+
+			state.nodes.forEach(n => {
+				if (n.hiddenDirs) {
+					if (n.hiddenDirs.bottom) hideDirection(n.pid, 'down');
+					if (n.hiddenDirs.top) hideDirection(n.pid, 'up');
+					if (n.hiddenDirs.right) hideDirection(n.pid, 'right');
+					if (n.hiddenDirs.left) hideDirection(n.pid, 'left');
+				}
+			});
+			return visible;
+		}
+
+		// Core Functions
+
+		function generatePid() {
+			let newPid;
+			do {
+				newPid = "P" + String(pidCounter).padStart(3, '0');
+				pidCounter++;
+			} while (getNode(newPid) !== null);
+			return newPid;
+		}
+
+		function clearAll() {
+			saveState();
+			state = {
+				nodes: [],
+				triplets: [],
+				selectedPid: null
+			};
+			pidCounter = 1;
+		}
+
+		function addNode(fields) {
+			saveState();
+			const pid = fields.pid || generatePid();
+			const newNode = {
+				pid: pid,
+				full_name: fields.full_name || "",
+				birth_year: fields.birth_year !== undefined ? fields.birth_year : null,
+				death_year: fields.death_year !== undefined ? fields.death_year : null,
+				gender: fields.gender || "unknown",
+				enslaved: fields.enslaved || false,
+				notes: fields.notes || "",
+				x: fields.x !== undefined ? fields.x : 0,
+				y: fields.y !== undefined ? fields.y : 0,
+				expanded: true,
+				hiddenDirs: { top: false, bottom: false, left: false, right: false }
+			};
+			state.nodes.push(newNode);
+			return newNode;
+		}
+
+		function editNode(pid, fields) {
+			saveState();
+			const node = getNode(pid);
+			if (node) {
+				Object.keys(fields).forEach(key => {
+					if (fields[key] !== undefined && key !== 'pid') {
+						node[key] = fields[key];
+					}
+				});
+			}
+		}
+
+		function deleteNode(pid) {
+			saveState();
+
+			const toDelete = new Set([pid]);
+			const queue = [pid];
+
+			// Find all downstream descendants
+			while (queue.length > 0) {
+				const current = queue.shift();
+				state.triplets.forEach(t => {
+					if ((t.predicate === 'MotherOf' || t.predicate === 'FatherOf') && t.subject === current) {
+						if (!toDelete.has(t.object)) {
+							toDelete.add(t.object);
+							queue.push(t.object);
+						}
+					}
+					if (t.predicate === 'ChildOf' && t.object === current) {
+						if (!toDelete.has(t.subject)) {
+							toDelete.add(t.subject);
+							queue.push(t.subject);
+						}
+					}
+				});
+			}
+
+			// Remove nodes
+			state.nodes = state.nodes.filter(n => !toDelete.has(n.pid));
+			// Remove triplets where any deleted node is subject or object
+			state.triplets = state.triplets.filter(t => !toDelete.has(t.subject) && !toDelete.has(t.object));
+
+			if (toDelete.has(state.selectedPid)) {
+				state.selectedPid = null;
+			}
+		}
+
+		function addTriplet(subject, predicate, object) {
+			saveState();
+			state.triplets.push({ subject, predicate, object });
+			if (predicate === "SpouseOf") {
+				// Automatically add reciprocal
+				const exists = state.triplets.some(t => t.subject === object && t.predicate === "SpouseOf" && t.object === subject);
+				if (!exists) {
+					state.triplets.push({ subject: object, predicate: "SpouseOf", object: subject });
+				}
+			}
+		}
+
+		function removeTriplet(subject, predicate, object) {
+			saveState();
+			const initialLen = state.triplets.length;
+			state.triplets = state.triplets.filter(t => !(t.subject === subject && t.predicate === predicate && t.object === object));
+
+			// If it was SpouseOf and we actually removed one, try removing reciprocal
+			if (predicate === "SpouseOf" && state.triplets.length < initialLen) {
+				state.triplets = state.triplets.filter(t => !(t.subject === object && t.predicate === "SpouseOf" && t.object === subject));
+			}
+		}
+
+		function getNode(pid) {
+			return state.nodes.find(n => n.pid === pid) || null;
+		}
+
+		function getRelationships(pid) {
+			return state.triplets.filter(t => t.subject === pid);
+		}
+
+		// Setup SVG
+		const svg = d3.select(".canvas-container")
+			.append("svg")
+			.attr("width", "100%")
+			.attr("height", "100%")
+			.style("display", "block");
+
+		// Main group for zoom/pan
+		const gMain = svg.append("g");
+
+		// Zoom and Pan behavior
+		const zoom = d3.zoom()
+			.scaleExtent([0.1, 4])
+			.on("zoom", (e) => {
+				gMain.attr("transform", e.transform);
+			});
+
+		svg.call(zoom);
+
+		// Click background to deselect
+		svg.on("click", (e) => {
+			if (e.target.tagName === 'svg') {
+				state.selectedPid = null;
+				updateNodeSelection();
+			}
+		});
+
+		// Initialize layers: edges strictly BEFORE nodes so they sit behind!
+		const gEdges = gMain.append("g").attr("class", "edges-layer");
+		const gNodes = gMain.append("g").attr("class", "nodes-layer");
+
+		// Hardcoded test data
+		clearAll(); // Ensure clean state before injecting our persistent test data
+		undoStack = [];
+
+		addNode({ full_name: "Mary Johnson", birth_year: 1820, death_year: 1890, gender: "female", enslaved: true, x: 200, y: 200 });
+		addNode({ full_name: "James Johnson", birth_year: 1815, death_year: 1878, gender: "male", enslaved: true, x: 500, y: 200 });
+		addNode({ full_name: "Sarah Johnson", birth_year: 1845, death_year: null, gender: "female", enslaved: false, x: 200, y: 450 });
+		addNode({ full_name: "Thomas Johnson", birth_year: 1842, death_year: 1910, gender: "male", enslaved: false, x: 500, y: 450 });
+		addNode({ full_name: "Josh Johnson", pid: "P005", birth_year: 1872, death_year: 1940, gender: "male", enslaved: false, x: -100, y: 200 });
+
+		// Phase 4 test triplets
+		addTriplet("P001", "SpouseOf", "P002");
+		addTriplet("P001", "MotherOf", "P003");
+		addTriplet("P001", "MotherOf", "P004");
+		addTriplet("P002", "FatherOf", "P003");
+		addTriplet("P002", "FatherOf", "P004");
+		addTriplet("P003", "SiblingOf", "P004");
+		addTriplet("P005", "CousinOf", "P001");
+
+		// Node Dimensions
+		const nodeWidth = 160;
+		const nodeHeight = 116;
+
+		// Path definitions for gender silhouettes
+		const femalePath = "M 4 20 L 9 10 A 4.5 4.5 0 1 1 15 10 L 20 20 Z";
+		const malePath = "M 6 20 L 6 14 C 6 11, 9 11, 9 10 A 4.5 4.5 0 1 1 15 10 C 15 11, 18 11, 18 14 L 18 20 Z";
+		const circlePath = "M 12 5.5 A 7.25 7.25 0 1 1 11.9 5.5 Z";
+
+		function getGenderPath(gender) {
+			if (gender === 'female') return femalePath;
+			if (gender === 'male') return malePath;
+			return circlePath;
+		}
+
+		// Drag Behavior
+		const drag = d3.drag()
+			.filter(function (e) {
+				if (typeof linkMode !== 'undefined' && linkMode) return false;
+				return !e.button;
+			})
+			.on("start", function (e, d) {
+				d3.select(this).raise();
+				state.selectedPid = d.pid;
+				updateNodeSelection();
+
+				// Build list of all downstream descendants to drag along
+				d.dragSet = new Set();
+				d.spouseSet = new Set();
+
+				// Record immediate spouses
+				state.triplets.forEach(t => {
+					if (t.predicate === 'SpouseOf') {
+						if (t.subject === d.pid) d.spouseSet.add(t.object);
+						if (t.object === d.pid) d.spouseSet.add(t.subject);
+					}
+				});
+
+				const queue = [d.pid];
+				while (queue.length > 0) {
+					const current = queue.shift();
+					state.triplets.forEach(t => {
+						if ((t.predicate === 'MotherOf' || t.predicate === 'FatherOf') && t.subject === current) {
+							if (!d.dragSet.has(t.object)) { d.dragSet.add(t.object); queue.push(t.object); }
+						}
+						if (t.predicate === 'ChildOf' && t.object === current) {
+							if (!d.dragSet.has(t.subject)) { d.dragSet.add(t.subject); queue.push(t.subject); }
+						}
+					});
+				}
+			})
+			.on("drag", function (e, d) {
+				d.x += e.dx;
+				d.y += e.dy;
+
+				// Move all downstream descendants
+				d.dragSet.forEach(childPid => {
+					const childNode = getNode(childPid);
+					if (childNode) {
+						childNode.x += e.dx;
+						childNode.y += e.dy;
+					}
+				});
+
+				// Vertically align spouses
+				d.spouseSet.forEach(spid => {
+					const spouseNode = getNode(spid);
+					if (spouseNode) {
+						spouseNode.y = d.y;
+					}
+				});
+
+				// Fast DOM update for all nodes uniformly
+				gNodes.selectAll(".node-group").attr("transform", nd => `translate(${nd.x},${nd.y})`);
+				renderEdges(); // Update edges in real time dynamically
+			})
+			.on("end", function (e, d) {
+				delete d.dragSet;
+			});
+
+		function renderNodes() {
+			// Bind data mapped against visibility
+			const visibleSet = getVisibleNodes();
+			const vNodes = state.nodes.filter(n => visibleSet.has(n.pid));
+
+			const nodeSelection = gNodes.selectAll(".node-group")
+				.data(vNodes, d => d.pid);
+
+			// Enter selection
+			const nodeEnter = nodeSelection.enter()
+				.append("g")
+				.attr("class", "node-group")
+				.attr("transform", d => `translate(${d.x},${d.y})`)
+				.call(drag)
+				.on("click", function (e, d) {
+					e.stopPropagation();
+					if (d.clickTimeout) clearTimeout(d.clickTimeout);
+					d.clickTimeout = setTimeout(() => {
+						if (typeof linkMode !== 'undefined' && linkMode) {
+							handleLinkTargetClick(d.pid);
+							return;
+						}
+						state.selectedPid = d.pid;
+						updateNodeSelection();
+					}, 250);
+				})
+				.on("dblclick", function (e, d) {
+					e.stopPropagation();
+					if (d.clickTimeout) clearTimeout(d.clickTimeout);
+					if (typeof openModalForNode === 'function') openModalForNode(d.pid);
+				});
+
+			// 1. Background Rectangle
+			nodeEnter.append("rect")
+				.attr("class", "node-bg")
+				.attr("width", nodeWidth)
+				.attr("height", nodeHeight)
+				.attr("rx", 10)
+				.attr("ry", 10)
+				.attr("fill", d => d.enslaved ? "#FFF2D1" : "#FFFFFF") // Lighter wheat
+				.attr("stroke", "#cccccc")
+				.attr("stroke-width", 2);
+
+			// 2. Silhouette Icon (Centered Top)
+			// Scale viewbox of roughly 24 up to exactly 40 (scale 1.666) -> X-offset to center
+			nodeEnter.append("path")
+				.attr("class", "node-icon")
+				.attr("d", d => getGenderPath(d.gender))
+				// Added additional 4px top padding (y shifts from 9px down to 13px)
+				.attr("transform", "translate(60, 13) scale(1.666)")
+				.attr("fill", d => {
+					if (d.gender === 'female') return 'LightCoral';
+					if (d.gender === 'male') return 'LightBlue';
+					return '#ffffff';
+				})
+				.attr("stroke", "#7a7a7a")
+				.attr("stroke-width", 1);
+
+			// 3. Full name
+			nodeEnter.append("text")
+				.attr("class", "node-name")
+				.attr("x", nodeWidth / 2)
+				.attr("y", 68)
+				.attr("text-anchor", "middle")
+				.attr("font-weight", "bold")
+				.attr("font-size", "14px")
+				.attr("fill", "#333")
+				.text(d => d.full_name);
+
+			// 4. Year range
+			nodeEnter.append("text")
+				.attr("class", "node-years")
+				.attr("x", nodeWidth / 2)
+				.attr("y", 88)
+				.attr("text-anchor", "middle")
+				.attr("font-size", "12px")
+				.attr("fill", "#666")
+				.text(d => {
+					const by = d.birth_year ? d.birth_year : "?";
+					const dy = d.death_year ? d.death_year : "present";
+					return `${by} – ${dy}`;
+				});
+
+			// 5. Small '+' button (bottom-right)
+			const plusGroup = nodeEnter.append("g")
+				.attr("transform", `translate(${nodeWidth - 15}, ${nodeHeight - 15})`)
+				.style("cursor", "pointer")
+				.on("mousedown", e => e.stopPropagation())
+				.on("click", (e, d) => {
+					e.stopPropagation();
+					if (typeof openModalForNewNode === 'function') openModalForNewNode(d.pid);
+				});
+
+			plusGroup.append("circle")
+				.attr("r", 8)
+				.attr("fill", "#FFFFFF")
+				.attr("stroke", "green")
+				.attr("stroke-width", 1);
+
+			plusGroup.append("text")
+				.attr("text-anchor", "middle")
+				.attr("fill", "green")  // Updated to 'green' per user request
+				.attr("font-weight", "bold")
+				.attr("font-size", "14px")
+				.attr("y", 0)
+				.attr("dy", "0.35em") // Perfect vertical text centering
+				.text("+");
+
+			// 6. Expand/Collapse triangles
+			const trianglesGroup = nodeEnter.append("g").attr("class", "triangles");
+
+			trianglesGroup.append("polygon")
+				.attr("class", "tri-right")
+				.attr("points", "0,-5 10,0 0,5")
+				.attr("transform", `translate(${nodeWidth - 10}, ${nodeHeight / 2})`)
+				.attr("fill", "#999")
+				.style("display", "none")
+				.on("mousedown", e => e.stopPropagation())
+				.on("click", (e, d) => {
+					e.stopPropagation();
+					d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
+					d.hiddenDirs.right = !d.hiddenDirs.right;
+					applyLayout(); renderNodes(); renderEdges();
+				});
+
+			trianglesGroup.append("polygon")
+				.attr("class", "tri-left")
+				.attr("points", "10,-5 0,0 10,5")
+				.attr("transform", `translate(10, ${nodeHeight / 2})`)
+				.attr("fill", "#999")
+				.style("display", "none")
+				.on("mousedown", e => e.stopPropagation())
+				.on("click", (e, d) => {
+					e.stopPropagation();
+					d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
+					d.hiddenDirs.left = !d.hiddenDirs.left;
+					applyLayout(); renderNodes(); renderEdges();
+				});
+
+			trianglesGroup.append("polygon")
+				.attr("class", "tri-bottom")
+				.attr("points", "-5,-5 5,-5 0,5")
+				.attr("transform", `translate(${nodeWidth / 2}, ${nodeHeight - 8})`)
+				.attr("fill", "#999")
+				.style("display", "none")
+				.on("mousedown", e => e.stopPropagation())
+				.on("click", (e, d) => {
+					e.stopPropagation();
+					d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
+					d.hiddenDirs.bottom = !d.hiddenDirs.bottom;
+					applyLayout(); renderNodes(); renderEdges();
+				});
+
+			trianglesGroup.append("polygon")
+				.attr("class", "tri-top")
+				.attr("points", "-5,5 5,5 0,-5")
+				.attr("transform", `translate(${nodeWidth / 2}, 8)`)
+				.attr("fill", "#999")
+				.style("display", "none")
+				.on("mousedown", e => e.stopPropagation())
+				.on("click", (e, d) => {
+					e.stopPropagation();
+					d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
+					d.hiddenDirs.top = !d.hiddenDirs.top;
+					applyLayout(); renderNodes(); renderEdges();
+				});
+
+			const nodeUpdate = nodeSelection.merge(nodeEnter);
+			nodeUpdate.attr("transform", d => `translate(${d.x},${d.y})`);
+
+			// Update core node editable data elements
+			nodeUpdate.select(".node-name").text(d => d.full_name);
+			nodeUpdate.select(".node-years").text(d => {
+				const by = d.birth_year ? d.birth_year : "?";
+				const dy = d.death_year ? d.death_year : "present";
+				return `${by} – ${dy}`;
+			});
+			nodeUpdate.select(".node-bg")
+				.attr("fill", d => d.enslaved ? "#FFF2D1" : "#FFFFFF");
+
+			nodeUpdate.select(".node-icon")
+				.attr("d", d => getGenderPath(d.gender))
+				.attr("fill", d => {
+					if (d.gender === 'female') return 'LightCoral';
+					if (d.gender === 'male') return 'LightBlue';
+					return '#ffffff';
+				});
+
+			// Update triangle fill colors if they are actively hiding a branch
+			nodeUpdate.select(".tri-right").attr("fill", d => d.hiddenDirs && d.hiddenDirs.right ? "green" : "#999");
+			nodeUpdate.select(".tri-left").attr("fill", d => d.hiddenDirs && d.hiddenDirs.left ? "green" : "#999");
+			nodeUpdate.select(".tri-bottom").attr("fill", d => d.hiddenDirs && d.hiddenDirs.bottom ? "green" : "#999");
+			nodeUpdate.select(".tri-top").attr("fill", d => d.hiddenDirs && d.hiddenDirs.top ? "green" : "#999");
+
+			nodeSelection.exit().remove();
+
+			updateNodeSelection();
+		}
+
+		function updateTriangleVisibility() {
+			gNodes.selectAll(".node-group").each(function (d) {
+				let hasBottomEdge = false;
+
+				state.triplets.forEach(t => {
+					if (t.subject === d.pid || t.object === d.pid) {
+						if (t.predicate === 'MotherOf' || t.predicate === 'FatherOf') {
+							if (t.subject === d.pid) hasBottomEdge = true; // parent to child -> bottom
+						} else if (t.predicate === 'ChildOf') {
+							if (t.object === d.pid) hasBottomEdge = true; // parent to child -> bottom
+						}
+					}
+				});
+
+				const group = d3.select(this);
+				group.select(".tri-right").style("display", "none");
+				group.select(".tri-left").style("display", "none");
+				group.select(".tri-bottom").style("display", hasBottomEdge ? "block" : "none");
+				group.select(".tri-top").style("display", "none");
+			});
+		}
+
+		function updateNodeSelection() {
+			gNodes.selectAll(".node-bg")
+				.attr("stroke", d => d.pid === state.selectedPid ? "#2ecc71" : "#cccccc")
+				.attr("stroke-width", d => d.pid === state.selectedPid ? 3 : 2);
+		}
+
+		// Layout and Edge rendering
+
+		function applyLayout() {
+			const visibleSet = getVisibleNodes();
+			const vNodes = state.nodes.filter(n => visibleSet.has(n.pid));
+			const vTriplets = state.triplets.filter(t => visibleSet.has(t.subject) && visibleSet.has(t.object));
+
+			const parentsOf = {};
+			const childrenOf = {};
+			const spousesOf = {};
+			const cousinsOf = {};
+
+			vNodes.forEach(n => {
+				parentsOf[n.pid] = [];
+				childrenOf[n.pid] = [];
+				spousesOf[n.pid] = [];
+				cousinsOf[n.pid] = [];
+			});
+
+			vTriplets.forEach(t => {
+				if (t.predicate === 'MotherOf' || t.predicate === 'FatherOf') {
+					parentsOf[t.object].push(t.subject);
+					childrenOf[t.subject].push(t.object);
+				} else if (t.predicate === 'ChildOf') {
+					parentsOf[t.subject].push(t.object);
+					childrenOf[t.object].push(t.subject);
+				}
+				if (t.predicate === 'SpouseOf') {
+					spousesOf[t.subject].push(t.object);
+				}
+				if (t.predicate === 'CousinOf') {
+					cousinsOf[t.subject].push(t.object);
+				}
+			});
+
+			const depths = {};
+			const queue = [];
+
+			vNodes.forEach(n => {
+				if (parentsOf[n.pid].length === 0) {
+					depths[n.pid] = 0;
+					queue.push(n.pid);
+				}
+			});
+
+			while (queue.length > 0) {
+				const curr = queue.shift();
+				const d = depths[curr];
+				childrenOf[curr].forEach(child => {
+					if (depths[child] === undefined || depths[child] < d + 1) {
+						depths[child] = d + 1;
+						queue.push(child);
+					}
+				});
+				spousesOf[curr].forEach(spouse => {
+					if (depths[spouse] === undefined || depths[spouse] < d) {
+						depths[spouse] = d;
+						queue.push(spouse);
+					}
+				});
+				cousinsOf[curr].forEach(cousin => {
+					if (depths[cousin] === undefined || depths[cousin] < d) {
+						depths[cousin] = d;
+						queue.push(cousin);
+					}
+				});
+			}
+
+			const nodesByDepth = {};
+			vNodes.forEach(n => {
+				let d = depths[n.pid] || 0;
+				if (!nodesByDepth[d]) nodesByDepth[d] = [];
+				nodesByDepth[d].push(n.pid);
+			});
+
+			const startX = 100;
+			const startY = 100;
+			const xSpacing = 220;
+			const ySpacing = 250;
+
+			Object.keys(nodesByDepth).sort().forEach((dStr, rowIdx) => {
+				const d = parseInt(dStr);
+				const pids = nodesByDepth[d];
+
+				let currentX = startX;
+				const placed = new Set();
+
+				pids.forEach(pid => {
+					if (placed.has(pid)) return;
+					const node = getNode(pid);
+					node.x = currentX;
+					node.y = startY + rowIdx * ySpacing;
+					placed.add(pid);
+					currentX += xSpacing;
+
+					spousesOf[pid].forEach(spid => {
+						if (!placed.has(spid) && depths[spid] === d) {
+							const snode = getNode(spid);
+							if (snode) {
+								currentX -= xSpacing; // Undo standard gap
+								currentX += nodeWidth + 20; // Snug 20px physical gap between spouses
+								snode.x = currentX;
+								snode.y = startY + rowIdx * ySpacing;
+								placed.add(spid);
+								currentX += xSpacing; // Resume standard spacing
+							}
+						}
+					});
+
+					cousinsOf[pid].forEach(cid => {
+						if (!placed.has(cid) && depths[cid] === d) {
+							const cnode = getNode(cid);
+							if (cnode) {
+								cnode.x = currentX;
+								cnode.y = startY + rowIdx * ySpacing;
+								placed.add(cid);
+								currentX += xSpacing;
+							}
+						}
+					});
+				});
+			});
+
+		}
+
+		function getAnchors(node) {
+			return {
+				top: { x: node.x + nodeWidth / 2, y: node.y, dir: [0, -1] },
+				bottom: { x: node.x + nodeWidth / 2, y: node.y + nodeHeight, dir: [0, 1] },
+				left: { x: node.x, y: node.y + nodeHeight / 2, dir: [-1, 0] },
+				right: { x: node.x + nodeWidth, y: node.y + nodeHeight / 2, dir: [1, 0] }
+			};
+		}
+
+		function drawSmartCurve(source, target) {
+			const cy1 = source.y + nodeHeight / 2;
+			const cy2 = target.y + nodeHeight / 2;
+
+			// 1. Same horizontal line check (close to being horizontal)
+			if (Math.abs(cy1 - cy2) < 50) {
+				let s = source, t = target;
+				if (source.x > target.x) { s = target; t = source; } // s is left
+				const startX = s.x + nodeWidth;
+				const startY = s.y + nodeHeight / 2;
+				const endX = t.x;
+				const endY = t.y + nodeHeight / 2;
+				return `M ${startX} ${startY} L ${endX} ${endY}`;
+			}
+
+			// 2. Otherwise, connect closest sides
+			const a1 = getAnchors(source);
+			const a2 = getAnchors(target);
+			let minD = Infinity;
+			let p1, p2;
+
+			for (let k1 in a1) {
+				for (let k2 in a2) {
+					const dx = a1[k1].x - a2[k2].x;
+					const dy = a1[k1].y - a2[k2].y;
+					const dist = dx * dx + dy * dy;
+					if (dist < minD) {
+						minD = dist;
+						p1 = a1[k1];
+						p2 = a2[k2];
+					}
+				}
+			}
+
+			const d = Math.sqrt(minD);
+			const handleLen = Math.max(d * 0.4, 30);
+
+			const cp1x = p1.x + p1.dir[0] * handleLen;
+			const cp1y = p1.y + p1.dir[1] * handleLen;
+			const cp2x = p2.x + p2.dir[0] * handleLen;
+			const cp2y = p2.y + p2.dir[1] * handleLen;
+
+			return `M ${p1.x} ${p1.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+		}
+
+		function renderEdges() {
+			const visibleSet = getVisibleNodes();
+
+			const edgeData = [];
+			const seenSpouses = new Set();
+			const seenSiblings = new Set();
+			const seenExtended = new Set();
+			const childToParents = {};
+
+			const vTriplets = state.triplets.filter(t => visibleSet.has(t.subject) && visibleSet.has(t.object));
+
+			vTriplets.forEach(t => {
+				const s = getNode(t.subject);
+				const o = getNode(t.object);
+				if (!s || !o) return;
+
+				if (t.predicate === 'SpouseOf') {
+					const pairKey = [t.subject, t.object].sort().join("-");
+					if (seenSpouses.has(pairKey)) return;
+					seenSpouses.add(pairKey);
+					edgeData.push({ type: 'SpouseOf', source: s, target: o, id: pairKey });
+				} else if (t.predicate === 'SiblingOf') {
+					const pairKey = [t.subject, t.object].sort().join("-");
+					if (seenSiblings.has(pairKey)) return;
+					seenSiblings.add(pairKey);
+					edgeData.push({ type: 'SiblingOf', source: s, target: o, id: pairKey + '-Sibling' });
+				} else if (t.predicate === 'CousinOf' || t.predicate === 'UncleOf' || t.predicate === 'AuntOf' || t.predicate === 'NiblingOf') {
+					const pairKey = [t.subject, t.object].sort().join("-");
+					if (seenExtended.has(pairKey)) return;
+					seenExtended.add(pairKey);
+					edgeData.push({ type: 'ExtendedOf', source: s, target: o, id: pairKey + '-Extended' });
+				} else if (t.predicate === 'MotherOf' || t.predicate === 'FatherOf' || t.predicate === 'ChildOf') {
+					let parent = s, child = o;
+					if (t.predicate === 'ChildOf') { parent = o; child = s; }
+
+					if (!childToParents[child.pid]) childToParents[child.pid] = [];
+					childToParents[child.pid].push(parent.pid);
+				}
+			});
+
+			let familyIdx = 0;
+			const familyGroups = {};
+			Object.keys(childToParents).forEach(childPid => {
+				const parentPids = childToParents[childPid].sort().join(",");
+				if (!familyGroups[parentPids]) familyGroups[parentPids] = { parents: childToParents[childPid], children: [] };
+				familyGroups[parentPids].children.push(childPid);
+			});
+
+			Object.keys(familyGroups).forEach(parentKey => {
+				const fam = familyGroups[parentKey];
+				const parents = fam.parents.map(pid => getNode(pid)).filter(Boolean);
+				const children = fam.children.map(pid => getNode(pid)).filter(Boolean);
+				if (parents.length > 0 && children.length > 0) {
+					edgeData.push({ type: 'FamilyPedigree', parents, children, id: `fam-${familyIdx++}` });
+				}
+			});
+
+			const edgeSel = gEdges.selectAll(".edge-group")
+				.data(edgeData, d => d.id);
+
+			const edgeEnter = edgeSel.enter().append("g")
+				.attr("class", "edge-group");
+
+			// Spouse (Double curved line effect)
+			edgeEnter.filter(d => d.type === 'SpouseOf')
+				.append("path")
+				.attr("class", "spouse-bg")
+				.attr("fill", "none")
+				.attr("stroke", "#888888") // Medium gray
+				.attr("stroke-width", 5);
+
+			edgeEnter.filter(d => d.type === 'SpouseOf')
+				.append("path")
+				.attr("class", "spouse-fg")
+				.attr("fill", "none")
+				.attr("stroke", "var(--canvas-bg, #ffffff)") // Masks core to create 2 parallel 1.5px lines
+				.attr("stroke-width", 2);
+
+			// Family Pedigree
+			edgeEnter.filter(d => d.type === 'FamilyPedigree')
+				.append("path")
+				.attr("class", "parent-child-line")
+				.attr("fill", "none")
+				.attr("stroke", "#aaaaaa") // Lighter gray
+				.attr("stroke-width", 2)
+				.attr("stroke-linejoin", "round");
+
+			// Sibling
+			edgeEnter.filter(d => d.type === 'SiblingOf')
+				.append("path")
+				.attr("class", "sibling-line")
+				.attr("fill", "none")
+				.attr("stroke", "#aaaaaa") // Lighter gray
+				.attr("stroke-width", 2)
+				.attr("stroke-dasharray", "5,5");
+
+			// Extended relationships
+			edgeEnter.filter(d => d.type === 'ExtendedOf')
+				.append("path")
+				.attr("class", "extended-line")
+				.attr("fill", "none")
+				.attr("stroke", "#000000") // Black
+				.attr("stroke-width", 2)
+				.attr("stroke-dasharray", "2,4"); // dotted
+
+			const allEdges = edgeEnter.merge(edgeSel);
+
+			allEdges.each(function (d) {
+				const group = d3.select(this);
+				if (d.type === 'SpouseOf') {
+					const pathData = drawSmartCurve(d.source, d.target);
+					group.select(".spouse-bg").attr("d", pathData);
+					group.select(".spouse-fg").attr("d", pathData);
+				} else if (d.type === 'FamilyPedigree') {
+					let parentX, parentY, bottomOfParents;
+					if (d.parents.length === 1) {
+						parentX = d.parents[0].x + nodeWidth / 2;
+						parentY = d.parents[0].y + nodeHeight;
+						bottomOfParents = parentY;
+					} else {
+						const minPx = Math.min(...d.parents.map(p => p.x));
+						const maxPx = Math.max(...d.parents.map(p => p.x));
+						parentX = minPx + (maxPx - minPx) / 2 + nodeWidth / 2;
+						parentY = Math.max(...d.parents.map(p => p.y)) + nodeHeight / 2;
+						bottomOfParents = Math.max(...d.parents.map(p => p.y)) + nodeHeight;
+					}
+
+					const childTopY = Math.min(...d.children.map(c => c.y));
+					const midY = bottomOfParents + Math.max(15, (childTopY - bottomOfParents) / 2);
+
+					let pathStr = `M ${parentX} ${parentY} L ${parentX} ${midY} `;
+
+					const childXs = d.children.map(c => c.x + nodeWidth / 2);
+					const allXs = [...childXs, parentX];
+					const minCx = Math.min(...allXs);
+					const maxCx = Math.max(...allXs);
+
+					pathStr += `M ${minCx} ${midY} L ${maxCx} ${midY} `;
+
+					d.children.forEach(c => {
+						const cx = c.x + nodeWidth / 2;
+						pathStr += `M ${cx} ${midY} L ${cx} ${c.y}`;
+					});
+
+					group.select(".parent-child-line").attr("d", pathStr);
+				} else if (d.type === 'SiblingOf') {
+					const pathData = drawSmartCurve(d.source, d.target);
+					group.select(".sibling-line").attr("d", pathData);
+				} else if (d.type === 'ExtendedOf') {
+					const pathData = drawSmartCurve(d.source, d.target);
+					group.select(".extended-line").attr("d", pathData);
+				}
+			});
+
+			edgeSel.exit().remove();
+
+			if (typeof updateTriangleVisibility !== 'undefined') updateTriangleVisibility();
+		}
+
+		// Apply automatic hierarchical layout and initial draw on load
+		applyLayout();
+		renderNodes();
+		renderEdges();
+
+	</script>
+
+	<!-- Phase 6: Fully Styled Modal Dialog -->
+	<dialog id="node-modal" class="modern-dialog">
+		<div class="dialog-header">
+			<h2 id="modal-title" style="margin-top: 0;">Edit Node</h2>
+			<button id="modal-close-x" class="close-x">&times;</button>
+		</div>
+		<div class="dialog-body">
+			<!-- Top Section: Person Fields -->
+			<div class="form-section">
+				<h3>Person Info</h3>
+				<input type="hidden" id="modal-mode" value="edit"> <!-- 'edit' or 'add' -->
+				<input type="hidden" id="modal-origin-node" value=""> <!-- For implied relationships -->
+				<input type="hidden" id="modal-original-pid" value="">
+
+				<div class="form-row">
+					<label>PID:</label>
+					<div class="input-wrapper">
+						<input type="text" id="node-pid">
+						<span class="error-msg" id="err-pid"></span>
+					</div>
+				</div>
+				<div class="form-row" id="row-new-rel" style="display:none;">
+					<label>Relation:</label>
+					<div class="input-wrapper">
+						<select id="new-node-rel" style="width: 100%; padding: 5px; box-sizing: border-box;">
+							<option value="ChildOf">ChildOf</option>
+							<option value="SpouseOf">SpouseOf</option>
+							<option value="MotherOf">MotherOf</option>
+							<option value="FatherOf">FatherOf</option>
+							<option value="SiblingOf">SiblingOf</option>
+							<option value="UncleOf">UncleOf</option>
+							<option value="AuntOf">AuntOf</option>
+							<option value="NiblingOf">NiblingOf</option>
+							<option value="CousinOf">CousinOf</option>
+							<option value="EnslavedBy">EnslavedBy</option>
+						</select>
+					</div>
+				</div>
+				<div class="form-row">
+					<label>Full Name:</label>
+					<div class="input-wrapper">
+						<input type="text" id="node-name">
+						<span class="error-msg" id="err-name"></span>
+					</div>
+				</div>
+				<div class="form-row">
+					<label>Birth Year:</label>
+					<div class="input-wrapper">
+						<input type="text" id="node-birth">
+						<span class="error-msg" id="err-birth"></span>
+					</div>
+				</div>
+				<div class="form-row">
+					<label>Death Year:</label>
+					<div class="input-wrapper">
+						<input type="text" id="node-death">
+						<span class="error-msg" id="err-death"></span>
+					</div>
+				</div>
+				<div class="form-row">
+					<label>Gender:</label>
+					<div class="input-wrapper">
+						<label><input type="radio" name="node-gender" value="male"> Male</label>
+						<label><input type="radio" name="node-gender" value="female"> Female</label>
+						<label><input type="radio" name="node-gender" value="unknown"> Unknown</label>
+					</div>
+				</div>
+				<div class="form-row">
+					<label>Enslaved:</label>
+					<div class="input-wrapper" style="flex-direction: row; min-height: 24px;">
+						<input type="checkbox" id="node-enslaved" style="margin: 0; align-self: flex-start;">
+					</div>
+				</div>
+				<div class="form-row">
+					<label>Notes:</label>
+					<div class="input-wrapper">
+						<textarea id="node-notes" rows="3"></textarea>
+					</div>
+				</div>
+			</div>
+
+			<!-- Middle Section: Relationships -->
+			<div class="form-section" id="rel-section">
+				<div class="section-header">
+					<h3>Relationships</h3>
+					<button type="button" id="btn-add-rel" class="icon-btn" title="Add Relationship">+</button>
+				</div>
+				<div class="rel-list" id="rel-list">
+					<!-- List items injected via JS -->
+				</div>
+				<button type="button" id="btn-remove-rel" disabled>Remove Selected</button>
+			</div>
+		</div>
+
+		<!-- Bottom Section: Actions -->
+		<div class="dialog-footer">
+			<button id="btn-delete" class="danger-btn">Delete Node</button>
+			<div class="primary-actions">
+				<button id="btn-cancel">Cancel</button>
+				<button id="btn-save" class="primary-btn">Save</button>
+			</div>
+		</div>
+	</dialog>
+
+	<dialog id="predicate-modal" class="modern-dialog" style="min-width: 250px;">
+		<div class="dialog-header">
+			<h3 style="margin:0;">Select Relationship</h3>
+		</div>
+		<div class="dialog-body" style="margin-bottom: 20px;">
+			<p>Relationship to <strong id="pred-target-name"></strong>:</p>
+			<select id="pred-select" style="width: 100%; padding: 5px;">
+				<option value="MotherOf">MotherOf</option>
+				<option value="FatherOf">FatherOf</option>
+				<option value="SpouseOf">SpouseOf</option>
+				<option value="ChildOf">ChildOf</option>
+				<option value="SiblingOf">SiblingOf</option>
+				<option value="UncleOf">UncleOf</option>
+				<option value="AuntOf">AuntOf</option>
+				<option value="NiblingOf">NiblingOf</option>
+				<option value="CousinOf">CousinOf</option>
+				<option value="EnslavedBy">EnslavedBy</option>
+			</select>
+		</div>
+		<div class="dialog-footer">
+			<button id="pred-cancel">Cancel</button>
+			<button id="pred-confirm" class="primary-btn">Confirm</button>
+		</div>
+	</dialog>
+
+	<script id="dialog-logic">
+		let linkMode = false;
+		let linkSourcePid = null;
+		let selectedRelKey = null;
+
+		let dialogHighlightTimeout = null;
+
+		function clearErrors() {
+			document.querySelectorAll('.error-msg').forEach(el => el.textContent = '');
+		}
+
+		function showError(id, msg) {
+			document.getElementById(id).textContent = msg;
+		}
+
+		function openModalForNode(pid) {
+			const n = getNode(pid);
+			if (!n) return;
+			clearErrors();
+			linkMode = false;
+			document.getElementById("link-banner").style.display = "none";
+			document.getElementById("row-new-rel").style.display = "none";
+
+			document.getElementById("modal-mode").value = "edit";
+			document.getElementById("modal-original-pid").value = n.pid;
+
+			document.getElementById("modal-title").innerText = "Edit Node";
+			document.getElementById("node-pid").value = n.pid;
+			document.getElementById("node-name").value = n.full_name;
+			document.getElementById("node-birth").value = n.birth_year || "";
+			document.getElementById("node-death").value = n.death_year || "";
+
+			const genderRadio = document.querySelector('input[name="node-gender"][value="' + n.gender + '"]');
+			if (genderRadio) genderRadio.checked = true;
+			else document.querySelector('input[name="node-gender"][value="unknown"]').checked = true;
+
+			document.getElementById("node-enslaved").checked = !!n.enslaved;
+			document.getElementById("node-notes").value = n.notes || "";
+
+			document.getElementById("btn-delete").style.display = "inline-block";
+			document.getElementById("rel-section").style.display = "block";
+
+			refreshRelList(pid);
+
+			document.getElementById("node-modal").showModal();
+		}
+
+		function openModalForNewNode(originPid) {
+			clearErrors();
+			linkMode = false;
+			document.getElementById("link-banner").style.display = "none";
+
+			document.getElementById("modal-mode").value = "add";
+			document.getElementById("modal-origin-node").value = originPid || "";
+			document.getElementById("modal-original-pid").value = "";
+
+			if (originPid) {
+				document.getElementById("row-new-rel").style.display = "flex";
+				document.getElementById("new-node-rel").value = "ChildOf";
+			} else {
+				document.getElementById("row-new-rel").style.display = "none";
+			}
+
+			document.getElementById("modal-title").innerText = "Add Node";
+			document.getElementById("node-pid").value = generatePid();
+			document.getElementById("node-name").value = "";
+			document.getElementById("node-birth").value = "";
+			document.getElementById("node-death").value = "";
+			document.querySelector('input[name="node-gender"][value="unknown"]').checked = true;
+			document.getElementById("node-enslaved").checked = false;
+			document.getElementById("node-notes").value = "";
+
+			document.getElementById("btn-delete").style.display = "none";
+			document.getElementById("rel-section").style.display = "none";
+
+			document.getElementById("node-modal").showModal();
+		}
+
+		function saveModal() {
+			clearErrors();
+			const pidInput = document.getElementById("node-pid").value.trim();
+			const nameInput = document.getElementById("node-name").value.trim();
+			const birthInput = document.getElementById("node-birth").value.trim();
+			const deathInput = document.getElementById("node-death").value.trim();
+
+			const genderEl = document.querySelector('input[name="node-gender"]:checked');
+			const gender = genderEl ? genderEl.value : "unknown";
+			const enslaved = document.getElementById("node-enslaved").checked;
+			const notes = document.getElementById("node-notes").value.trim();
+
+			const originalPid = document.getElementById("modal-original-pid").value;
+			const originNodeId = document.getElementById("modal-origin-node").value;
+			const mode = document.getElementById("modal-mode").value;
+
+			let hasError = false;
+
+			if (!nameInput) {
+				showError("err-name", "Full name cannot be empty");
+				hasError = true;
+			}
+
+			if (!pidInput) {
+				showError("err-pid", "PID cannot be empty");
+				hasError = true;
+			} else if (pidInput !== originalPid && getNode(pidInput)) {
+				showError("err-pid", "PID must be unique");
+				hasError = true;
+			}
+
+			let by = null, dy = null;
+			if (birthInput) {
+				if (!/^[0-9]{4}$/.test(birthInput)) {
+					showError("err-birth", "Must be 4 digits");
+					hasError = true;
+				} else by = parseInt(birthInput, 10);
+			}
+			if (deathInput) {
+				if (!/^[0-9]{4}$/.test(deathInput)) {
+					showError("err-death", "Must be 4 digits");
+					hasError = true;
+				} else dy = parseInt(deathInput, 10);
+			}
+			if (by !== null && dy !== null && dy < by) {
+				showError("err-death", "Death year cannot be before birth year");
+				hasError = true;
+			}
+
+			if (hasError) return;
+
+			const fields = {
+				full_name: nameInput,
+				birth_year: by,
+				death_year: dy,
+				gender: gender,
+				enslaved: enslaved,
+				notes: notes
+			};
+
+			if (mode === "edit") {
+				const oldPid = originalPid;
+				if (pidInput !== oldPid) {
+					saveState();
+					let nodeInstance = getNode(oldPid);
+					nodeInstance.pid = pidInput;
+					state.triplets.forEach(t => {
+						if (t.subject === oldPid) t.subject = pidInput;
+						if (t.object === oldPid) t.object = pidInput;
+					});
+					if (state.selectedPid === oldPid) state.selectedPid = pidInput;
+				}
+				editNode(pidInput, fields);
+			} else {
+				fields.pid = pidInput;
+				addNode(fields);
+				if (originNodeId) {
+					const selectedRel = document.getElementById("new-node-rel").value;
+					addTriplet(pidInput, selectedRel, originNodeId);
+				}
+			}
+
+			document.getElementById("node-modal").close();
+			applyLayout(); renderNodes(); renderEdges();
+		}
+
+		function refreshRelList(pid) {
+			const relListEle = document.getElementById("rel-list");
+			relListEle.innerHTML = "";
+			selectedRelKey = null;
+			document.getElementById("btn-remove-rel").disabled = true;
+
+			const rels = getRelationships(pid);
+			rels.forEach(t => {
+				const targetNode = getNode(t.object);
+				const targetName = targetNode ? targetNode.full_name : "Unknown";
+				const div = document.createElement("div");
+				div.className = "rel-item";
+				div.textContent = t.predicate + ' → ' + targetName;
+				div.onclick = () => {
+					document.querySelectorAll('.rel-item').forEach(el => el.classList.remove('selected'));
+					div.classList.add('selected');
+					selectedRelKey = t;
+					document.getElementById("btn-remove-rel").disabled = false;
+					highlightNodeOrange(t.object);
+				};
+				relListEle.appendChild(div);
+			});
+		}
+
+		function highlightNodeOrange(pid) {
+			d3.selectAll(".node-bg")
+				.attr("stroke", d => d.pid === pid ? "orange" : (d.pid === state.selectedPid ? "#2ecc71" : "#cccccc"))
+				.attr("stroke-width", d => d.pid === pid ? 4 : (d.pid === state.selectedPid ? 3 : 2));
+
+			if (dialogHighlightTimeout) clearTimeout(dialogHighlightTimeout);
+			dialogHighlightTimeout = setTimeout(() => {
+				if (typeof updateNodeSelection === 'function') updateNodeSelection();
+			}, 1000);
+		}
+
+		document.getElementById("btn-cancel").addEventListener("click", () => document.getElementById("node-modal").close());
+		document.getElementById("modal-close-x").addEventListener("click", () => document.getElementById("node-modal").close());
+		document.getElementById("btn-save").addEventListener("click", saveModal);
+
+		document.getElementById("btn-delete").addEventListener("click", () => {
+			const originalPid = document.getElementById("modal-original-pid").value;
+			const n = getNode(originalPid);
+			if (!n) return;
+			if (confirm('Are you sure you want to delete ' + n.full_name + '?')) {
+				deleteNode(originalPid);
+				document.getElementById("node-modal").close();
+				applyLayout(); renderNodes(); renderEdges();
+			}
+		});
+
+		document.getElementById("btn-remove-rel").addEventListener("click", () => {
+			if (!selectedRelKey) return;
+			if (confirm('Are you sure you want to remove this relationship?')) {
+				removeTriplet(selectedRelKey.subject, selectedRelKey.predicate, selectedRelKey.object);
+				refreshRelList(document.getElementById("modal-original-pid").value);
+				applyLayout(); renderNodes(); renderEdges();
+			}
+		});
+
+		document.getElementById("btn-add-rel").addEventListener("click", () => {
+			const sourcePid = document.getElementById("modal-original-pid").value;
+			document.getElementById("node-modal").close();
+			linkMode = true;
+			linkSourcePid = sourcePid;
+			document.getElementById("link-banner").style.display = "block";
+		});
+
+		function handleLinkTargetClick(targetPid) {
+			linkMode = false;
+			document.getElementById("link-banner").style.display = "none";
+			const targetNode = getNode(targetPid);
+			if (!targetNode) return;
+
+			document.getElementById("pred-target-name").innerText = targetNode.full_name;
+			document.getElementById("predicate-modal").dataset.target = targetPid;
+			document.getElementById("predicate-modal").showModal();
+		}
+
+		document.getElementById("pred-cancel").addEventListener("click", () => {
+			document.getElementById("predicate-modal").close();
+			openModalForNode(linkSourcePid);
+		});
+
+		document.getElementById("pred-confirm").addEventListener("click", () => {
+			const pred = document.getElementById("pred-select").value;
+			const targetPid = document.getElementById("predicate-modal").dataset.target;
+			document.getElementById("predicate-modal").close();
+
+			if (pred && targetPid && linkSourcePid) {
+				addTriplet(linkSourcePid, pred, targetPid);
+				applyLayout(); renderNodes(); renderEdges();
+			}
+			openModalForNode(linkSourcePid);
+		});
+
+	</script>
+
+</body>
+
+</html>
