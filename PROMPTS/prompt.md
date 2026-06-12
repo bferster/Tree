@@ -12,6 +12,17 @@ Create a plain vanilla JavaScript web application, using no frameworks, that wil
 	The tree should be displayed on a virtual canvas that can be zoomed, panned, and scrolled.
 	App’s name is “Verité editor”.
 
+**NOTEPAD**
+
+	Create a notepad area on the right side of the screen to display notes about the tree.
+	The defaule size is 20vw and 60vh
+	The notepad should be scrollable and should display the notes in a readable format.
+	The notepad should be updated whenever the tree is updated.
+	Store the notepad data in the SQLite database.	
+	The notepad should be draggable and resizable.
+	The notepad should be hidden by default and should be displayed by clicking on the "Notepad" option in the "View" menu.
+	Remeber the size and position of 
+
 *DATA STRUCTURE*
 
 	The internal data is organized as a directed acyclic graph, with each person a node and their relationships as edges.
@@ -100,8 +111,7 @@ Create a plain vanilla JavaScript web application, using no frameworks, that wil
 		Accessed from the “Export” option in the “File” menu.
 	The tree can be exported in RDF turtle .ttl format on drive:
 		Accessed from the “Export” option in the “File” menu.
-	Support unlimited undo and redo using ctrl-z and ctrl-y:
-		Accessed from “Undo” and “Redo” options in the “Edit” menu.
+	Support unlimited undo and redo using ctrl-z and ctrl-y, as well as via "Undo" and "Redo" options in the "Edit" menu. Disable these menu options if no actions are possible.
 	Add “Search” option to “Data” menu:
 		When clicked it opens a new tab to the link url “/.search”, which will launch searching options.
 
@@ -115,20 +125,29 @@ Implement this in phases.
 	No functionality, just layout and CSS styling
 	Confirms the visual structure looks right before any logic
 	PHASE 1 prompt: 
+
 		Create a single HTML file for a family tree web application. This is a static scaffold only — no JavaScript logic or functionality is needed yet, just structure and styling.
 		Layout requirements:
 			A traditional menu bar at the top with four menus: File, Edit, View, and Search.
 			File menu items: New, Open, Save, Save As, Export (with submenu: GEDCOM, RDF), separator, Exit.
-			Edit menu items: Undo, Redo, separator, Edit Node, Delete Node
+			Edit menu items: Undo, Redo, separator, Edit Node, Delete Node 
+				- implement delete node, by deleting the currently highlighted node.
 			View menu items: Zoom In, Zoom Out, Fit to Screen, Reset Layout.
-			Search menu item: opens placeholder alert for now.
-		Below the menu bar, a large canvas area that fills the remaining. screen height, with a light gray background and a subtle grid pattern.
-		App’s name is  “Verité editor”.
+				- implement fit to screen, by adjusting the zoom level to fit the entire tree on the screen.
+				- implement zoom in, by increasing the zoom level by 10%.
+				- implement zoom out, by decreasing the zoom level by 10%.
+				- implement reset layout, realigning all nodes to their default positions.and resetting the zoom level to fit to screen
+	
+			Below the menu bar, a large canvas area that fills the remaining. screen height, with a light gray background and a subtle grid pattern.
+			Fill only 50% of screen width with this canvas area, later inclusion of matching module on the right side of the canvas.
+			App’s name is  “Verité editor”.
+
 		Style requirements:
 			Clean, modern sans-serif font throughout
 			Menu bar should look like a traditional desktop application menu (not a navbar)
 			The canvas area should feel like a workspace — not a webpage
 			Use only vanilla CSS, no frameworks or external stylesheets
+
 		Technical requirements:
 			Single self-contained .html file
 			Use jQuery (loaded from CDN) for any menu open/close interactions
@@ -278,7 +297,7 @@ Implement this in phases.
 		Draw edges when nodes are first rendered and update them when nodes are dragged.
 		Connect edges to the side closest to the connected node.
 		If node is close to being on the same horizontal line as the connected node, draw the edge straight across.
-		If connecting parents to children, draw the edge down and then draw a horizontal line across to connect the children.
+		If connecting parents to children, draw the edge as a smooth curve (vertical edge lines can be rendered as curves).
 				
 	Edge routing:
 
@@ -295,7 +314,7 @@ Implement this in phases.
 			Place each subsequent generation one level lower, spaced evenly
 			Space siblings horizontally with enough room so nodes do not overlap (account for node width of ~160px plus padding)
 			Spouses should be placed side by side on the same row
-			Update each node's x and y in state to reflect the layout positions
+			Update each node's x and y in state to reflect the layout positions, but maintain moved positions on refresh (i.e. if a node was manually dragged, don't overwrite its position indiscriminately, or restore from local storage).
 			After layout, re-render nodes so they appear in their new positions
 
 	Re-rendering on drag:
@@ -335,13 +354,17 @@ Implement this in phases.
 
 	Replace the placeholder modal with a fully styled dialog box containing the following sections:
 	Top section — person fields:
-		Full name: single-line text input
+		Full name: single-line text input (do not validate name when editing)
 		PID: single-line text input (editable but must remain unique — show an inline error if a duplicate pid is entered)
-		Birth year: single-line text input (numeric only)
-		Death year: single-line text input (numeric only, leave blank if still living)
-		Gender: three radio buttons labeled Male, Female, Unknown
+		Birth year: single-line text input (numeric only, display '?' if none)
+		Death year: single-line text input (numeric only, display '?' if none)
+		Gender: three radio buttons labeled M, F, ? and shown horizontally (make gender default M)
 		Enslaved: a single checkbox labeled "Enslaved"
+		Probability: a range slider from 0 to 100 with the data value next to it.
 		Notes: multi-line textarea
+
+    The edit dialog should be draggable by its header.
+    When clicking on a relationship in the dialog's relationship list, highlight the corresponding edge in green on the canvas. It should go back to its original color when the edit dialog closes.
 
 	Middle section — relationships:
 
