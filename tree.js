@@ -1558,21 +1558,191 @@ $(document).ready(function () {
 	}
 });
 
+function getMockMentions(node) {
+	if (!node) return [];
+	const lName = node.last_name || "Johnson";
+	const fName = node.first_name || "Mary";
+	const gender = node.gender || "male";
+	const race = node.race || "";
+	const bYear = node.birth_year || 1840;
+	const dYear = node.death_year || 1900;
+
+	return [
+		{
+			mention_id: "M_" + node.person_id + "_1",
+			source: "ALB-CN1870",
+			source_type: "Census",
+			source_year: 1870,
+			full_name: `${fName} ${lName}`,
+			first_name: fName,
+			norm_first_name: fName.toUpperCase(),
+			last_name: lName,
+			nysiis_last_name: node.nysiis_last_name || "JHNSN",
+			soundex_last_name: node.soundex_last_name || "J525",
+			birth_year: bYear,
+			death_year: dYear,
+			race: race,
+			norm_race: race,
+			gender: gender,
+			narrative: `${fName} ${lName} was recorded in the Albany Census of 1870 living in household 12.`,
+			narrative_vector: [0.5, 0.5, 0.5],
+			original_data: { page: 45, line: 12, entry: "Exact match" }
+		},
+		{
+			mention_id: "M_" + node.person_id + "_2",
+			source: "ALB-CN1880",
+			source_type: "Census",
+			source_year: 1880,
+			full_name: `${fName} ${lName}`,
+			first_name: fName,
+			norm_first_name: fName.toUpperCase(),
+			last_name: lName,
+			nysiis_last_name: node.nysiis_last_name || "JHNSN",
+			soundex_last_name: node.soundex_last_name || "J525",
+			birth_year: bYear ? bYear + 2 : null,
+			death_year: dYear ? dYear - 2 : null,
+			race: race,
+			norm_race: race,
+			gender: gender,
+			narrative: `${fName} ${lName} appears in the 1880 census with a slightly different birth year of ${bYear ? bYear + 2 : '?'}.`,
+			narrative_vector: [0.5, 0.5, 0.5],
+			original_data: { page: 12, line: 4, entry: "Slight year variation" }
+		},
+		{
+			mention_id: "M_" + node.person_id + "_3",
+			source: "ALB-MARR",
+			source_type: "Marriage",
+			source_year: bYear ? bYear + 20 : 1860,
+			full_name: `${fName}a ${lName}`,
+			first_name: fName + "a",
+			norm_first_name: (fName + "a").toUpperCase(),
+			last_name: lName,
+			nysiis_last_name: node.nysiis_last_name || "JHNSN",
+			soundex_last_name: node.soundex_last_name || "J525",
+			birth_year: bYear ? bYear - 1 : null,
+			death_year: dYear,
+			race: race,
+			norm_race: race,
+			gender: gender,
+			narrative: `A marriage record for ${fName}a ${lName} in ${bYear ? bYear + 20 : 1860} lists birth year around ${bYear ? bYear - 1 : '?'}.`,
+			narrative_vector: [0.5, 0.5, 0.5],
+			original_data: { volume: 2, page: 98, entry: "First name spelling variation" }
+		},
+		{
+			mention_id: "M_" + node.person_id + "_4",
+			source: "ALB-TAX",
+			source_type: "Tax List",
+			source_year: bYear ? bYear + 30 : 1870,
+			full_name: `Different ${lName}`,
+			first_name: "Different",
+			norm_first_name: "DIFFERENT",
+			last_name: lName,
+			nysiis_last_name: node.nysiis_last_name || "JHNSN",
+			soundex_last_name: node.soundex_last_name || "J525",
+			birth_year: bYear ? bYear + 5 : null,
+			death_year: dYear ? dYear + 10 : null,
+			race: race,
+			norm_race: race,
+			gender: gender,
+			narrative: `Tax records show a different ${lName} at this location.`,
+			narrative_vector: [0.1, 0.1, 0.1],
+			original_data: { page: 9, line: 3, entry: "Same last name only" }
+		}
+	];
+}
+
 function selectNodeAndShowEditor(personId) {
 	state.selectedPid = personId;
 	if (typeof updateNodeSelection === 'function') updateNodeSelection();
 
 	const rightPanel = $('#right-panel-content');
-	rightPanel.empty().append('<div id="person-editor-container" style="width:100%; height:100%; overflow-y:auto; padding: 15px;"></div>');
+	rightPanel.empty().append(`
+		<div style="display: flex; flex-direction: row; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5; padding: 12px; gap: 12px;">
+			<div id="person-editor-container" class="person-editor" style="flex: 1; min-width: 0; height: 100%; overflow-y: auto; box-sizing: border-box;"></div>
+			<div id="mentions-editor-container" style="width: 33.33%; height: 100%; overflow-y: auto; box-sizing: border-box;"></div>
+		</div>
+	`);
 	
 	window._VPE_FAKE_PERSONS = window._VPE_FAKE_PERSONS || {};
 	state.nodes.forEach(n => { window._VPE_FAKE_PERSONS[n.person_id] = n; });
+	
+	let mEditor = null;
+	const node = getNode(personId);
+	if (node) {
+		node.narrative_vector = node.narrative_vector || [0.5, 0.5, 0.5];
+	}
+
+	if (window.MentionsEditor) {
+		const mentionsContainer = document.getElementById('mentions-editor-container');
+		mEditor = new window.MentionsEditor(mentionsContainer, {
+			onAdd: (pid, mentionId) => {
+				const mention = mEditor.getCurrentMention();
+				if (!mention) return;
+				
+				const n = getNode(pid);
+				if (n) {
+					n.mentions = n.mentions || [];
+					const exists = n.mentions.some(m => m.mention_id === mentionId);
+					if (!exists) {
+						n.mentions.push({
+							mention_id: mention.mention_id,
+							source: mention.source,
+							label: mention.source + ' (' + mention.source_year + ')',
+							field_values: {
+								first_name: mention.first_name,
+								last_name: mention.last_name,
+								birth_year: mention.birth_year ? String(mention.birth_year) : undefined,
+								death_year: mention.death_year ? String(mention.death_year) : undefined,
+								gender: mention.gender === 'female' ? 'F' : (mention.gender === 'male' ? 'M' : ''),
+								race: mention.race
+							}
+						});
+						isDirty = true;
+						selectNodeAndShowEditor(pid);
+					}
+				}
+			}
+		});
+
+		if (node) {
+			mEditor.load(node, ['ALB-CN1870', 'ALB-CN1880', 'ALB-MARR', 'ALB-TAX'], getMockMentions(node));
+		}
+	}
 	
 	if (typeof ShowPersonEditor === 'function') {
 		ShowPersonEditor(personId, $('#person-editor-container'));
 		$('#person-editor-container').on('change vpe:changed vpe:rerender', function() {
 			const n = getNode(personId);
-			if (n) syncEditorToNode(n);
+			if (n) {
+				syncEditorToNode(n);
+				if (mEditor && n) {
+					n.narrative_vector = n.narrative_vector || [0.5, 0.5, 0.5];
+					mEditor.load(n, ['ALB-CN1870', 'ALB-CN1880', 'ALB-MARR', 'ALB-TAX'], getMockMentions(n));
+				}
+			}
+		});
+
+		$('#person-editor-container').on('vpe:search', function(e, criteria) {
+			if (mEditor && criteria && criteria.fields) {
+				const adaptedCriteria = {};
+				for (const fieldName of Object.keys(criteria.fields)) {
+					const fieldVal = criteria.fields[fieldName];
+					let keys = [];
+					if (fieldName === 'first_name') keys = ['exactFirstName', 'fuzzyFirstName', 'rarityFirstName'];
+					else if (fieldName === 'last_name') keys = ['exactLastName', 'fuzzyLastName', 'rarityLastName'];
+					else if (fieldName === 'nysiis_last_name') keys = ['exactNysiisLast', 'fuzzyNysiisLast', 'rarityNysiisLast'];
+					else if (fieldName === 'birth_year') keys = ['birthYear'];
+					else if (fieldName === 'death_year') keys = ['deathYear'];
+					
+					keys.forEach(k => {
+						adaptedCriteria[k] = {
+							enabled: fieldVal.compare ? !fieldVal.compare.includes('ignore') : true,
+							weight: fieldVal.weight * 2
+						};
+					});
+				}
+				mEditor.setCriteria(adaptedCriteria);
+			}
 		});
 	}
 }

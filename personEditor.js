@@ -224,10 +224,12 @@
   function renderShell($dialog, person, state) {
     $dialog.append(`
       <div class="vpe-header">
-        <h2>Edit person — ${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)} (${escapeHtml(person.person_id)})</h2>
+        <div>
+          <h2 class="vpe-title">PERSON EDITOR</h2>
+          <p class="vpe-target-summary">Target: ${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)} ${escapeHtml(person.birth_year || '?')}-${escapeHtml(person.death_year || '?')}</p>
+        </div>
         <i class="ti ti-x vpe-close" aria-label="Close"></i>
       </div>
-      <p class="vpe-section-label">FACTORS</p>
       <div class="vpe-factors"></div>
       <div class="vpe-footer"></div>
     `);
@@ -259,7 +261,7 @@
     });
 
     // re-render after any change
-    $factors.on('vpe:rerender', function () {
+    $factors.off('vpe:rerender').on('vpe:rerender', function () {
       renderFactors($dialog, person, state);
     });
   }
@@ -545,29 +547,39 @@
     if (stylesInjected) return;
     stylesInjected = true;
     const css = `
+      .person-editor {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #e5e5e5;
+        border-radius: 12px;
+        margin-left: 0;
+        margin-top: 12px;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .vpe-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.25rem; }
       .vpe-dialog { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-        background:#fff; border-radius:12px; border:0.5px solid #f0f0f0; max-width:880px; padding:1.5rem; }
-      .vpe-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; }
-      .vpe-header h2 { margin:0; font-size:1.1rem; font-weight:600; }
+        background:#fff; border-radius:12px; border:1px solid #e3ddd5; box-shadow:0 2px 8px rgba(0,0,0,0.06); width:100%; box-sizing:border-box; padding:0.5rem; overflow:hidden; }
+      .vpe-title { margin:0; font-size:15px; font-weight:600; }
+      .vpe-target-summary { font-size:13px; color:#6b6258; margin:2px 0 0; }
       .vpe-close { font-size:20px; color:#757575; cursor:pointer; }
       .vpe-section-label { font-size:13px; font-weight:500; letter-spacing:.05em; color:#9e9e9e; margin:0 0 .75rem; }
-      .vpe-row { display:grid; grid-template-columns:130px minmax(0,1fr) 80px 1fr; gap:12px; align-items:center;
-        padding:10px 8px; border-top:0.5px solid #f0f0f0; }
-      .vpe-row-header { font-size:12px; font-weight:500; color:#9e9e9e; border-top:none; padding:6px 8px; }
+      .vpe-row { display:grid; grid-template-columns:130px minmax(0,1fr) 80px 1fr; gap:8px 24px; align-items:center;
+        padding:4px 8px; border-top:0.5px solid #f0f0f0; }
+      .vpe-row-header { font-size:12px; font-weight:500; color:#9e9e9e; border-top:none; padding:4px 8px; }
       .vpe-row-linked { grid-template-columns:130px 1fr; }
-      .vpe-field-label { font-size:14px; font-weight:500; }
-      .vpe-value-pill { display:flex; align-items:center; flex-wrap:wrap; gap:6px; width:100%;
-        min-height:32px; border-radius:999px; padding:4px 6px; }
-      .vpe-chip { display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:3px 8px;
+      .vpe-field-label { font-size:13px; font-weight:500; }
+      .vpe-value-pill { display:flex; align-items:center; flex-wrap:wrap; gap:4px; width:100%;
+        min-height:24px; border-radius:999px; padding:2px 6px; }
+      .vpe-chip { display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:2px 6px;
         border-radius:999px; white-space:nowrap; min-width:24px; min-height:18px; background:#fff; }
       .vpe-value-pill select, .vpe-value-pill input[type=text] {
-        font-size:12px; height:26px; padding:0 6px; min-width:90px; flex:1; background:transparent;
+        font-size:12px; height:20px; padding:0 4px; min-width:90px; flex:1; background:transparent;
         border:none; }
       .vpe-star-row { display:flex; gap:3px; align-items:center; }
       .vpe-compare-row { display:flex; flex-wrap:wrap; gap:6px; }
       .vpe-pill { display:inline-flex; align-items:center; font-size:12px; padding:3px 10px; border-radius:999px;
         white-space:nowrap; cursor:pointer; border:0.5px solid #f0f0f0; background:transparent; color:#757575; }
-      .vpe-pill.active { background:#0d47a1; color:#fff; border-color:#0d47a1; }
+      .vpe-pill.active { background:#eaf2fb; color:#185fa5; border-color:#b5d4f4; }
       .vpe-footer { display:flex; justify-content:space-between; align-items:center; gap:8px;
         margin-top:1.5rem; padding-top:1rem; border-top:0.5px solid #f0f0f0; }
       .vpe-verity { display:flex; align-items:center; gap:6px; }
@@ -586,8 +598,8 @@
       .vpe-source-row { display:flex; align-items:center; gap:8px; padding:6px 8px; font-size:13px; cursor:pointer; border-radius:6px; }
       .vpe-source-row:hover { background:#f5f5f5; }
       .vpe-source-row input { width:14px; height:14px; cursor:pointer; flex-shrink:0; }
-      .vpe-search-btn { display:flex; align-items:center; gap:6px; background:#0d47a1; border:0.5px solid #0d47a1;
-        border-radius:6px; padding:8px 16px; color:#fff; text-transform:uppercase; letter-spacing:.04em;
+      .vpe-search-btn { display:flex; align-items:center; gap:6px; background:#eaf2fb; border:1px solid #b5d4f4;
+        border-radius:6px; padding:8px 16px; color:#185fa5; text-transform:uppercase; letter-spacing:.04em;
         font-size:12px; font-weight:600; cursor:pointer; }
     `;
     $('<style>').text(css).appendTo('head');

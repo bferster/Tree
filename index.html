@@ -16,6 +16,11 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
 	<!-- Person Editor module -->
 	<script src="personEditor.js"></script>
+	<!-- Mentions Editor module -->
+	<script type="module">
+		import MentionsEditor from './mentionsEditor.js';
+		window.MentionsEditor = MentionsEditor;
+	</script>
 	<style>
 		/* Base Styling for a desktop application feel */
 		:root {
