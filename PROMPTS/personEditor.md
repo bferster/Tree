@@ -116,5 +116,16 @@ PersonID is this object:
 	linked_persons[]
 	}
 
+when a first_name is set in PERSON EDITOR, convert that value into a nickname using the algorithm outlined in 
 
+Normalize.md
+ and place as value in the Nick Name factor VALUE control
+when a last_name is set in PERSON EDITOR, convert that value into a NYSSIS value using the algorithm outlined in 
+
+Normalize.md
+ and place as value in the NYSIIS factor VALUE control
+when a last_name is set in PERSON EDITOR, convert that value into a Soundex value using the algorithm outlined in 
+
+Normalize.md
+ and place as value in the Soundec factor VALUE control
 

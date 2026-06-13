@@ -64,11 +64,11 @@
      that property of the person object.
      ---------------------------------------------------------- */
   const FIELD_CONFIG = [
-    { key: 'first_name', label: 'First name', editKind: 'free',
+    { key: 'first_name', label: 'First name', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
       compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi' },
     { key: 'norm_first_name', label: 'Nick name', editKind: 'locked',
       compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi' },
-    { key: 'last_name', label: 'Last name', editKind: 'free',
+    { key: 'last_name', label: 'Last name', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
       compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi' },
     { key: 'nysiis_last_name', label: 'NYSIIS', editKind: 'locked',
       compare: ['ignore', 'exact', 'rarity'], compareMode: 'multi' },
@@ -78,11 +78,11 @@
       compare: ['ignore', 'exact'], compareMode: 'multi' },
     { key: 'race', label: 'Race', editKind: 'choice', choices: [{ v: 'B', l: 'Black' }, { v: 'W', l: 'White' }],
       compare: ['ignore', 'exact'], compareMode: 'multi' },
-    { key: 'gender', label: 'Gender', editKind: 'choice', choices: [{ v: 'M', l: 'Male' }, { v: 'F', l: 'Female' }],
+    { key: 'gender', label: 'Gender', editKind: 'choice', choices: [{ v: 'M', l: 'M' }, { v: 'F', l: 'F' }],
       compare: ['ignore', 'exact'], compareMode: 'multi' },
-    { key: 'birth_year', label: 'Birth year', editKind: 'free',
+    { key: 'birth_year', label: 'Birth year', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
       compare: ['ignore', 'exact', '±1', '±2', '±3', '±5'], compareMode: 'radio' },
-    { key: 'death_year', label: 'Death year', editKind: 'free',
+    { key: 'death_year', label: 'Death year', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
       compare: ['ignore', 'exact', '±1', '±2', '±3', '±5'], compareMode: 'radio' },
     { key: 'linked_persons', label: 'Linked people', editKind: 'linked' }
   ];
@@ -187,6 +187,14 @@
      State initialization
      ---------------------------------------------------------- */
   function buildState(person) {
+    if (person.first_name && !person.norm_first_name) {
+      person.norm_first_name = window.Normalize.getNickname(person.first_name);
+    }
+    if (person.last_name) {
+      if (!person.nysiis_last_name) person.nysiis_last_name = window.Normalize.getNYSIIS(person.last_name);
+      if (!person.soundex_last_name) person.soundex_last_name = window.Normalize.getSoundex(person.last_name);
+    }
+
     const fields = {};
     FIELD_CONFIG.forEach(cfg => {
       if (cfg.editKind === 'linked') return;
@@ -278,19 +286,50 @@
     const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]}"></div>`);
 
     if (cfg.editKind === 'free' && fstate.editing) {
-      const $input = $(`<input type="text" placeholder="Type a value…" style="color:${ramp_[1]}">`);
-      $input.on('keydown', function (e) {
-        if (e.key === 'Enter' && $input.val().trim()) {
-          const txt = $input.val().trim();
+      let currentVal = '';
+      if (fstate.selected >= 0 && fstate.options[fstate.selected]) {
+        currentVal = fstate.options[fstate.selected].value;
+      }
+      const $input = $(`<input type="text" placeholder="Type a value…" style="color:${ramp_[1]}" value="${escapeHtml(currentVal)}">`);
+      
+      const saveInput = function() {
+        if (!fstate.editing) return;
+        const txt = $input.val().trim();
+        if (txt) {
           fstate.options.push({ value: txt, option: txt });
           fstate.selected = fstate.options.length - 1;
-          fstate.editing = false;
-          $row.trigger('vpe:changed');
+        } else {
+          fstate.selected = -1;
+        }
+        fstate.editing = false;
+        $row.trigger('vpe:changed');
+      };
+
+      $input.on('input', function() {
+        const val = $input.val().trim();
+        const $factors = $row.closest('.vpe-factors');
+        if (cfg.key === 'first_name') {
+           const norm = window.Normalize.getNickname(val);
+           $factors.find('.vpe-row').filter(function() { return $(this).find('.vpe-field-label').text() === 'Nick name'; }).find('.vpe-chip').text(norm);
+        } else if (cfg.key === 'last_name') {
+           $factors.find('.vpe-row').filter(function() { return $(this).find('.vpe-field-label').text() === 'NYSIIS'; }).find('.vpe-chip').text(window.Normalize.getNYSIIS(val));
+           $factors.find('.vpe-row').filter(function() { return $(this).find('.vpe-field-label').text() === 'Soundex'; }).find('.vpe-chip').text(window.Normalize.getSoundex(val));
+        }
+      });
+
+      $input.on('keydown', function (e) {
+        if (e.key === 'Enter') {
+          saveInput();
         } else if (e.key === 'Escape') {
           fstate.editing = false;
           $row.trigger('vpe:changed');
         }
       });
+
+      $input.on('blur', function() {
+        saveInput();
+      });
+
       const $cancel = $(`<i class="ti ti-x" style="cursor:pointer;color:${ramp_[1]}"></i>`);
       $cancel.on('click', function () { fstate.editing = false; $row.trigger('vpe:changed'); });
       $val.append($input, $cancel);
@@ -409,8 +448,36 @@
   /* re-render the whole factors table when a row changes */
   function bindChanged($row, person, cfg, state) {
     $row.on('vpe:changed', function () {
+      const fstate = state.fields[cfg.key];
+      let selectedValue = null;
+      if (fstate && fstate.selected >= 0 && fstate.options[fstate.selected]) {
+        selectedValue = fstate.options[fstate.selected].value;
+      }
+
+      if (cfg.key === 'first_name' && selectedValue) {
+        let norm = window.Normalize.getNickname(selectedValue);
+        if (norm) updateFieldState(state, 'norm_first_name', norm);
+      } else if (cfg.key === 'last_name' && selectedValue) {
+        let nysiis = window.Normalize.getNYSIIS(selectedValue);
+        if (nysiis) updateFieldState(state, 'nysiis_last_name', nysiis);
+        let soundex = window.Normalize.getSoundex(selectedValue);
+        if (soundex) updateFieldState(state, 'soundex_last_name', soundex);
+      }
+
       $row.closest('.vpe-factors').trigger('vpe:rerender');
     });
+  }
+
+  function updateFieldState(state, key, newValue) {
+    const fs = state.fields[key];
+    if (!fs) return;
+    let idx = fs.options.findIndex(o => String(o.value).toUpperCase() === String(newValue).toUpperCase());
+    if (idx >= 0) {
+      fs.selected = idx;
+    } else {
+      fs.options.push({ value: newValue, option: newValue });
+      fs.selected = fs.options.length - 1;
+    }
   }
 
   /* ----------------------------------------------------------
@@ -552,7 +619,7 @@
         background: #e5e5e5;
         border-radius: 12px;
         margin-left: 0;
-        margin-top: 12px;
+        margin-top: 0;
         padding: 0;
         box-sizing: border-box;
       }

@@ -61,7 +61,7 @@ document.body.insertAdjacentHTML('afterbegin', `
 	<!-- Workspace Area -->
 	<div class="main-workspace">
 		<!-- Main Canvas Area -->
-		<div class="canvas-container" style="width: 50%;">
+		<div class="canvas-container" style="width: 33.33%;">
 	
 		</div>
 	
@@ -69,7 +69,7 @@ document.body.insertAdjacentHTML('afterbegin', `
 		<div id="divider"></div>
 
 		<!-- Matching Module Placeholder -->
-		<div class="matching-module-placeholder" style="width: calc(50% - 6px);">
+		<div class="matching-module-placeholder" style="width: calc(66.67% - 6px);">
 			<div id="right-panel-content" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #666; font-size: 16px; overflow-y: auto;">
 				Select a person node to view/edit details
 			</div>
@@ -349,7 +349,7 @@ function addNode(fields) {
 		mentions: fields.mentions || [],
 		linked_persons: fields.linked_persons || [],
 		enslaved: fields.enslaved || false, // kept for node color/tan styling
-		
+
 		// Canvas layout properties
 		x: fields.x !== undefined ? fields.x : 0,
 		y: fields.y !== undefined ? fields.y : 0,
@@ -554,10 +554,10 @@ function syncEditorToNode(node) {
 	const container = $('#person-editor-container');
 	if (!container.length) return;
 
-	container.find('.vpe-row').each(function() {
+	container.find('.vpe-row').each(function () {
 		const label = $(this).find('.vpe-field-label').text().trim().toLowerCase();
 		const val = $(this).find('.vpe-chip').text().trim() || null;
-		
+
 		if (label === 'first name') node.first_name = val || "";
 		else if (label === 'last name') node.last_name = val || "";
 		else if (label === 'nick name') node.norm_first_name = val || "";
@@ -820,7 +820,7 @@ function fitToScreen(duration = 500) {
 		containerHeight / bboxHeight,
 		4 // Cap at max zoom scale (4)
 	);
-	
+
 	const finalScale = Math.max(scale, 0.1);
 
 	// Center the bounding box in the container
@@ -1170,11 +1170,11 @@ function renderEdges() {
 clearAll(); // Ensure clean state before injecting our persistent test data
 undoStack = [];
 
-addNode({ person_id: "P001", first_name: "Mary", last_name: "Johnson", birth_year: 1820, death_year: 1890, gender: "female", enslaved: true, x: 200, y: 200 });
-addNode({ person_id: "P002", first_name: "James", last_name: "Johnson", birth_year: 1815, death_year: 1878, gender: "male", enslaved: true, x: 500, y: 200 });
-addNode({ person_id: "P003", first_name: "Sarah", last_name: "Johnson", birth_year: 1845, death_year: null, gender: "female", enslaved: false, x: 200, y: 450 });
-addNode({ person_id: "P004", first_name: "Thomas", last_name: "Johnson", birth_year: 1842, death_year: 1910, gender: "male", enslaved: false, x: 500, y: 450 });
-addNode({ person_id: "P005", first_name: "Josh", last_name: "Johnson", birth_year: 1872, death_year: 1940, gender: "male", enslaved: false, x: -100, y: 200 });
+addNode({ person_id: "P001", first_name: "Mary", last_name: "Johnson", birth_year: 1820, death_year: 1890, gender: "F", enslaved: true, x: 200, y: 200 });
+addNode({ person_id: "P002", first_name: "James", last_name: "Johnson", birth_year: 1815, death_year: 1878, gender: "M", enslaved: true, x: 500, y: 200 });
+addNode({ person_id: "P003", first_name: "Sarah", last_name: "Johnson", birth_year: 1845, death_year: null, gender: "F", enslaved: false, x: 200, y: 450 });
+addNode({ person_id: "P004", first_name: "Thomas", last_name: "Johnson", birth_year: 1842, death_year: 1910, gender: "M", enslaved: false, x: 500, y: 450 });
+addNode({ person_id: "P005", first_name: "Josh", last_name: "Johnson", birth_year: 1872, death_year: 1940, gender: "M", enslaved: false, x: -100, y: 200 });
 
 // Phase 4 test triplets
 addTriplet("P001", "SpouseOf", "P002");
@@ -1440,7 +1440,7 @@ $(document).ready(function () {
 		const sourcePid = document.getElementById("add-node-modal").dataset.sourcePid;
 		const relation = document.getElementById("add-node-select").value;
 		document.getElementById("add-node-modal").close();
-		
+
 		if (sourcePid && relation) {
 			const sourceNode = getNode(sourcePid);
 			const newPid = generatePid();
@@ -1471,7 +1471,7 @@ $(document).ready(function () {
 				addTriplet(sourcePid, 'ChildOf', newPid);
 			} else if (relation === 'SiblingOf') {
 				addTriplet(newPid, 'SiblingOf', sourcePid);
-				
+
 				// Connect the new sibling to all known parents of the source node
 				const parents = new Set();
 				state.triplets.forEach(t => {
@@ -1662,10 +1662,10 @@ function selectNodeAndShowEditor(personId) {
 			<div id="mentions-editor-container" style="width: 33.33%; height: 100%; overflow-y: auto; box-sizing: border-box;"></div>
 		</div>
 	`);
-	
+
 	window._VPE_FAKE_PERSONS = window._VPE_FAKE_PERSONS || {};
 	state.nodes.forEach(n => { window._VPE_FAKE_PERSONS[n.person_id] = n; });
-	
+
 	let mEditor = null;
 	const node = getNode(personId);
 	if (node) {
@@ -1678,7 +1678,7 @@ function selectNodeAndShowEditor(personId) {
 			onAdd: (pid, mentionId) => {
 				const mention = mEditor.getCurrentMention();
 				if (!mention) return;
-				
+
 				const n = getNode(pid);
 				if (n) {
 					n.mentions = n.mentions || [];
@@ -1708,10 +1708,10 @@ function selectNodeAndShowEditor(personId) {
 			mEditor.load(node, ['ALB-CN1870', 'ALB-CN1880', 'ALB-MARR', 'ALB-TAX'], getMockMentions(node));
 		}
 	}
-	
+
 	if (typeof ShowPersonEditor === 'function') {
 		ShowPersonEditor(personId, $('#person-editor-container'));
-		$('#person-editor-container').on('change vpe:changed vpe:rerender', function() {
+		$('#person-editor-container').on('change vpe:changed vpe:rerender', function () {
 			const n = getNode(personId);
 			if (n) {
 				syncEditorToNode(n);
@@ -1722,7 +1722,7 @@ function selectNodeAndShowEditor(personId) {
 			}
 		});
 
-		$('#person-editor-container').on('vpe:search', function(e, criteria) {
+		$('#person-editor-container').on('vpe:search', function (e, criteria) {
 			if (mEditor && criteria && criteria.fields) {
 				const adaptedCriteria = {};
 				for (const fieldName of Object.keys(criteria.fields)) {
@@ -1733,7 +1733,7 @@ function selectNodeAndShowEditor(personId) {
 					else if (fieldName === 'nysiis_last_name') keys = ['exactNysiisLast', 'fuzzyNysiisLast', 'rarityNysiisLast'];
 					else if (fieldName === 'birth_year') keys = ['birthYear'];
 					else if (fieldName === 'death_year') keys = ['deathYear'];
-					
+
 					keys.forEach(k => {
 						adaptedCriteria[k] = {
 							enabled: fieldVal.compare ? !fieldVal.compare.includes('ignore') : true,

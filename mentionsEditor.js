@@ -497,6 +497,7 @@ class MentionsEditor {
     const fieldRows = Object.keys(MentionsEditor.FIELD_LABELS).map(key => {
       const label = MentionsEditor.FIELD_LABELS[key];
       let val = match.mention[key];
+      if (key === 'gender' && val && val !== '') val = String(val)[0].toUpperCase();
       if (val === undefined || val === null || val === '') val = '\u2014';
       return `
         <tr>
@@ -581,7 +582,7 @@ class MentionsEditor {
         background: var(--me-bg);
         border-radius: var(--me-radius);
         margin-left: 0;
-        margin-top: 12px;
+        margin-top: 0;
         padding: 0;
         box-sizing: border-box;
         max-height: calc(100% - 12px);
@@ -617,7 +618,7 @@ class MentionsEditor {
       }
       .me-detail-panel {
         flex: 1;
-        padding: 14px 16px;
+        padding: 7px 16px 14px 16px;
         min-width: 0;
         overflow-y: auto;
       }
