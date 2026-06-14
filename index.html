@@ -6,23 +6,18 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Verité editor</title>
 	<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-	<!-- Use jQuery loaded from CDN as requested for menu toggles -->
 	<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-	<!-- jQuery UI for autocomplete, draggable, etc if used by personEditor -->
 	<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 	<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
 	<script src="https://d3js.org/d3.v7.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-	<!-- Normalization algorithms -->
-	<script src="normalize.js"></script>
-	<!-- Person Editor module -->
-	<script src="personEditor.js"></script>
-	<!-- Mentions Editor module -->
-	<script type="module">
-		import MentionsEditor from './mentionsEditor.js';
-		window.MentionsEditor = MentionsEditor;
-	</script>
+	<script src="app.js" defer></script>
+	<script src="normalize.js" defer></script>
+	<script src="personEditor.js" defer></script>
+	<script src="mentionsEditor.js" defer></script>
+	<script src="tree.js" defer></script>
+
 	<style>
 		/* Base Styling for a desktop application feel */
 		:root {
@@ -345,12 +340,10 @@
 			border-color: #d43f3a;
 		}
 	</style>
+	<script> function trace(a, b, c, d) { console.log(a, b, c, d); } </script>
 </head>
 
 <body>
-
-	<script src="tree.js"></script>
-
 </body>
 
 </html>

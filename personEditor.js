@@ -5,37 +5,36 @@
 	   ShowPersonEditor(personId, $('#myTabDiv'))
    ============================================================ */
 
-(function (window, $) {
-	'use strict';
+class PersonEditor {
 
-	const FAKE_PERSONS = {
+	static FAKE_PERSONS = {
 	};
 
 	/* ----------------------------------------------------------
 	   COLOR RAMPS (per field, light pill bg / dark text)
 	   ---------------------------------------------------------- */
-	const COLORS = {
+	static COLORS = {
 		first_name: 'c-purple', norm_first_name: 'c-purple', last_name: 'c-teal', nysiis_last_name: 'c-coral',
 		soundex_last_name: 'c-coral', suffix: 'c-amber', race: 'c-pink', gender: 'c-pink',
 		birth_year: 'c-blue', death_year: 'c-blue', linked_persons: 'c-green'
 	};
 
-	const RAMP = {
+	static RAMP = {
 		'c-purple': ['#EEEDFE', '#26215C'], 'c-teal': ['#E1F5EE', '#04342C'], 'c-coral': ['#FAECE7', '#4A1B0C'],
 		'c-pink': ['#FBEAF0', '#4B1528'], 'c-gray': ['#F1EFE8', '#2C2C2A'], 'c-blue': ['#E6F1FB', '#042C53'],
 		'c-amber': ['#FCEFD9', '#4A2E07'], 'c-green': ['#E5F4E9', '#0F3D1F']
 	};
 
-	const STAR_FILL = '#EF9F27';
-	const STAR_EMPTY = '#9e9e9e';
-	const STAR_PATH = "M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.7-6.2 3.7 1.6-7L2 9.2l7.1-.6z";
+	static STAR_FILL = '#EF9F27';
+	static STAR_EMPTY = '#9e9e9e';
+	static STAR_PATH = "M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.7-6.2 3.7 1.6-7L2 9.2l7.1-.6z";
 
 	/* ----------------------------------------------------------
 	   FIELD CONFIG
 	   Each entry describes how to render the FACTORS row for
 	   that property of the person object.
 	   ---------------------------------------------------------- */
-	const FIELD_CONFIG = [
+	static FIELD_CONFIG = [
 		{
 			key: 'first_name', label: 'First name', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
 			compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi'
@@ -82,28 +81,28 @@
 	/* ----------------------------------------------------------
 	   SVG star helpers
 	   ---------------------------------------------------------- */
-	function makeStarSVG(filled) {
+	static makeStarSVG(filled) {
 		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 		svg.setAttribute('viewBox', '0 0 24 24');
 		svg.setAttribute('width', '18');
 		svg.setAttribute('height', '18');
 		svg.style.display = 'block';
 		const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-		path.setAttribute('d', STAR_PATH);
-		path.setAttribute('fill', filled ? STAR_FILL : 'none');
-		path.setAttribute('stroke', filled ? STAR_FILL : STAR_EMPTY);
+		path.setAttribute('d', PersonEditor.STAR_PATH);
+		path.setAttribute('fill', filled ? PersonEditor.STAR_FILL : 'none');
+		path.setAttribute('stroke', filled ? PersonEditor.STAR_FILL : PersonEditor.STAR_EMPTY);
 		path.setAttribute('stroke-width', '1.5');
 		path.setAttribute('stroke-linejoin', 'round');
 		svg.appendChild(path);
 		return svg;
 	}
 
-	function paintStars(container, n) {
+	static paintStars(container, n) {
 		container.children().each(function (idx) {
 			const path = this.querySelector('path');
 			const filled = idx < n;
-			path.setAttribute('fill', filled ? STAR_FILL : 'none');
-			path.setAttribute('stroke', filled ? STAR_FILL : STAR_EMPTY);
+			path.setAttribute('fill', filled ? PersonEditor.STAR_FILL : 'none');
+			path.setAttribute('stroke', filled ? PersonEditor.STAR_FILL : PersonEditor.STAR_EMPTY);
 		});
 	}
 
@@ -111,11 +110,11 @@
 	   Build the list of selectable "VALUE" options for a field
 	   by combining the canonical value with any mention variants.
 	   ---------------------------------------------------------- */
-	function buildOptions(person, key) {
+	static buildOptions(person, key) {
 		const seen = new Set();
 		const options = [];
 
-		const cfg = FIELD_CONFIG.find(c => c.key === key);
+		const cfg = PersonEditor.FIELD_CONFIG.find(c => c.key === key);
 		if (cfg && cfg.choices) {
 			cfg.choices.forEach(c => {
 				let v = typeof c === 'object' ? c.v : c;
@@ -153,9 +152,15 @@
 	   Main entry point
 	   ---------------------------------------------------------- */
 
-	function ShowPersonEditor(personId, $target) {
-		$target = $target || $('body');
-		const person = FAKE_PERSONS[personId];
+
+	constructor($target) {
+		this.$target = $target || $('body');
+		app.personEditor = this;
+	}
+
+	load(personId) {
+		const $target = this.$target;
+		const person = PersonEditor.FAKE_PERSONS[personId];
 
 		if (!person) {
 			$target.empty().append($('<p>').text('Person not found: ' + personId));
@@ -163,23 +168,23 @@
 		}
 
 		// working copy of state (selections, weights, etc.)
-		const state = buildState(person);
+		const state = PersonEditor.buildState(person);
 
 		$target.empty();
 		const $dialog = $('<div class="vpe-dialog"></div>');
 		$target.append($dialog);
 
-		renderShell($dialog, person, state);
-		renderFactors($dialog, person, state);
-		renderFooter($dialog, person, state);
+		PersonEditor.renderShell($dialog, person, state);
+		PersonEditor.renderFactors($dialog, person, state);
+		PersonEditor.renderFooter($dialog, person, state);
 
-		injectStylesOnce();
+		PersonEditor.injectStylesOnce();
 	}
 
 	/* ----------------------------------------------------------
 	   State initialization
 	   ---------------------------------------------------------- */
-	function buildState(person) {
+	static buildState(person) {
 		if (person.first_name && !person.norm_first_name) {
 			person.norm_first_name = window.Normalize.getNickname(person.first_name);
 		}
@@ -189,10 +194,10 @@
 		}
 
 		const fields = {};
-		FIELD_CONFIG.forEach(cfg => {
+		PersonEditor.FIELD_CONFIG.forEach(cfg => {
 			if (cfg.editKind === 'linked') return;
 
-			const options = buildOptions(person, cfg.key);
+			const options = PersonEditor.buildOptions(person, cfg.key);
 			let selectedIdx = 0;
 			const canonical = person[cfg.key];
 			const found = options.findIndex(o => String(o.value) === String(canonical));
@@ -222,11 +227,11 @@
 	/* ----------------------------------------------------------
 	   Shell: header + factors table container
 	   ---------------------------------------------------------- */
-	function renderShell($dialog, person, state) {
+	static renderShell($dialog, person, state) {
 		$dialog.append(`
       <div class="vpe-header">
         <div>
-          <p class="vpe-target-summary">${escapeHtml(person.first_name)} ${escapeHtml(person.last_name)} ${escapeHtml(person.birth_year || '?')}-${escapeHtml(person.death_year || '?')}</p>
+          <p class="vpe-target-summary">${PersonEditor.escapeHtml(person.first_name)} ${PersonEditor.escapeHtml(person.last_name)} ${PersonEditor.escapeHtml(person.birth_year || '?')}-${PersonEditor.escapeHtml(person.death_year || '?')}</p>
         </div>
         <i class="ti ti-x vpe-close" aria-label="Close"></i>
       </div>
@@ -242,7 +247,7 @@
 	/* ----------------------------------------------------------
 	   FACTORS table
 	   ---------------------------------------------------------- */
-	function renderFactors($dialog, person, state) {
+	static renderFactors($dialog, person, state) {
 		const $factors = $dialog.find('.vpe-factors');
 		$factors.empty();
 
@@ -252,27 +257,27 @@
       </div>
     `);
 
-		FIELD_CONFIG.forEach(cfg => {
+		PersonEditor.FIELD_CONFIG.forEach(cfg => {
 			if (cfg.editKind === 'linked') {
-				$factors.append(renderLinkedRow(person, cfg));
+				$factors.append(PersonEditor.renderLinkedRow(person, cfg));
 				return;
 			}
-			$factors.append(renderFieldRow(person, cfg, state));
+			$factors.append(PersonEditor.renderFieldRow(person, cfg, state));
 		});
 
 		// re-render after any change
 		$factors.off('vpe:rerender').on('vpe:rerender', function () {
-			renderFactors($dialog, person, state);
+			PersonEditor.renderFactors($dialog, person, state);
 		});
 	}
 
 	/* ----- single field row (free / choice / locked) ----- */
-	function renderFieldRow(person, cfg, state) {
+	static renderFieldRow(person, cfg, state) {
 		const fstate = state.fields[cfg.key];
-		const ramp_ = RAMP[COLORS[cfg.key]] || RAMP['c-gray'];
+		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS[cfg.key]] || PersonEditor.RAMP['c-gray'];
 
 		const $row = $(`<div class="vpe-row"></div>`);
-		$row.append(`<div class="vpe-field-label">${escapeHtml(cfg.label)}</div>`);
+		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
 
 		// VALUE
 		const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]}"></div>`);
@@ -282,7 +287,7 @@
 			if (fstate.selected >= 0 && fstate.options[fstate.selected]) {
 				currentVal = fstate.options[fstate.selected].value;
 			}
-			const $input = $(`<input type="text" placeholder="Type a value…" style="color:${ramp_[1]}" value="${escapeHtml(currentVal)}">`);
+			const $input = $(`<input type="text" placeholder="Type a value…" style="color:${ramp_[1]}" value="${PersonEditor.escapeHtml(currentVal)}">`);
 
 			const saveInput = function () {
 				if (!fstate.editing) return;
@@ -329,7 +334,7 @@
 
 			// empty impact/compare placeholders to keep grid alignment
 			$row.append('<div></div><div></div>');
-			bindChanged($row, person, cfg, state);
+			PersonEditor.bindChanged($row, person, cfg, state);
 			setTimeout(() => $input.trigger('focus'), 0);
 			return $row;
 		}
@@ -342,7 +347,7 @@
 		if (cfg.editKind === 'free') {
 			const $sel = $(`<select style="color:${isNull ? 'transparent' : ramp_[1]}"></select>`);
 			fstate.options.forEach((o, i) => {
-				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${escapeHtml(o.option)}</option>`);
+				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${PersonEditor.escapeHtml(o.option)}</option>`);
 			});
 			$sel.append(`<option value="-1" ${isNull ? 'selected' : ''} style="color:${ramp_[1]}">Make blank</option>`);
 			$sel.append(`<option value="addtext" style="color:${ramp_[1]}">Add text</option>`);
@@ -356,7 +361,7 @@
 		} else if (cfg.editKind === 'choice') {
 			const $sel = $(`<select style="color:${isNull ? 'transparent' : ramp_[1]}"></select>`);
 			fstate.options.forEach((o, i) => {
-				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${escapeHtml(o.option)}</option>`);
+				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${PersonEditor.escapeHtml(o.option)}</option>`);
 			});
 			$sel.append(`<option value="-1" ${isNull ? 'selected' : ''} style="color:${ramp_[1]}">Make blank</option>`);
 			$sel.on('change', function () {
@@ -372,13 +377,13 @@
 		// IMPACT
 		const $impact = $(`<div class="vpe-star-row"></div>`);
 		for (let s = 1; s <= 4; s++) {
-			const svg = makeStarSVG(s <= fstate.weight);
+			const svg = PersonEditor.makeStarSVG(s <= fstate.weight);
 			svg.setAttribute('aria-label', `${s} star${s > 1 ? 's' : ''}`);
 			$(svg).css('cursor', 'pointer');
 			$impact.append(svg);
 			$(svg).on('click', function () {
 				fstate.weight = s;
-				paintStars($impact, fstate.weight);
+				PersonEditor.paintStars($impact, fstate.weight);
 			});
 		}
 		$row.append($impact);
@@ -387,7 +392,7 @@
 		const $compare = $(`<div class="vpe-compare-row"></div>`);
 		fstate.compare.forEach(label => {
 			const isActive = fstate.active.includes(label);
-			const $pill = $(`<button type="button" class="vpe-pill ${isActive ? 'active' : ''}">${escapeHtml(label)}</button>`);
+			const $pill = $(`<button type="button" class="vpe-pill ${isActive ? 'active' : ''}">${PersonEditor.escapeHtml(label)}</button>`);
 			$pill.on('click', function () {
 				if (fstate.compareMode === 'radio') {
 					fstate.active = [label];
@@ -410,17 +415,17 @@
 		});
 		$row.append($compare);
 
-		bindChanged($row, person, cfg, state);
+		PersonEditor.bindChanged($row, person, cfg, state);
 		return $row;
 	}
 
 	/* ----- linked people row ----- */
-	function renderLinkedRow(person, cfg) {
-		const ramp_ = RAMP[COLORS.linked_persons];
+	static renderLinkedRow(person, cfg) {
+		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS.linked_persons];
 		const linked = person.linked_persons || [];
 
 		const $row = $(`<div class="vpe-row vpe-row-linked"></div>`);
-		$row.append(`<div class="vpe-field-label">${escapeHtml(cfg.label)}</div>`);
+		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
 
 		const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]}"></div>`);
 		const $chip = $(`<span class="vpe-chip" style="color:${ramp_[1]}">${linked.length} linked people</span>`);
@@ -429,7 +434,7 @@
 		const $sel = $(`<select style="color:${ramp_[1]}"></select>`);
 		$sel.append('<option value="">View linked people</option>');
 		linked.forEach((p, i) => {
-			$sel.append(`<option value="${i}" disabled style="color:${ramp_[1]}">${escapeHtml(p.value)} (${escapeHtml(p.source)})</option>`);
+			$sel.append(`<option value="${i}" disabled style="color:${ramp_[1]}">${PersonEditor.escapeHtml(p.value)} (${PersonEditor.escapeHtml(p.source)})</option>`);
 		});
 		$val.append($sel);
 
@@ -438,7 +443,7 @@
 	}
 
 	/* re-render the whole factors table when a row changes */
-	function bindChanged($row, person, cfg, state) {
+	static bindChanged($row, person, cfg, state) {
 		$row.on('vpe:changed', function () {
 			const fstate = state.fields[cfg.key];
 			let selectedValue = null;
@@ -448,19 +453,19 @@
 
 			if (cfg.key === 'first_name' && selectedValue) {
 				let norm = window.Normalize.getNickname(selectedValue);
-				if (norm) updateFieldState(state, 'norm_first_name', norm);
+				if (norm) PersonEditor.updateFieldState(state, 'norm_first_name', norm);
 			} else if (cfg.key === 'last_name' && selectedValue) {
 				let nysiis = window.Normalize.getNYSIIS(selectedValue);
-				if (nysiis) updateFieldState(state, 'nysiis_last_name', nysiis);
+				if (nysiis) PersonEditor.updateFieldState(state, 'nysiis_last_name', nysiis);
 				let soundex = window.Normalize.getSoundex(selectedValue);
-				if (soundex) updateFieldState(state, 'soundex_last_name', soundex);
+				if (soundex) PersonEditor.updateFieldState(state, 'soundex_last_name', soundex);
 			}
 
 			$row.closest('.vpe-factors').trigger('vpe:rerender');
 		});
 	}
 
-	function updateFieldState(state, key, newValue) {
+	static updateFieldState(state, key, newValue) {
 		const fs = state.fields[key];
 		if (!fs) return;
 		let idx = fs.options.findIndex(o => String(o.value).toUpperCase() === String(newValue).toUpperCase());
@@ -475,7 +480,7 @@
 	/* ----------------------------------------------------------
 	   FOOTER: Verity stars, Sources dropdown, Search button
 	   ---------------------------------------------------------- */
-	function renderFooter($dialog, person, state) {
+	static renderFooter($dialog, person, state) {
 		const $footer = $dialog.find('.vpe-footer');
 		$footer.empty();
 
@@ -483,7 +488,7 @@
 		const $verity = $(`<div class="vpe-verity"><span class="vpe-verity-label">Verity:</span></div>`);
 		const $stars = $('<div class="vpe-star-row"></div>');
 		for (let s = 1; s <= 4; s++) {
-			const svg = makeStarSVG(s <= state.verity);
+			const svg = PersonEditor.makeStarSVG(s <= state.verity);
 			svg.setAttribute('aria-label', `${s} star${s > 1 ? 's' : ''}`);
 			$stars.append(svg);
 		}
@@ -491,12 +496,12 @@
 
 		// Sources dropdown
 		const $sourcesWrap = $('<div class="vpe-sources-wrap"></div>');
-		renderSourcesDropdown($sourcesWrap, state);
+		PersonEditor.renderSourcesDropdown($sourcesWrap, state);
 
 		// Search button
 		const $searchBtn = $(`<button type="button" class="vpe-search-btn"><i class="ti ti-search"></i>Search</button>`);
 		$searchBtn.on('click', function () {
-			$dialog.trigger('vpe:search', [collectCriteria(person, state)]);
+			$dialog.trigger('vpe:search', [PersonEditor.collectCriteria(person, state)]);
 		});
 
 		const $right = $('<div class="vpe-footer-right"></div>');
@@ -505,7 +510,7 @@
 		$footer.append($verity, $right);
 	}
 
-	function renderSourcesDropdown($wrap, state) {
+	static renderSourcesDropdown($wrap, state) {
 		$wrap.empty();
 		const ids = Object.keys(state.sources);
 		const checkedCount = ids.filter(id => state.sources[id].checked).length;
@@ -542,7 +547,7 @@
 				e.stopPropagation();
 				const newVal = !allChecked;
 				ids.forEach(id => state.sources[id].checked = newVal);
-				renderSourcesDropdown($wrap, state);
+				PersonEditor.renderSourcesDropdown($wrap, state);
 			});
 			$toggleRow.append($toggleBtn);
 			$panel.append($toggleRow);
@@ -552,13 +557,13 @@
 				const $row = $('<div class="vpe-source-row"></div>');
 				const $cb = $(`<input type="checkbox" ${src.checked ? 'checked' : ''}>`);
 				$cb.on('click', e => e.stopPropagation());
-				$cb.on('change', function () { src.checked = $cb.is(':checked'); renderSourcesDropdown($wrap, state); });
-				$row.append($cb, `<span>${escapeHtml(src.label)}</span>`);
+				$cb.on('change', function () { src.checked = $cb.is(':checked'); PersonEditor.renderSourcesDropdown($wrap, state); });
+				$row.append($cb, `<span>${PersonEditor.escapeHtml(src.label)}</span>`);
 				$row.on('click', function (e) {
 					if (e.target !== $cb[0]) {
 						$cb.prop('checked', !$cb.is(':checked'));
 						src.checked = $cb.is(':checked');
-						renderSourcesDropdown($wrap, state);
+						PersonEditor.renderSourcesDropdown($wrap, state);
 					}
 				});
 				$panel.append($row);
@@ -571,7 +576,7 @@
 	/* ----------------------------------------------------------
 	   Collect current criteria for "Search"
 	   ---------------------------------------------------------- */
-	function collectCriteria(person, state) {
+	static collectCriteria(person, state) {
 		const criteria = { person_id: person.person_id, fields: {}, sources: [] };
 		Object.keys(state.fields).forEach(key => {
 			const f = state.fields[key];
@@ -591,16 +596,16 @@
 	/* ----------------------------------------------------------
 	   Utilities
 	   ---------------------------------------------------------- */
-	function escapeHtml(s) {
+	static escapeHtml(s) {
 		return String(s == null ? '' : s)
 			.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 			.replace(/"/g, '&quot;');
 	}
 
-	let stylesInjected = false;
-	function injectStylesOnce() {
-		if (stylesInjected) return;
-		stylesInjected = true;
+	static stylesInjected = false;
+	static injectStylesOnce() {
+		if (PersonEditor.stylesInjected) return;
+		PersonEditor.stylesInjected = true;
 		const css = `
       .person-editor {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -660,8 +665,7 @@
 		$('<style>').text(css).appendTo('head');
 	}
 
-	/* expose */
-	window.ShowPersonEditor = ShowPersonEditor;
-	window._VPE_FAKE_PERSONS = FAKE_PERSONS; // for testing/dev
+}
 
-})(window, jQuery);
+window.PersonEditor = PersonEditor;
+window._VPE_FAKE_PERSONS = PersonEditor.FAKE_PERSONS; // for testing/dev
