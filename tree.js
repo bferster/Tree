@@ -587,22 +587,22 @@ function renderNodes() {
 		.attr("class", "node-bg")
 		.attr("d", d => getGenderPath(d.gender))
 		.attr("transform", "translate(22, 0) scale(1.16)")
-		.attr("fill", "#ffffff")
-		.attr("stroke", "#cccccc")
+		.attr("fill", "#f5d506d9")
+		.attr("stroke", "#999999")
 		.attr("stroke-width", 1)
 		.attr("stroke-linejoin", "round")
 		.attr("stroke-linecap", "round");
 
-	// 3. Full name
+	// 3. Name Label
 	nodeEnter.append("text")
 		.attr("class", "node-name")
 		.attr("x", nodeWidth / 2)
 		.attr("y", 135)
 		.attr("text-anchor", "middle")
 		.attr("font-weight", "bold")
-		.attr("font-size", "14px")
+		.attr("font-size", "12px")
 		.attr("fill", "#333")
-		.text(d => (d.first_name || "") + " " + (d.last_name || ""));
+		.text(d => (d.first_name || "?") + " " + (d.last_name || ""));
 
 	// 4. Year range
 	nodeEnter.append("text")
@@ -641,7 +641,7 @@ function renderNodes() {
 		.attr("y", 2)
 		.attr("font-size", "7px")
 		.attr("font-weight", "bold")
-		.attr("fill", "green")
+		.attr("fill", "#2ecc71")
 		.text("+");
 
 	// 6. Expand/Collapse triangles
@@ -707,7 +707,7 @@ function renderNodes() {
 	nodeUpdate.attr("transform", d => `translate(${d.x},${d.y})`);
 
 	// Update core node editable data elements
-	nodeUpdate.select(".node-name").text(d => (d.first_name || "") + " " + (d.last_name || ""));
+	nodeUpdate.select(".node-name").text(d => (d.first_name || "?") + " " + (d.last_name || ""));
 	nodeUpdate.select(".node-years").text(d => {
 		const by = d.birth_year ? d.birth_year : "?";
 		const dy = d.death_year ? d.death_year : "?";
@@ -715,7 +715,7 @@ function renderNodes() {
 	});
 	nodeUpdate.select(".node-bg")
 		.attr("d", d => getGenderPath(d.gender))
-		.attr("fill", "#ffffff");
+		.attr("fill", "#ffe0b2");
 
 	// Update triangle fill colors if they are actively hiding a branch
 	nodeUpdate.select(".tri-right").attr("fill", d => d.hiddenDirs && d.hiddenDirs.right ? "green" : "#999");
@@ -754,7 +754,7 @@ function updateTriangleVisibility() {
 
 function updateNodeSelection() {
 	gNodes.selectAll(".node-bg")
-		.attr("stroke", d => d.person_id === state.selectedPid ? "#2ecc71" : "#cccccc")
+		.attr("stroke", d => d.person_id === state.selectedPid ? "#2ecc71" : "#999999")
 		.attr("stroke-width", 1);
 }
 
@@ -946,7 +946,7 @@ function applyLayout() {
 function getAnchors(node) {
 	const g = (node.gender || "unknown").toLowerCase();
 	let lx, rx, y;
-	
+
 	if (g === 'female' || g === 'f') {
 		lx = node.x + 60;
 		rx = node.x + 100;
@@ -978,7 +978,7 @@ function drawSmartCurve(source, target) {
 		const startY = getAnchors(s).right.y;
 		const endX = getAnchors(t).left.x;
 		const endY = getAnchors(t).left.y;
-		
+
 		const cp1X = startX + 30;
 		const cp2X = endX - 30;
 		return `M ${startX} ${startY} C ${cp1X} ${startY}, ${cp2X} ${endY}, ${endX} ${endY}`;
@@ -1089,8 +1089,8 @@ function renderEdges() {
 		.append("path")
 		.attr("class", "spouse-bg")
 		.attr("fill", "none")
-		.attr("stroke", "#888888")
-		.attr("stroke-width", 5)
+		.attr("stroke", "#999999")
+		.attr("stroke-width", 3)
 		.attr("d", d => drawSmartCurve(d.source, d.target));
 
 	edgeGroups.filter(d => d.type === 'SpouseOf')
@@ -1098,7 +1098,7 @@ function renderEdges() {
 		.attr("class", "spouse-fg")
 		.attr("fill", "none")
 		.attr("stroke", "var(--canvas-bg, #e5e5e5)")
-		.attr("stroke-width", 2)
+		.attr("stroke-width", 1)
 		.attr("d", d => drawSmartCurve(d.source, d.target));
 
 	// Family Pedigree (parent→child lines)
@@ -1106,8 +1106,8 @@ function renderEdges() {
 		.append("path")
 		.attr("class", "parent-child-line")
 		.attr("fill", "none")
-		.attr("stroke", "#aaaaaa")
-		.attr("stroke-width", 2)
+		.attr("stroke", "#666666")
+		.attr("stroke-width", 1)
 		.attr("stroke-linejoin", "round")
 		.attr("d", d => {
 			let parentX, parentY;
@@ -1126,34 +1126,51 @@ function renderEdges() {
 				parentX = minPx + (maxPx - minPx) / 2 + nodeWidth / 2;
 				parentY = Math.max(...d.parents.map(p => getAnchors(p).right.y));
 			}
-			
+
 			let pathStr = "";
 			d.children.forEach(c => {
 				const isRight = c.x > parentX;
 				const anchors = getAnchors(c);
 				const cx = isRight ? anchors.left.x : anchors.right.x;
 				const cy = anchors.left.y;
-				
+
 				if (d.parents.length > 1) {
-					const cp2X = isRight ? cx - 50 : cx + 50;
-					const midY = parentY + Math.max(20, (cy - parentY) / 2);
+					// Start with a vertical drop, swing gracefully into a horizontal entry (sigmoid S-curve)
+					const dx = Math.abs(cx - parentX);
+					const cp2X = isRight ? cx - dx / 2 : cx + dx / 2;
+					const midY = parentY + (cy - parentY) / 2;
 					pathStr += `M ${parentX} ${parentY} C ${parentX} ${midY}, ${cp2X} ${cy}, ${cx} ${cy} `;
 				} else {
-					const cp1X = isRight ? parentX + 50 : parentX - 50;
-					const cp2X = isRight ? cx - 50 : cx + 50;
+					// Horizontal to horizontal sigmoid S-curve
+					const dx = cx - parentX;
+					const cp1X = parentX + dx / 2;
+					const cp2X = cx - dx / 2;
 					pathStr += `M ${parentX} ${parentY} C ${cp1X} ${parentY}, ${cp2X} ${cy}, ${cx} ${cy} `;
 				}
 			});
 			return pathStr;
 		});
 
+	// Family Pedigree (Junction Circle)
+	edgeGroups.filter(d => d.type === 'FamilyPedigree' && d.parents.length > 1)
+		.append("circle")
+		.attr("class", "family-junction")
+		.attr("r", 1.5)
+		.attr("fill", "#666666")
+		.attr("cx", d => {
+			const minPx = Math.min(...d.parents.map(p => p.x));
+			const maxPx = Math.max(...d.parents.map(p => p.x));
+			return minPx + (maxPx - minPx) / 2 + nodeWidth / 2;
+		})
+		.attr("cy", d => Math.max(...d.parents.map(p => getAnchors(p).right.y)));
+
 	// Sibling
 	edgeGroups.filter(d => d.type === 'SiblingOf')
 		.append("path")
 		.attr("class", "sibling-line")
 		.attr("fill", "none")
-		.attr("stroke", "#aaaaaa")
-		.attr("stroke-width", 2)
+		.attr("stroke", "#666666")
+		.attr("stroke-width", 1)
 		.attr("stroke-dasharray", "5,5")
 		.attr("d", d => drawSmartCurve(d.source, d.target));
 
@@ -1162,8 +1179,8 @@ function renderEdges() {
 		.append("path")
 		.attr("class", "extended-line")
 		.attr("fill", "none")
-		.attr("stroke", "#000000")
-		.attr("stroke-width", 2)
+		.attr("stroke", "#666666")
+		.attr("stroke-width", 1)
 		.attr("stroke-dasharray", "2,4")
 		.attr("d", d => drawSmartCurve(d.source, d.target));
 
@@ -1452,7 +1469,15 @@ $(document).ready(function () {
 			let newY = sourceNode ? sourceNode.y : 0;
 
 			if (relation === 'ChildOf') {
-				newX += 0; newY += 250;
+				const spouses = state.triplets.filter(t => t.predicate === 'SpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
+				if (spouses.length > 0) {
+					const spouseId = spouses[0].subject === sourcePid ? spouses[0].object : spouses[0].subject;
+					const spouseNode = getNode(spouseId);
+					if (spouseNode) {
+						newX = (sourceNode.x + spouseNode.x) / 2;
+					}
+				}
+				newY += 250;
 			} else if (relation === 'ParentOf') {
 				newX += 0; newY -= 250;
 			} else if (relation === 'SiblingOf') {
@@ -1471,6 +1496,19 @@ $(document).ready(function () {
 
 			if (relation === 'ChildOf') {
 				addTriplet(newPid, 'ChildOf', sourcePid);
+				const spouses = state.triplets.filter(t => t.predicate === 'SpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
+				spouses.forEach(t => {
+					const spousePid = t.subject === sourcePid ? t.object : t.subject;
+					addTriplet(newPid, 'ChildOf', spousePid);
+				});
+
+				// Connect to existing siblings
+				const siblings = state.triplets
+					.filter(t => t.predicate === 'ChildOf' && t.object === sourcePid && t.subject !== newPid)
+					.map(t => t.subject);
+				siblings.forEach(siblingPid => {
+					addTriplet(newPid, 'SiblingOf', siblingPid);
+				});
 			} else if (relation === 'ParentOf') {
 				addTriplet(sourcePid, 'ChildOf', newPid);
 			} else if (relation === 'SiblingOf') {
