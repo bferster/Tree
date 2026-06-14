@@ -398,7 +398,6 @@ class MentionsEditor {
       <div class="me-panel">
         <div class="me-header">
           <div>
-            <p class="me-title">MENTIONS EDITOR</p>
             <p class="me-target-summary"></p>
           </div>
           <span class="me-count"></span>
@@ -428,7 +427,7 @@ class MentionsEditor {
   _renderList() {
     const target = this.targetPerson;
     this.targetSummaryEl.textContent = target
-      ? `Target: ${target.norm_first_name || target.first_name || ''} ${target.last_name || ''} ${target.birth_year || '?'}-${target.death_year || '?'}`
+      ? `${target.norm_first_name || target.first_name || ''} ${target.last_name || ''} ${target.birth_year || '?'}-${target.death_year || '?'}`
       : '';
     this.countEl.textContent = `${this.matches.length} matches`;
 
@@ -607,7 +606,7 @@ class MentionsEditor {
         justify-content: space-between;
       }
       .me-title { font-weight: 600; font-size: 15px; margin: 0; }
-      .me-target-summary { font-size: 13px; color: var(--me-text-secondary); margin: 2px 0 0; }
+      .me-target-summary { font-size: 18px; font-weight: 600; color: #333; margin: 2px 0 0; }
       .me-count { font-size: 12px; color: var(--me-text-tertiary); white-space: nowrap; }
       .me-body { display: flex; flex: 1; overflow: hidden; }
       .me-match-list {

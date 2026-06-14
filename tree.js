@@ -48,28 +48,20 @@ document.body.insertAdjacentHTML('afterbegin', `
 			</div>
 		</div>
 
-		<!-- Search Menu -->
-		<div class="menu-top-level" id="searchMenu">
-			Search
-			<div class="dropdown">
-				<div class="dropdown-item" id="menu-search-sources">Sources</div>
-				<div class="dropdown-item" id="menu-search-match">Match</div>
-			</div>
-		</div>
 	</div>
 
 	<!-- Workspace Area -->
 	<div class="main-workspace">
 		<!-- Main Canvas Area -->
-		<div class="canvas-container" style="width: 33.33%;">
-	
+		<div class="canvas-container" style="width: 50%; position: relative;">
+			<img src="Vlogo.png" style="position: absolute; bottom: 20px; left: 20px; width: 4vw;opacity: 0.5; pointer-events: none;">
 		</div>
-	
+
 		<!-- Vertical Divider Splitter -->
 		<div id="divider"></div>
 
 		<!-- Matching Module Placeholder -->
-		<div class="matching-module-placeholder" style="width: calc(66.67% - 6px);">
+		<div class="matching-module-placeholder" style="width: calc(50% - 6px);">
 			<div id="right-panel-content" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #666; font-size: 16px; overflow-y: auto;">
 				Select a person node to view/edit details
 			</div>
@@ -197,7 +189,7 @@ function updateUndoRedoMenu() {
 function saveState() {
 	// Deep copy using JSON (safe since our data is simple JS objects)
 	undoStack.push(JSON.parse(JSON.stringify(state)));
-	redoStack = []; // Clear redo stack on new action
+	redoStack = [];															// Clear redo stack on new action
 	updateUndoRedoMenu();
 }
 
@@ -290,7 +282,7 @@ function getVisibleNodes() {
 		queue.forEach(targetPid => {
 			if (dir === 'down') hideDescendants(targetPid);
 			else if (dir === 'up') hideAncestors(targetPid);
-			else hideAncestors(targetPid); // For spouses, hiding their ancestral line is safe
+			else hideAncestors(targetPid);									// For spouses, hiding their ancestral line is safe
 		});
 	}
 
@@ -348,7 +340,7 @@ function addNode(fields) {
 		confidence: fields.confidence !== undefined ? fields.confidence : 1,
 		mentions: fields.mentions || [],
 		linked_persons: fields.linked_persons || [],
-		enslaved: fields.enslaved || false, // kept for node color/tan styling
+		enslaved: fields.enslaved || false,									// kept for node color/tan styling
 
 		// Canvas layout properties
 		x: fields.x !== undefined ? fields.x : 0,
@@ -482,13 +474,15 @@ const nodeWidth = 160;
 const nodeHeight = 116;
 
 // Path definitions for gender silhouettes
-const femalePath = "M 4 20 L 9 10 A 4.5 4.5 0 1 1 15 10 L 20 20 Z";
-const malePath = "M 6 20 L 6 14 C 6 11, 9 11, 9 10 A 4.5 4.5 0 1 1 15 10 C 15 11, 18 11, 18 14 L 18 20 Z";
-const circlePath = "M 12 5.5 A 7.25 7.25 0 1 1 11.9 5.5 Z";
+const femalePath = "M 25,90 L 42,45 A 15,15 0 1,1 58,45 L 75,90 Q 80,100 70,100 L 30,100 Q 20,100 25,90 Z";
+const malePath = "M 28,45 L 42.52,45 A 15,15 0 1,1 57.48,45 L 72,45 Q 77,45 77,50 L 77,95 Q 77,100 72,100 L 28,100 Q 23,100 23,95 L 23,50 Q 23,45 28,45 Z";
+const circlePath = "M 50, 50 m -40, 0 a 40,40 0 1,0 80,0 a 40,40 0 1,0 -80,0";
 
 function getGenderPath(gender) {
-	if (gender === 'female') return femalePath;
-	if (gender === 'male') return malePath;
+	if (!gender) return circlePath;
+	const g = gender.toLowerCase();
+	if (g === 'female' || g === 'f') return femalePath;
+	if (g === 'male' || g === 'm') return malePath;
 	return circlePath;
 }
 
@@ -533,12 +527,12 @@ const drag = d3.drag()
 
 		// Fast DOM update for all nodes uniformly
 		gNodes.selectAll(".node-group").attr("transform", nd => `translate(${nd.x},${nd.y})`);
-		renderEdges(); // Update edges in real time dynamically
+		renderEdges();														// Update edges in real time dynamically
 	})
 	.on("end", function (e, d) {
 		delete d.spouseSet;
 		if (d.wasDragged) {
-			d.moved = true; // Mark as manually moved so layout doesn't override unconditionally
+			d.moved = true;													// Mark as manually moved so layout doesn't override unconditionally
 		} else {
 			// It was a click (no dragging occurred)
 			if (typeof linkMode !== 'undefined' && linkMode) {
@@ -588,37 +582,22 @@ function renderNodes() {
 		.attr("transform", d => `translate(${d.x},${d.y})`)
 		.call(drag);
 
-	// 1. Background Rectangle
-	nodeEnter.append("rect")
-		.attr("class", "node-bg")
-		.attr("width", nodeWidth)
-		.attr("height", nodeHeight)
-		.attr("rx", 10)
-		.attr("ry", 10)
-		.attr("fill", d => d.enslaved ? "#FFF2D1" : "#FFFFFF") // Lighter wheat
-		.attr("stroke", "#cccccc")
-		.attr("stroke-width", 2);
-
-	// 2. Silhouette Icon (Centered Top)
-	// Scale viewbox of roughly 24 up to exactly 40 (scale 1.666) -> X-offset to center
+	// 1. Background Shape (Gendered Silhouette)
 	nodeEnter.append("path")
-		.attr("class", "node-icon")
+		.attr("class", "node-bg")
 		.attr("d", d => getGenderPath(d.gender))
-		// Added additional 4px top padding (y shifts from 9px down to 13px)
-		.attr("transform", "translate(60, 13) scale(1.666)")
-		.attr("fill", d => {
-			if (d.gender === 'female' || d.gender === 'F') return 'LightCoral';
-			if (d.gender === 'male' || d.gender === 'M') return 'LightBlue';
-			return '#ffffff';
-		})
-		.attr("stroke", "#7a7a7a")
-		.attr("stroke-width", 1);
+		.attr("transform", "translate(22, 0) scale(1.16)")
+		.attr("fill", "#ffffff")
+		.attr("stroke", "#cccccc")
+		.attr("stroke-width", 1)
+		.attr("stroke-linejoin", "round")
+		.attr("stroke-linecap", "round");
 
 	// 3. Full name
 	nodeEnter.append("text")
 		.attr("class", "node-name")
 		.attr("x", nodeWidth / 2)
-		.attr("y", 68)
+		.attr("y", 135)
 		.attr("text-anchor", "middle")
 		.attr("font-weight", "bold")
 		.attr("font-size", "14px")
@@ -629,9 +608,9 @@ function renderNodes() {
 	nodeEnter.append("text")
 		.attr("class", "node-years")
 		.attr("x", nodeWidth / 2)
-		.attr("y", 88)
+		.attr("y", 103)
 		.attr("text-anchor", "middle")
-		.attr("font-size", "12px")
+		.attr("font-size", "6px")
 		.attr("fill", "#666")
 		.text(d => {
 			const by = d.birth_year ? d.birth_year : "?";
@@ -639,9 +618,9 @@ function renderNodes() {
 			return `${by} – ${dy}`;
 		});
 
-	// 5. Small '+' button (bottom-right)
+	// 5. Small '+' button (over dates)
 	const plusGroup = nodeEnter.append("g")
-		.attr("transform", `translate(${nodeWidth - 15}, ${nodeHeight - 15})`)
+		.attr("transform", `translate(${nodeWidth / 2}, 90)`)
 		.style("cursor", "pointer")
 		.on("mousedown", e => e.stopPropagation())
 		.on("click", (e, d) => {
@@ -653,18 +632,16 @@ function renderNodes() {
 		});
 
 	plusGroup.append("circle")
-		.attr("r", 8)
-		.attr("fill", "#FFFFFF")
-		.attr("stroke", "green")
-		.attr("stroke-width", 1);
+		.attr("r", 4)
+		.attr("fill", "white")
+		.attr("stroke", "#999");
 
 	plusGroup.append("text")
 		.attr("text-anchor", "middle")
-		.attr("fill", "green")  // Updated to 'green' per user request
+		.attr("y", 2)
+		.attr("font-size", "7px")
 		.attr("font-weight", "bold")
-		.attr("font-size", "14px")
-		.attr("y", 0)
-		.attr("dy", "0.35em") // Perfect vertical text centering
+		.attr("fill", "green")
 		.text("+");
 
 	// 6. Expand/Collapse triangles
@@ -672,7 +649,7 @@ function renderNodes() {
 
 	trianglesGroup.append("polygon")
 		.attr("class", "tri-right")
-		.attr("points", "0,-5 10,0 0,5")
+		.attr("points", "0,-3 6,0 0,3")
 		.attr("transform", `translate(${nodeWidth - 10}, ${nodeHeight / 2})`)
 		.attr("fill", "#999")
 		.style("display", "none")
@@ -686,7 +663,7 @@ function renderNodes() {
 
 	trianglesGroup.append("polygon")
 		.attr("class", "tri-left")
-		.attr("points", "10,-5 0,0 10,5")
+		.attr("points", "6,-3 0,0 6,3")
 		.attr("transform", `translate(10, ${nodeHeight / 2})`)
 		.attr("fill", "#999")
 		.style("display", "none")
@@ -700,8 +677,8 @@ function renderNodes() {
 
 	trianglesGroup.append("polygon")
 		.attr("class", "tri-bottom")
-		.attr("points", "-5,-5 5,-5 0,5")
-		.attr("transform", `translate(${nodeWidth / 2}, ${nodeHeight - 8})`)
+		.attr("points", "-3,3 3,3 0,-3")
+		.attr("transform", `translate(${nodeWidth / 2}, ${nodeHeight - 7})`)
 		.attr("fill", "#999")
 		.style("display", "none")
 		.on("mousedown", e => e.stopPropagation())
@@ -714,7 +691,7 @@ function renderNodes() {
 
 	trianglesGroup.append("polygon")
 		.attr("class", "tri-top")
-		.attr("points", "-5,5 5,5 0,-5")
+		.attr("points", "-3,3 3,3 0,-3")
 		.attr("transform", `translate(${nodeWidth / 2}, 8)`)
 		.attr("fill", "#999")
 		.style("display", "none")
@@ -737,20 +714,15 @@ function renderNodes() {
 		return `${by} – ${dy}`;
 	});
 	nodeUpdate.select(".node-bg")
-		.attr("fill", d => d.enslaved ? "#FFF2D1" : "#FFFFFF");
-
-	nodeUpdate.select(".node-icon")
 		.attr("d", d => getGenderPath(d.gender))
-		.attr("fill", d => {
-			if (d.gender === 'female' || d.gender === 'F') return 'LightCoral';
-			if (d.gender === 'male' || d.gender === 'M') return 'LightBlue';
-			return '#ffffff';
-		});
+		.attr("fill", "#ffffff");
 
 	// Update triangle fill colors if they are actively hiding a branch
 	nodeUpdate.select(".tri-right").attr("fill", d => d.hiddenDirs && d.hiddenDirs.right ? "green" : "#999");
 	nodeUpdate.select(".tri-left").attr("fill", d => d.hiddenDirs && d.hiddenDirs.left ? "green" : "#999");
-	nodeUpdate.select(".tri-bottom").attr("fill", d => d.hiddenDirs && d.hiddenDirs.bottom ? "green" : "#999");
+	nodeUpdate.select(".tri-bottom")
+		.attr("fill", d => d.hiddenDirs && d.hiddenDirs.bottom ? "green" : "#999")
+		.attr("points", d => d.hiddenDirs && d.hiddenDirs.bottom ? "-3,-3 3,-3 0,3" : "-3,3 3,3 0,-3");
 	nodeUpdate.select(".tri-top").attr("fill", d => d.hiddenDirs && d.hiddenDirs.top ? "green" : "#999");
 
 	nodeSelection.exit().remove();
@@ -765,9 +737,9 @@ function updateTriangleVisibility() {
 		state.triplets.forEach(t => {
 			if (t.subject === d.person_id || t.object === d.person_id) {
 				if (t.predicate === 'MotherOf' || t.predicate === 'FatherOf') {
-					if (t.subject === d.person_id) hasBottomEdge = true; // parent to child -> bottom
+					if (t.subject === d.person_id) hasBottomEdge = true;		// parent to child -> bottom
 				} else if (t.predicate === 'ChildOf') {
-					if (t.object === d.person_id) hasBottomEdge = true; // parent to child -> bottom
+					if (t.object === d.person_id) hasBottomEdge = true;		// parent to child -> bottom
 				}
 			}
 		});
@@ -783,7 +755,7 @@ function updateTriangleVisibility() {
 function updateNodeSelection() {
 	gNodes.selectAll(".node-bg")
 		.attr("stroke", d => d.person_id === state.selectedPid ? "#2ecc71" : "#cccccc")
-		.attr("stroke-width", d => d.person_id === state.selectedPid ? 3 : 2);
+		.attr("stroke-width", 1);
 }
 
 // Layout and Edge rendering
@@ -818,7 +790,7 @@ function fitToScreen(duration = 500) {
 	const scale = Math.min(
 		containerWidth / bboxWidth,
 		containerHeight / bboxHeight,
-		4 // Cap at max zoom scale (4)
+		4																	// Cap at max zoom scale (4)
 	);
 
 	const finalScale = Math.max(scale, 0.1);
@@ -941,14 +913,14 @@ function applyLayout() {
 				if (!placed.has(spid) && depths[spid] === d) {
 					const snode = getNode(spid);
 					if (snode) {
-						currentX -= xSpacing; // Undo standard gap
-						currentX += nodeWidth + 20; // Snug 20px physical gap between spouses
+						currentX -= xSpacing;									// Undo standard gap
+						currentX += nodeWidth + 20;							// Snug 20px physical gap between spouses
 						if (!snode.moved) {
 							snode.x = currentX;
 							snode.y = startY + rowIdx * ySpacing;
 						}
 						placed.add(spid);
-						currentX += xSpacing; // Resume standard spacing
+						currentX += xSpacing;									// Resume standard spacing
 					}
 				}
 			});
@@ -972,11 +944,25 @@ function applyLayout() {
 }
 
 function getAnchors(node) {
+	const g = (node.gender || "unknown").toLowerCase();
+	let lx, rx, y;
+	
+	if (g === 'female' || g === 'f') {
+		lx = node.x + 60;
+		rx = node.x + 100;
+		y = node.y + 81;
+	} else if (g === 'male' || g === 'm') {
+		lx = node.x + 49;
+		rx = node.x + 111;
+		y = node.y + 81;
+	} else {
+		lx = node.x + 34;
+		rx = node.x + 126;
+		y = node.y + 58;
+	}
 	return {
-		top: { x: node.x + nodeWidth / 2, y: node.y, dir: [0, -1] },
-		bottom: { x: node.x + nodeWidth / 2, y: node.y + nodeHeight, dir: [0, 1] },
-		left: { x: node.x, y: node.y + nodeHeight / 2, dir: [-1, 0] },
-		right: { x: node.x + nodeWidth, y: node.y + nodeHeight / 2, dir: [1, 0] }
+		left: { x: lx, y: y, dir: [-1, 0] },
+		right: { x: rx, y: y, dir: [1, 0] }
 	};
 }
 
@@ -987,12 +973,15 @@ function drawSmartCurve(source, target) {
 	// 1. Same horizontal line check (close to being horizontal)
 	if (Math.abs(cy1 - cy2) < 50) {
 		let s = source, t = target;
-		if (source.x > target.x) { s = target; t = source; } // s is left
-		const startX = s.x + nodeWidth;
-		const startY = s.y + nodeHeight / 2;
-		const endX = t.x;
-		const endY = t.y + nodeHeight / 2;
-		return `M ${startX} ${startY} L ${endX} ${endY}`;
+		if (source.x > target.x) { s = target; t = source; }						// s is left
+		const startX = getAnchors(s).right.x;
+		const startY = getAnchors(s).right.y;
+		const endX = getAnchors(t).left.x;
+		const endY = getAnchors(t).left.y;
+		
+		const cp1X = startX + 30;
+		const cp2X = endX - 30;
+		return `M ${startX} ${startY} C ${cp1X} ${startY}, ${cp2X} ${endY}, ${endX} ${endY}`;
 	}
 
 	// 2. Otherwise, connect closest sides
@@ -1121,24 +1110,39 @@ function renderEdges() {
 		.attr("stroke-width", 2)
 		.attr("stroke-linejoin", "round")
 		.attr("d", d => {
-			let parentX, parentY, bottomOfParents;
+			let parentX, parentY;
 			if (d.parents.length === 1) {
-				parentX = d.parents[0].x + nodeWidth / 2;
-				parentY = d.parents[0].y + nodeHeight;
-				bottomOfParents = parentY;
+				const p = d.parents[0];
+				const avgChildX = d.children.reduce((sum, c) => sum + c.x, 0) / d.children.length;
+				if (avgChildX > p.x) {
+					parentX = getAnchors(p).right.x;
+				} else {
+					parentX = getAnchors(p).left.x;
+				}
+				parentY = getAnchors(p).right.y;
 			} else {
 				const minPx = Math.min(...d.parents.map(p => p.x));
 				const maxPx = Math.max(...d.parents.map(p => p.x));
 				parentX = minPx + (maxPx - minPx) / 2 + nodeWidth / 2;
-				parentY = Math.max(...d.parents.map(p => p.y)) + nodeHeight / 2;
-				bottomOfParents = Math.max(...d.parents.map(p => p.y)) + nodeHeight;
+				parentY = Math.max(...d.parents.map(p => getAnchors(p).right.y));
 			}
-			const childTopY = Math.min(...d.children.map(c => c.y));
-			const midY = bottomOfParents + Math.max(15, (childTopY - bottomOfParents) / 2);
+			
 			let pathStr = "";
 			d.children.forEach(c => {
-				const cx = c.x + nodeWidth / 2;
-				pathStr += `M ${parentX} ${parentY} C ${parentX} ${midY}, ${cx} ${midY}, ${cx} ${c.y} `;
+				const isRight = c.x > parentX;
+				const anchors = getAnchors(c);
+				const cx = isRight ? anchors.left.x : anchors.right.x;
+				const cy = anchors.left.y;
+				
+				if (d.parents.length > 1) {
+					const cp2X = isRight ? cx - 50 : cx + 50;
+					const midY = parentY + Math.max(20, (cy - parentY) / 2);
+					pathStr += `M ${parentX} ${parentY} C ${parentX} ${midY}, ${cp2X} ${cy}, ${cx} ${cy} `;
+				} else {
+					const cp1X = isRight ? parentX + 50 : parentX - 50;
+					const cp2X = isRight ? cx - 50 : cx + 50;
+					pathStr += `M ${parentX} ${parentY} C ${cp1X} ${parentY}, ${cp2X} ${cy}, ${cx} ${cy} `;
+				}
 			});
 			return pathStr;
 		});
@@ -1167,7 +1171,7 @@ function renderEdges() {
 }
 
 
-clearAll(); // Ensure clean state before injecting our persistent test data
+clearAll();																	// Ensure clean state before injecting our persistent test data
 undoStack = [];
 
 addNode({ person_id: "P001", first_name: "Mary", last_name: "Johnson", birth_year: 1820, death_year: 1890, gender: "F", enslaved: true, x: 200, y: 200 });
@@ -1184,7 +1188,7 @@ addTriplet("P002", "FatherOf", "P003");
 addTriplet("P002", "FatherOf", "P004");
 addTriplet("P003", "SiblingOf", "P004");
 addTriplet("P005", "CousinOf", "P001");
-undoStack = []; // clear test data from undo
+undoStack = [];																// clear test data from undo
 isDirty = false;
 
 // Dialog and Link variables
@@ -1368,7 +1372,7 @@ $(document).ready(function () {
 			const rect = npEl.getBoundingClientRect();
 			startLeft = rect.left;
 			startTop = rect.top;
-			npEl.style.right = 'auto'; // Disable right/bottom alignments to avoid flex issues on drag
+			npEl.style.right = 'auto';											// Disable right/bottom alignments to avoid flex issues on drag
 			npEl.style.bottom = 'auto';
 		});
 		document.addEventListener('mousemove', (e) => {
@@ -1408,7 +1412,7 @@ $(document).ready(function () {
 			isDirty = true;
 		});
 		npText.addEventListener('blur', function () {
-			saveState(); // push notepad change to undo history so it is saved natively in tree history
+			saveState();														// push notepad change to undo history so it is saved natively in tree history
 		});
 	}
 
@@ -1459,8 +1463,8 @@ $(document).ready(function () {
 
 			const newNode = addNode({
 				person_id: newPid,
-				first_name: 'New',
-				last_name: 'Person',
+				first_name: '',
+				last_name: sourceNode ? (sourceNode.last_name || '') : '',
 				x: newX,
 				y: newY
 			});
@@ -1553,6 +1557,7 @@ $(document).ready(function () {
 	applyLayout();
 	renderNodes();
 	renderEdges();
+	fitToScreen(0);
 	if (state.nodes && state.nodes.length > 0) {
 		selectNodeAndShowEditor(state.nodes[0].person_id);
 	}
@@ -1657,11 +1662,25 @@ function selectNodeAndShowEditor(personId) {
 
 	const rightPanel = $('#right-panel-content');
 	rightPanel.empty().append(`
-		<div style="display: flex; flex-direction: row; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5; padding: 12px; gap: 12px;">
-			<div id="person-editor-container" class="person-editor" style="flex: 1; min-width: 0; height: 100%; overflow-y: auto; box-sizing: border-box;"></div>
-			<div id="mentions-editor-container" style="width: 33.33%; height: 100%; overflow-y: auto; box-sizing: border-box;"></div>
+		<div style="display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5;">
+			<div style="display: flex; background: #d4d4d4; border-bottom: 1px solid #ccc; user-select: none;">
+				<div class="tab-btn active" data-target="person-editor-container" style="padding: 10px 20px; cursor: pointer; background: #e5e5e5; border-top: 2px solid #0078d7; font-weight: bold; font-size: 14px; color: #333;">PERSONS EDITOR</div>
+				<div class="tab-btn" data-target="mentions-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">MENTIONS EDITOR</div>
+			</div>
+			<div style="flex: 1; position: relative; overflow: hidden;">
+				<div id="person-editor-container" class="person-editor" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box;"></div>
+				<div id="mentions-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box; display: none;"></div>
+			</div>
 		</div>
 	`);
+
+	rightPanel.find('.tab-btn').on('click', function () {
+		rightPanel.find('.tab-btn').css({ background: '#d4d4d4', borderTopColor: 'transparent', fontWeight: 'normal', color: '#666' }).removeClass('active');
+		$(this).css({ background: '#e5e5e5', borderTopColor: '#0078d7', fontWeight: 'bold', color: '#333' }).addClass('active');
+		const target = $(this).attr('data-target');
+		rightPanel.find('#person-editor-container, #mentions-editor-container').hide();
+		rightPanel.find('#' + target).show();
+	});
 
 	window._VPE_FAKE_PERSONS = window._VPE_FAKE_PERSONS || {};
 	state.nodes.forEach(n => { window._VPE_FAKE_PERSONS[n.person_id] = n; });
@@ -1742,6 +1761,7 @@ function selectNodeAndShowEditor(personId) {
 					});
 				}
 				mEditor.setCriteria(adaptedCriteria);
+				$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
 			}
 		});
 	}
