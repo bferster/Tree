@@ -224,9 +224,6 @@ class MentionsEditor {
 		//	if (window.Normalize.NormalizeRace(mention.race) !== target.race) return null;
 		//	if (mention.gender !== target.gender) return null;
 
-
-
-		trace(55)
 		const factors = {}; // key -> { value, enabled }
 
 		const addFactor = (key, value) => {

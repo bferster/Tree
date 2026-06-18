@@ -339,6 +339,58 @@
 			color: white;
 			border-color: #d43f3a;
 		}
+
+		/* Responsive layout for < 1546px */
+		@media (max-width: 1545px) {
+			#divider { display: none !important; }
+			
+			.main-workspace {
+				position: relative;
+			}
+
+			.canvas-container {
+				position: absolute !important;
+				left: 0;
+				top: 40px; /* Leave space for tabs */
+				width: 100% !important;
+				height: calc(100% - 40px) !important;
+				z-index: 10;
+			}
+
+			.matching-module-placeholder {
+				width: 100% !important;
+				position: absolute !important;
+				left: 0; 
+				top: 0; 
+				right: 0; 
+				bottom: 0;
+				z-index: 20;
+				background: transparent !important;
+			}
+
+			.tree-tab-btn {
+				display: block !important;
+			}
+			
+			body.show-tree .canvas-container {
+				z-index: 30;
+			}
+			body.show-tree #editor-scroll-area {
+				display: none !important;
+			}
+			body.show-tree #editor-layout {
+				background: transparent !important;
+			}
+		}
+
+		@media (min-width: 1546px) {
+			.tree-tab-btn {
+				display: none !important;
+			}
+			body.show-tree .canvas-container { z-index: auto; }
+			body.show-tree #editor-scroll-area { display: block; }
+			body.show-tree #editor-layout { background: #e5e5e5 !important; }
+		}
 	</style>
 	<script> function trace(a, b, c, d) { console.log(a, b, c, d); } </script>
 </head>

@@ -36,7 +36,7 @@ class PersonEditor {
 	   ---------------------------------------------------------- */
 	static FIELD_CONFIG = [
 		{
-			key: 'first_name', label: 'First name', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
+			key: 'first_name', label: 'First name', editKind: 'free',
 			compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi'
 		},
 		{
@@ -44,7 +44,7 @@ class PersonEditor {
 			compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi'
 		},
 		{
-			key: 'last_name', label: 'Last name', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
+			key: 'last_name', label: 'Last name', editKind: 'free',
 			compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi'
 		},
 		{
@@ -68,11 +68,11 @@ class PersonEditor {
 			compare: ['ignore', 'exact'], compareMode: 'multi'
 		},
 		{
-			key: 'birth_year', label: 'Birth year', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
+			key: 'birth_year', label: 'Birth year', editKind: 'free',
 			compare: ['ignore', 'exact', '±1', '±2', '±3', '±5'], compareMode: 'radio'
 		},
 		{
-			key: 'death_year', label: 'Death year', editKind: 'free', choices: ['ALB-CN1870', 'ALB-CN1880'],
+			key: 'death_year', label: 'Death year', editKind: 'free',
 			compare: ['ignore', 'exact', '±1', '±2', '±3', '±5'], compareMode: 'radio'
 		},
 		{ key: 'linked_persons', label: 'Linked people', editKind: 'linked' }
@@ -118,27 +118,33 @@ class PersonEditor {
 		if (cfg && cfg.choices) {
 			cfg.choices.forEach(c => {
 				let v = typeof c === 'object' ? c.v : c;
-				let l = typeof c === 'object' ? c.l : c;
-				if (!seen.has(String(v))) {
-					options.push({ value: v, option: String(l) });
-					seen.add(String(v));
+				let valString = String(v);
+				if (!valString.includes(':')) valString = `${valString}:Added`;
+				if (!seen.has(valString)) {
+					options.push({ value: valString, option: valString });
+					seen.add(valString);
 				}
 			});
 		}
 
 		const canonical = person[key];
 		if (canonical != null && canonical !== '') {
-			if (!seen.has(String(canonical))) {
-				options.push({ value: canonical, option: String(canonical) });
-				seen.add(String(canonical));
+			let valString = String(canonical);
+			if (!valString.includes(':')) valString = `${valString}:Added`;
+			if (!seen.has(valString)) {
+				options.push({ value: valString, option: valString });
+				seen.add(valString);
 			}
 		}
 
 		(person.mentions || []).forEach(m => {
 			const v = m.field_values && m.field_values[key];
-			if (v != null && v !== '' && !seen.has(String(v) + '|' + m.source)) {
-				seen.add(String(v) + '|' + m.source);
-				options.push({ value: v, option: `${v} (${m.source})` });
+			if (v != null && v !== '') {
+				let valString = `${v}:${m.source}`;
+				if (!seen.has(valString)) {
+					seen.add(valString);
+					options.push({ value: valString, option: valString });
+				}
 			}
 		});
 
@@ -186,11 +192,12 @@ class PersonEditor {
 	   ---------------------------------------------------------- */
 	static buildState(person) {
 		if (person.first_name && !person.norm_first_name) {
-			person.norm_first_name = window.Normalize.getNickname(person.first_name);
+			person.norm_first_name = window.Normalize.getNickname(person.first_name.split(':')[0]);
 		}
 		if (person.last_name) {
-			if (!person.nysiis_last_name) person.nysiis_last_name = window.Normalize.getNYSIIS(person.last_name);
-			if (!person.soundex_last_name) person.soundex_last_name = window.Normalize.getSoundex(person.last_name);
+			const lnBase = person.last_name.split(':')[0];
+			if (!person.nysiis_last_name) person.nysiis_last_name = window.Normalize.getNYSIIS(lnBase);
+			if (!person.soundex_last_name) person.soundex_last_name = window.Normalize.getSoundex(lnBase);
 		}
 
 		const fields = {};
@@ -200,22 +207,36 @@ class PersonEditor {
 			const options = PersonEditor.buildOptions(person, cfg.key);
 			let selectedIdx = 0;
 			const canonical = person[cfg.key];
-			const found = options.findIndex(o => String(o.value) === String(canonical));
+			let found = -1;
+			if (canonical != null && canonical !== '') {
+				let canStr = String(canonical);
+				if (!canStr.includes(':')) canStr = `${canStr}:Added`;
+				found = options.findIndex(o => o.value === canStr);
+			}
 			if (found >= 0) selectedIdx = found;
 
 			fields[cfg.key] = {
 				options: options,
 				selected: selectedIdx,
-				weight: 2,                       // default impact; could come from server
+				weight: 3,                       // default impact
 				compare: cfg.compare,
 				compareMode: cfg.compareMode,
-				active: cfg.compareMode === 'radio' ? ['ignore'] : ['ignore'],
+				active: ['ignore'],
 				editing: false
 			};
 		});
 
 		const sources = {};
-		(person.mentions || []).forEach(m => { sources[m.source] = { label: m.label, checked: true }; });
+		if (window.GlobalSources) {
+			Object.keys(window.GlobalSources).forEach(k => {
+				sources[k] = { label: k, checked: true };
+			});
+		}
+		(person.mentions || []).forEach(m => { 
+			if (!sources[m.source]) {
+				sources[m.source] = { label: m.source, checked: true }; 
+			}
+		});
 
 		return {
 			fields: fields,
@@ -282,17 +303,37 @@ class PersonEditor {
 		// VALUE
 		const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]}"></div>`);
 
-		if (cfg.editKind === 'free' && fstate.editing) {
-			let currentVal = '';
-			if (fstate.selected >= 0 && fstate.options[fstate.selected]) {
-				currentVal = fstate.options[fstate.selected].value;
+		const isNull = fstate.selected === -1 || fstate.selected == null;
+		let val1 = "", val2 = "";
+		let fullVal = "";
+		if (!isNull) {
+			fullVal = fstate.options[fstate.selected].value;
+			const parts = fullVal.split(':');
+			if (parts.length > 1) {
+				val1 = parts[0];
+				val2 = parts.slice(1).join(':');
+			} else {
+				val1 = fullVal;
+				val2 = fullVal;
 			}
+			
+			if (['norm_first_name', 'nysiis_last_name', 'soundex_last_name'].includes(cfg.key)) {
+				val1 = val1.toUpperCase();
+				val2 = "";
+			} else if (['first_name', 'last_name'].includes(cfg.key)) {
+				val1 = val1.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+			}
+		}
+
+		if (cfg.editKind === 'free' && fstate.editing) {
+			let currentVal = val1; // Pre-fill with the first part only
 			const $input = $(`<input type="text" placeholder="Type a value…" style="color:${ramp_[1]}" value="${PersonEditor.escapeHtml(currentVal)}">`);
 
 			const saveInput = function () {
 				if (!fstate.editing) return;
-				const txt = $input.val().trim();
+				let txt = $input.val().trim();
 				if (txt) {
+					if (!txt.includes(':')) txt = txt + ':Added';
 					fstate.options.push({ value: txt, option: txt });
 					fstate.selected = fstate.options.length - 1;
 				} else {
@@ -303,14 +344,14 @@ class PersonEditor {
 			};
 
 			$input.on('input', function () {
-				const val = $input.val().trim();
+				const val = $input.val().trim().split(':')[0];
 				const $factors = $row.closest('.vpe-factors');
 				if (cfg.key === 'first_name') {
 					const norm = window.Normalize.getNickname(val);
-					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Nick name'; }).find('.vpe-chip').text(norm);
+					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Nick name'; }).find('.vpe-chip').text(norm ? norm.toUpperCase() : '');
 				} else if (cfg.key === 'last_name') {
-					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'NYSIIS'; }).find('.vpe-chip').text(window.Normalize.getNYSIIS(val));
-					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Soundex'; }).find('.vpe-chip').text(window.Normalize.getSoundex(val));
+					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'NYSIIS'; }).find('.vpe-chip').text(window.Normalize.getNYSIIS(val) ? window.Normalize.getNYSIIS(val).toUpperCase() : '');
+					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Soundex'; }).find('.vpe-chip').text(window.Normalize.getSoundex(val) ? window.Normalize.getSoundex(val).toUpperCase() : '');
 				}
 			});
 
@@ -339,38 +380,35 @@ class PersonEditor {
 			return $row;
 		}
 
-		const isNull = fstate.selected === -1 || fstate.selected == null;
 		const $chip = $(`<span class="vpe-chip" style="color:${ramp_[1]}"></span>`);
-		if (!isNull) $chip.text(fstate.options[fstate.selected].value);
+		if (!isNull && val1) $chip.text(val1);
 		$val.append($chip);
 
-		if (cfg.editKind === 'free') {
-			const $sel = $(`<select style="color:${isNull ? 'transparent' : ramp_[1]}"></select>`);
+		if (cfg.editKind === 'free' || cfg.editKind === 'choice') {
+			const $selContainer = $(`<div style="position: relative; flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
+			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
+			const $visibleText = $(`<span style="color:${isNull ? 'transparent' : ramp_[1]}; padding:0 4px; font-size:12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayVal2}</span>`);
+			const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer;"></select>`);
+
 			fstate.options.forEach((o, i) => {
 				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${PersonEditor.escapeHtml(o.option)}</option>`);
 			});
 			$sel.append(`<option value="-1" ${isNull ? 'selected' : ''} style="color:${ramp_[1]}">Make blank</option>`);
-			$sel.append(`<option value="addtext" style="color:${ramp_[1]}">Add text</option>`);
+			if (cfg.editKind === 'free') {
+				$sel.append(`<option value="addtext" style="color:${ramp_[1]}">Add text</option>`);
+			}
 			$sel.on('change', function () {
 				const v = $(this).val();
 				if (v === 'addtext') { fstate.editing = true; }
 				else { fstate.selected = parseInt(v, 10); }
 				$row.trigger('vpe:changed');
 			});
-			$val.append($sel);
-		} else if (cfg.editKind === 'choice') {
-			const $sel = $(`<select style="color:${isNull ? 'transparent' : ramp_[1]}"></select>`);
-			fstate.options.forEach((o, i) => {
-				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${PersonEditor.escapeHtml(o.option)}</option>`);
-			});
-			$sel.append(`<option value="-1" ${isNull ? 'selected' : ''} style="color:${ramp_[1]}">Make blank</option>`);
-			$sel.on('change', function () {
-				fstate.selected = parseInt($(this).val(), 10);
-				$row.trigger('vpe:changed');
-			});
-			$val.append($sel);
+
+			$selContainer.append($visibleText, $sel);
+			$val.append($selContainer);
 		} else {
-			$val.append(`<i class="ti ti-lock" style="color:${ramp_[1]};opacity:.6;margin-left:4px" aria-label="Not editable"></i>`);
+			$val.append(`<span style="color:${ramp_[1]}; padding:0 4px; font-size:12px; margin-left:auto;">${PersonEditor.escapeHtml(val2)}</span>`);
+			$val.append(`<i class="ti ti-lock" style="color:${ramp_[1]};opacity:.6;margin-left:4px;" aria-label="Not editable"></i>`);
 		}
 		$row.append($val);
 
@@ -452,12 +490,13 @@ class PersonEditor {
 			}
 
 			if (cfg.key === 'first_name' && selectedValue) {
-				let norm = window.Normalize.getNickname(selectedValue);
+				let norm = window.Normalize.getNickname(selectedValue.split(':')[0]);
 				if (norm) PersonEditor.updateFieldState(state, 'norm_first_name', norm);
 			} else if (cfg.key === 'last_name' && selectedValue) {
-				let nysiis = window.Normalize.getNYSIIS(selectedValue);
+				let baseVal = selectedValue.split(':')[0];
+				let nysiis = window.Normalize.getNYSIIS(baseVal);
 				if (nysiis) PersonEditor.updateFieldState(state, 'nysiis_last_name', nysiis);
-				let soundex = window.Normalize.getSoundex(selectedValue);
+				let soundex = window.Normalize.getSoundex(baseVal);
 				if (soundex) PersonEditor.updateFieldState(state, 'soundex_last_name', soundex);
 			}
 
@@ -540,16 +579,28 @@ class PersonEditor {
 			$panel.on('click', e => e.stopPropagation());
 
 			const allChecked = ids.every(id => state.sources[id].checked);
-			const $toggleRow = $('<div class="vpe-toggle-all-row"></div>');
-			$toggleRow.append(`<span class="vpe-toggle-label">${allChecked ? 'All selected' : 'Select all'}</span>`);
+			const $toggleRow = $('<div class="vpe-toggle-all-row" style="display:flex; justify-content:space-between; align-items:center;"></div>');
+			
+			const $leftGroup = $('<div style="display:flex; align-items:center; gap:8px;"></div>');
+			$leftGroup.append(`<span class="vpe-toggle-label">${allChecked ? 'All selected' : 'Select all'}</span>`);
 			const $toggleBtn = $(`<button type="button" class="vpe-toggle-btn">${allChecked ? 'Clear all' : 'Select all'}</button>`);
 			$toggleBtn.on('click', function (e) {
 				e.stopPropagation();
 				const newVal = !allChecked;
 				ids.forEach(id => state.sources[id].checked = newVal);
 				PersonEditor.renderSourcesDropdown($wrap, state);
+				$wrap.find('.vpe-sources-btn').click(); // re-open after re-render
 			});
-			$toggleRow.append($toggleBtn);
+			$leftGroup.append($toggleBtn);
+
+			const $closeBtn = $(`<button type="button" style="background:none; border:none; cursor:pointer; color:#757575; padding:4px; display:flex; align-items:center; justify-content:center;"><i class="ti ti-x"></i></button>`);
+			$closeBtn.on('click', function(e) {
+				e.stopPropagation();
+				open = false;
+				$wrap.find('.vpe-sources-panel').remove();
+			});
+
+			$toggleRow.append($leftGroup, $closeBtn);
 			$panel.append($toggleRow);
 
 			ids.forEach(id => {
@@ -557,13 +608,18 @@ class PersonEditor {
 				const $row = $('<div class="vpe-source-row"></div>');
 				const $cb = $(`<input type="checkbox" ${src.checked ? 'checked' : ''}>`);
 				$cb.on('click', e => e.stopPropagation());
-				$cb.on('change', function () { src.checked = $cb.is(':checked'); PersonEditor.renderSourcesDropdown($wrap, state); });
+				$cb.on('change', function () { 
+					src.checked = $cb.is(':checked'); 
+					PersonEditor.renderSourcesDropdown($wrap, state); 
+					$wrap.find('.vpe-sources-btn').click(); // re-open
+				});
 				$row.append($cb, `<span>${PersonEditor.escapeHtml(src.label)}</span>`);
 				$row.on('click', function (e) {
 					if (e.target !== $cb[0]) {
 						$cb.prop('checked', !$cb.is(':checked'));
 						src.checked = $cb.is(':checked');
 						PersonEditor.renderSourcesDropdown($wrap, state);
+						$wrap.find('.vpe-sources-btn').click(); // re-open
 					}
 				});
 				$panel.append($row);
@@ -623,7 +679,7 @@ class PersonEditor {
       .vpe-target-summary { font-size:18px; font-weight:600; color:#333; margin:2px 0 0; }
       .vpe-close { font-size:20px; color:#757575; cursor:pointer; }
       .vpe-section-label { font-size:13px; font-weight:500; letter-spacing:.05em; color:#9e9e9e; margin:0 0 .75rem; }
-      .vpe-row { display:grid; grid-template-columns:130px minmax(0,1fr) 80px 1fr; gap:8px 24px; align-items:center;
+      .vpe-row { display:grid; grid-template-columns:130px 240px 80px 1fr; gap:8px 24px; align-items:center;
         padding:4px 8px; border-top:0.5px solid #f0f0f0; }
       .vpe-row-header { font-size:12px; font-weight:500; color:#9e9e9e; border-top:none; padding:4px 8px; }
       .vpe-row-linked { grid-template-columns:130px 1fr; }

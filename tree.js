@@ -313,11 +313,11 @@ class TreeApp {
 		this.clearAll();																	// Ensure clean this.state before injecting our persistent test data
 		this.undoStack = [];
 
-		this.addNode({ person_id: "P001", first_name: "Mary", last_name: "Johnson", birth_year: 1820, death_year: 1890, gender: "F", enslaved: true, x: 200, y: 200 });
-		this.addNode({ person_id: "P002", first_name: "James", last_name: "Johnson", birth_year: 1815, death_year: 1878, gender: "M", enslaved: true, x: 500, y: 200 });
-		this.addNode({ person_id: "P003", first_name: "Sarah", last_name: "Johnson", birth_year: 1845, death_year: null, gender: "F", enslaved: false, x: 200, y: 450 });
-		this.addNode({ person_id: "P004", first_name: "Thomas", last_name: "Johnson", birth_year: 1842, death_year: 1910, gender: "M", enslaved: false, x: 500, y: 450 });
-		this.addNode({ person_id: "P005", first_name: "Josh", last_name: "Johnson", birth_year: 1872, death_year: 1940, gender: "M", enslaved: false, x: -100, y: 200 });
+		this.addNode({ person_id: "P001", first_name: "Mary:ALB-CN-1880", last_name: "Johnson:ALB-CN-1880", birth_year: 1820, death_year: 1890, gender: "F", x: 200, y: 200 });
+		this.addNode({ person_id: "P002", first_name: "James:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1815, death_year: 1878, gender: "M:ALB-CN-1870", x: 500, y: 200 });
+		this.addNode({ person_id: "P003", first_name: "Sarah:ALB-CN-1880", last_name: "Johnson:ALB-CN-1880", birth_year: 1845, death_year: null, gender: "F", x: 200, y: 450 });
+		this.addNode({ person_id: "P004", first_name: "Thomas:ALB-CN-1880", last_name: "Johnson:ALB-CN-1880", birth_year: "1842:ALB-CN-1870", death_year: 1910, gender: "M", x: 500, y: 450 });
+		this.addNode({ person_id: "P005", first_name: "Josh:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1872, death_year: 1940, gender: "M", x: -100, y: 200 });
 
 		// Phase 4 test triplets
 		this.addTriplet("P001", "SpouseOf", "P002");
@@ -408,7 +408,7 @@ class TreeApp {
 					return;
 				}
 				const n = this.getNode(this.state.selectedPid);
-				if (n && confirm('Are you sure you want to delete ' + n.first_name + " " + n.last_name + '?')) {
+				if (n && confirm('Are you sure you want to delete ' + this.formatNodeName(n) + '?')) {
 					this.deleteNode(this.state.selectedPid);
 					this.applyLayout(); this.renderNodes(); this.renderEdges();
 				}
@@ -972,10 +972,20 @@ class TreeApp {
 
 	getGenderPath(gender) {
 		if (!gender) return this.circlePath;
-		const g = gender.toLowerCase();
+		const g = gender.split(':')[0].toLowerCase();
 		if (g === 'female' || g === 'f') return this.femalePath;
 		if (g === 'male' || g === 'm') return this.malePath;
 		return this.circlePath;
+	}
+
+	formatNodeName(d) {
+		const toTitleCase = (str) => {
+			if (!str) return "";
+			return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+		};
+		const fn = (d.first_name || "?").split(':')[0];
+		const ln = (d.last_name || "").split(':')[0];
+		return (toTitleCase(fn) + " " + toTitleCase(ln)).trim();
 	}
 
 	syncEditorToNode(node) {
@@ -1036,7 +1046,7 @@ class TreeApp {
 			.attr("font-weight", "bold")
 			.attr("font-size", "12px")
 			.attr("fill", "#333")
-			.text(d => (d.first_name || "?") + " " + (d.last_name || ""));
+			.text(d => this.formatNodeName(d));
 
 		// 4. Year range
 		nodeEnter.append("text")
@@ -1059,7 +1069,7 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
-				const targetName = (d.first_name || "") + " " + (d.last_name || "");
+				const targetName = this.formatNodeName(d);
 				document.getElementById("add-node-target-name").innerText = targetName.trim() || d.person_id;
 				document.getElementById("add-node-modal").dataset.sourcePid = d.person_id;
 				document.getElementById("add-node-modal").showModal();
@@ -1141,7 +1151,7 @@ class TreeApp {
 		nodeUpdate.attr("transform", d => `translate(${d.x},${d.y})`);
 
 		// Update core node editable data elements
-		nodeUpdate.select(".node-name").text(d => (d.first_name || "?") + " " + (d.last_name || ""));
+		nodeUpdate.select(".node-name").text(d => this.formatNodeName(d));
 		nodeUpdate.select(".node-years").text(d => {
 			const by = d.birth_year ? d.birth_year : "?";
 			const dy = d.death_year ? d.death_year : "?";
@@ -1377,7 +1387,7 @@ class TreeApp {
 	}
 
 	getAnchors(node) {
-		const g = (node.gender || "unknown").toLowerCase();
+		const g = (node.gender || "unknown").split(':')[0].toLowerCase();
 		let lx, rx, y;
 
 		if (g === 'female' || g === 'f') {
@@ -1626,7 +1636,7 @@ class TreeApp {
 		const targetNode = this.getNode(targetPid);
 		if (!targetNode) return;
 
-		document.getElementById("pred-target-name").innerText = targetNode.first_name + " " + targetNode.last_name;
+		document.getElementById("pred-target-name").innerText = this.formatNodeName(targetNode);
 		document.getElementById("predicate-modal").dataset.target = targetPid;
 		document.getElementById("predicate-modal").showModal();
 	}
