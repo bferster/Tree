@@ -241,7 +241,7 @@ class PersonEditor {
 		return {
 			fields: fields,
 			sources: sources,
-			verity: Math.max(0, Math.min(4, Math.round(person.confidence || 0)))
+			verity: Math.max(0, Math.min(4, Math.round(person.verity !== undefined ? person.verity : (person.confidence || 0))))
 		};
 	}
 
@@ -249,10 +249,12 @@ class PersonEditor {
 	   Shell: header + factors table container
 	   ---------------------------------------------------------- */
 	static renderShell($dialog, person, state) {
+		const fname = (person.first_name || '').split(':')[0];
+		const lname = (person.last_name || '').split(':')[0];
 		$dialog.append(`
       <div class="vpe-header">
         <div>
-          <p class="vpe-target-summary">${PersonEditor.escapeHtml(person.first_name)} ${PersonEditor.escapeHtml(person.last_name)} ${PersonEditor.escapeHtml(person.birth_year || '?')}-${PersonEditor.escapeHtml(person.death_year || '?')}</p>
+          <p class="vpe-target-summary">${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} ${PersonEditor.escapeHtml(person.birth_year || '?')}-${PersonEditor.escapeHtml(person.death_year || '?')}</p>
         </div>
         <i class="ti ti-x vpe-close" aria-label="Close"></i>
       </div>
@@ -461,12 +463,16 @@ class PersonEditor {
 	static renderLinkedRow(person, cfg) {
 		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS.linked_persons];
 		const linked = person.linked_persons || [];
+		
+		const rels = (window.app && window.app.curTree) 
+			? window.app.curTree.relationships.filter(r => r.subject_id === person.person_id) 
+			: [];
 
 		const $row = $(`<div class="vpe-row vpe-row-linked"></div>`);
 		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
 
 		const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]}"></div>`);
-		const $chip = $(`<span class="vpe-chip" style="color:${ramp_[1]}">${linked.length} linked people</span>`);
+		const $chip = $(`<span class="vpe-chip" style="color:${ramp_[1]}">${linked.length + rels.length} linked people</span>`);
 		$val.append($chip);
 
 		const $sel = $(`<select style="color:${ramp_[1]}"></select>`);
@@ -474,6 +480,26 @@ class PersonEditor {
 		linked.forEach((p, i) => {
 			$sel.append(`<option value="${i}" disabled style="color:${ramp_[1]}">${PersonEditor.escapeHtml(p.value)} (${PersonEditor.escapeHtml(p.source)})</option>`);
 		});
+		rels.forEach((r, i) => {
+			const objPerson = window.app.curTree.person[r.object_id];
+			const fname = objPerson ? (objPerson.first_name||'').split(':')[0] : '';
+			const lname = objPerson ? (objPerson.last_name||'').split(':')[0] : '';
+			const fullName = `${fname} ${lname}`.trim() || r.object_id;
+			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(fullName)} - ${PersonEditor.escapeHtml(r.predicate)}</option>`);
+		});
+		
+		$sel.on('change', function() {
+			const val = $(this).val();
+			if (val && val.startsWith('rel_')) {
+				const idx = parseInt(val.split('_')[1], 10);
+				const rel = rels[idx];
+				if (rel && window.app && typeof window.app.selectNodeAndShowEditor === 'function') {
+					window.app.selectNodeAndShowEditor(rel.object_id);
+				}
+				$(this).val(''); // Reset
+			}
+		});
+
 		$val.append($sel);
 
 		$row.append($val);
@@ -578,8 +604,20 @@ class PersonEditor {
 			const $panel = $('<div class="vpe-sources-panel"></div>');
 			$panel.on('click', e => e.stopPropagation());
 
+			const $headerRow = $('<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"></div>');
+			$headerRow.append('<div style="font-size:13px; font-weight:bold; color:#333;">Choose source(s) to search:</div>');
+
+			const $closeBtn = $(`<button type="button" style="background:none; border:none; cursor:pointer; color:#757575; padding:4px; display:flex; align-items:center; justify-content:center;"><i class="ti ti-x"></i></button>`);
+			$closeBtn.on('click', function(e) {
+				e.stopPropagation();
+				open = false;
+				$wrap.find('.vpe-sources-panel').remove();
+			});
+			$headerRow.append($closeBtn);
+			$panel.append($headerRow);
+
 			const allChecked = ids.every(id => state.sources[id].checked);
-			const $toggleRow = $('<div class="vpe-toggle-all-row" style="display:flex; justify-content:space-between; align-items:center;"></div>');
+			const $toggleRow = $('<div class="vpe-toggle-all-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"></div>');
 			
 			const $leftGroup = $('<div style="display:flex; align-items:center; gap:8px;"></div>');
 			$leftGroup.append(`<span class="vpe-toggle-label">${allChecked ? 'All selected' : 'Select all'}</span>`);
@@ -593,14 +631,7 @@ class PersonEditor {
 			});
 			$leftGroup.append($toggleBtn);
 
-			const $closeBtn = $(`<button type="button" style="background:none; border:none; cursor:pointer; color:#757575; padding:4px; display:flex; align-items:center; justify-content:center;"><i class="ti ti-x"></i></button>`);
-			$closeBtn.on('click', function(e) {
-				e.stopPropagation();
-				open = false;
-				$wrap.find('.vpe-sources-panel').remove();
-			});
-
-			$toggleRow.append($leftGroup, $closeBtn);
+			$toggleRow.append($leftGroup);
 			$panel.append($toggleRow);
 
 			ids.forEach(id => {

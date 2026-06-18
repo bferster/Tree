@@ -432,8 +432,10 @@ class MentionsEditor {
 
 	_renderList() {
 		const target = this.targetPerson;
+		const fname = target ? (target.norm_first_name || target.first_name || '').split(':')[0] : '';
+		const lname = target ? (target.last_name || '').split(':')[0] : '';
 		this.targetSummaryEl.textContent = target
-			? `${target.norm_first_name || target.first_name || ''} ${target.last_name || ''} ${target.birth_year || '?'}-${target.death_year || '?'}`
+			? `${fname} ${lname} ${target.birth_year || '?'}-${target.death_year || '?'}`
 			: '';
 		this.countEl.textContent = `${this.matches.length} matches`;
 

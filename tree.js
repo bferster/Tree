@@ -98,15 +98,15 @@ class TreeApp {
 				<div class="dialog-body" style="margin-bottom: 20px;">
 					<p>Relationship to <strong id="pred-target-name"></strong>:</p>
 					<select id="pred-select" style="width: 100%; padding: 5px;">
-						<option value="MotherOf">MotherOf</option>
-						<option value="FatherOf">FatherOf</option>
-						<option value="SpouseOf">SpouseOf</option>
-						<option value="ChildOf">ChildOf</option>
-						<option value="SiblingOf">SiblingOf</option>
-						<option value="UncleOf">UncleOf</option>
-						<option value="AuntOf">AuntOf</option>
-						<option value="NiblingOf">NiblingOf</option>
-						<option value="CousinOf">CousinOf</option>
+						<option value="isMotherOf">isMotherOf</option>
+						<option value="isFatherOf">isFatherOf</option>
+						<option value="isSpouseOf">isSpouseOf</option>
+						<option value="isChildOf">isChildOf</option>
+						<option value="isSiblingOf">isSiblingOf</option>
+						<option value="isUncleOf">isUncleOf</option>
+						<option value="isAuntOf">isAuntOf</option>
+						<option value="isNiblingOf">isNiblingOf</option>
+						<option value="isCousinOf">isCousinOf</option>
 						<option value="EnslavedBy">EnslavedBy</option>
 					</select>
 				</div>
@@ -123,10 +123,10 @@ class TreeApp {
 				<div class="dialog-body" style="margin-bottom: 20px;">
 					<p>How is this new person related to <strong id="add-node-target-name"></strong>?</p>
 					<select id="add-node-select" style="width: 100%; padding: 5px;">
-						<option value="ChildOf">is Child of</option>
+						<option value="isChildOf">is Child of</option>
 						<option value="ParentOf">is Parent of</option>
-						<option value="SiblingOf">is Sibling of</option>
-						<option value="SpouseOf">is Spouse of</option>
+						<option value="isSiblingOf">is Sibling of</option>
+						<option value="isSpouseOf">is Spouse of</option>
 					</select>
 				</div>
 				<div class="dialog-footer">
@@ -260,7 +260,7 @@ class TreeApp {
 
 				// Record immediate spouses
 				this.state.triplets.forEach(t => {
-					if (t.predicate === 'SpouseOf') {
+					if (t.predicate === 'isSpouseOf') {
 						if (t.subject === d.person_id) d.spouseSet.add(t.object);
 						if (t.object === d.person_id) d.spouseSet.add(t.subject);
 					}
@@ -311,22 +311,6 @@ class TreeApp {
 
 
 		this.clearAll();																	// Ensure clean this.state before injecting our persistent test data
-		this.undoStack = [];
-
-		this.addNode({ person_id: "P001", first_name: "Mary:ALB-CN-1880", last_name: "Johnson:ALB-CN-1880", birth_year: 1820, death_year: 1890, gender: "F", x: 200, y: 200 });
-		this.addNode({ person_id: "P002", first_name: "James:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1815, death_year: 1878, gender: "M:ALB-CN-1870", x: 500, y: 200 });
-		this.addNode({ person_id: "P003", first_name: "Sarah:ALB-CN-1880", last_name: "Johnson:ALB-CN-1880", birth_year: 1845, death_year: null, gender: "F", x: 200, y: 450 });
-		this.addNode({ person_id: "P004", first_name: "Thomas:ALB-CN-1880", last_name: "Johnson:ALB-CN-1880", birth_year: "1842:ALB-CN-1870", death_year: 1910, gender: "M", x: 500, y: 450 });
-		this.addNode({ person_id: "P005", first_name: "Josh:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1872, death_year: 1940, gender: "M", x: -100, y: 200 });
-
-		// Phase 4 test triplets
-		this.addTriplet("P001", "SpouseOf", "P002");
-		this.addTriplet("P001", "MotherOf", "P003");
-		this.addTriplet("P001", "MotherOf", "P004");
-		this.addTriplet("P002", "FatherOf", "P003");
-		this.addTriplet("P002", "FatherOf", "P004");
-		this.addTriplet("P003", "SiblingOf", "P004");
-		this.addTriplet("P005", "CousinOf", "P001");
 		this.undoStack = [];																// clear test data from undo
 		this.isDirty = false;
 
@@ -385,6 +369,13 @@ class TreeApp {
 			// Close menus when clicking outside
 			$(document).on('click', () => {
 				$('.menu-top-level').removeClass('active');
+			});
+
+			// Re-apply layout on window resize
+			$(window).on('resize', () => {
+				this.applyLayout();
+				this.renderNodes();
+				this.renderEdges();
 			});
 
 			// Edit Menu Logic — editing is done in the right-panel PersonEditor (click a node to open)
@@ -576,8 +567,8 @@ class TreeApp {
 					let newX = sourceNode ? sourceNode.x : 0;
 					let newY = sourceNode ? sourceNode.y : 0;
 
-					if (relation === 'ChildOf') {
-						const spouses = this.state.triplets.filter(t => t.predicate === 'SpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
+					if (relation === 'isChildOf') {
+						const spouses = this.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
 						if (spouses.length > 0) {
 							const spouseId = spouses[0].subject === sourcePid ? spouses[0].object : spouses[0].subject;
 							const spouseNode = this.getNode(spouseId);
@@ -588,9 +579,9 @@ class TreeApp {
 						newY += 250;
 					} else if (relation === 'ParentOf') {
 						newX += 0; newY -= 250;
-					} else if (relation === 'SiblingOf') {
+					} else if (relation === 'isSiblingOf') {
 						newX += 250; newY += 0;
-					} else if (relation === 'SpouseOf') {
+					} else if (relation === 'isSpouseOf') {
 						newX += 200; newY += 0;
 					}
 
@@ -602,41 +593,41 @@ class TreeApp {
 						y: newY
 					});
 
-					if (relation === 'ChildOf') {
-						this.addTriplet(newPid, 'ChildOf', sourcePid);
-						const spouses = this.state.triplets.filter(t => t.predicate === 'SpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
+					if (relation === 'isChildOf') {
+						this.addTriplet(newPid, 'isChildOf', sourcePid);
+						const spouses = this.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
 						spouses.forEach(t => {
 							const spousePid = t.subject === sourcePid ? t.object : t.subject;
-							this.addTriplet(newPid, 'ChildOf', spousePid);
+							this.addTriplet(newPid, 'isChildOf', spousePid);
 						});
 
 						// Connect to existing siblings
 						const siblings = this.state.triplets
-							.filter(t => t.predicate === 'ChildOf' && t.object === sourcePid && t.subject !== newPid)
+							.filter(t => t.predicate === 'isChildOf' && t.object === sourcePid && t.subject !== newPid)
 							.map(t => t.subject);
 						siblings.forEach(siblingPid => {
-							this.addTriplet(newPid, 'SiblingOf', siblingPid);
+							this.addTriplet(newPid, 'isSiblingOf', siblingPid);
 						});
 					} else if (relation === 'ParentOf') {
-						this.addTriplet(sourcePid, 'ChildOf', newPid);
-					} else if (relation === 'SiblingOf') {
-						this.addTriplet(newPid, 'SiblingOf', sourcePid);
+						this.addTriplet(sourcePid, 'isChildOf', newPid);
+					} else if (relation === 'isSiblingOf') {
+						this.addTriplet(newPid, 'isSiblingOf', sourcePid);
 
 						// Connect the new sibling to all known parents of the source node
 						const parents = new Set();
 						this.state.triplets.forEach(t => {
-							if (t.predicate === 'ChildOf' && t.subject === sourcePid) {
+							if (t.predicate === 'isChildOf' && t.subject === sourcePid) {
 								parents.add(t.object);
 							}
-							if ((t.predicate === 'MotherOf' || t.predicate === 'FatherOf') && t.object === sourcePid) {
+							if ((t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') && t.object === sourcePid) {
 								parents.add(t.subject);
 							}
 						});
 						parents.forEach(parentPid => {
-							this.addTriplet(newPid, 'ChildOf', parentPid);
+							this.addTriplet(newPid, 'isChildOf', parentPid);
 						});
-					} else if (relation === 'SpouseOf') {
-						this.addTriplet(newPid, 'SpouseOf', sourcePid);
+					} else if (relation === 'isSpouseOf') {
+						this.addTriplet(newPid, 'isSpouseOf', sourcePid);
 					}
 
 					this.applyLayout(); this.renderNodes(); this.renderEdges();
@@ -775,13 +766,13 @@ class TreeApp {
 			const queue = [];
 			this.state.triplets.forEach(t => {
 				if (dir === 'down') {
-					if (t.subject === pid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) queue.push(t.object);
-					if (t.object === pid && t.predicate === 'ChildOf') queue.push(t.subject);
+					if (t.subject === pid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) queue.push(t.object);
+					if (t.object === pid && t.predicate === 'isChildOf') queue.push(t.subject);
 				} else if (dir === 'up') {
-					if (t.object === pid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) queue.push(t.subject);
-					if (t.subject === pid && t.predicate === 'ChildOf') queue.push(t.object);
+					if (t.object === pid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) queue.push(t.subject);
+					if (t.subject === pid && t.predicate === 'isChildOf') queue.push(t.object);
 				} else if (dir === 'right' || dir === 'left') {
-					if (t.subject === pid && t.predicate === 'SpouseOf') {
+					if (t.subject === pid && t.predicate === 'isSpouseOf') {
 						const other = this.getNode(t.object);
 						const me = this.getNode(pid);
 						if (other && me) {
@@ -796,9 +787,9 @@ class TreeApp {
 				if (visible.has(cpid)) {
 					visible.delete(cpid);
 					this.state.triplets.forEach(t => {
-						if (t.subject === cpid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) hideDescendants(t.object);
-						if (t.object === cpid && t.predicate === 'ChildOf') hideDescendants(t.subject);
-						if (t.subject === cpid && t.predicate === 'SpouseOf') hideDescendants(t.object);
+						if (t.subject === cpid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) hideDescendants(t.object);
+						if (t.object === cpid && t.predicate === 'isChildOf') hideDescendants(t.subject);
+						if (t.subject === cpid && t.predicate === 'isSpouseOf') hideDescendants(t.object);
 					});
 				}
 			}
@@ -807,9 +798,9 @@ class TreeApp {
 				if (visible.has(cpid)) {
 					visible.delete(cpid);
 					this.state.triplets.forEach(t => {
-						if (t.object === cpid && (t.predicate === 'MotherOf' || t.predicate === 'FatherOf')) hideAncestors(t.subject);
-						if (t.subject === cpid && t.predicate === 'ChildOf') hideAncestors(t.object);
-						if (t.subject === cpid && t.predicate === 'SpouseOf') hideAncestors(t.object);
+						if (t.object === cpid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) hideAncestors(t.subject);
+						if (t.subject === cpid && t.predicate === 'isChildOf') hideAncestors(t.object);
+						if (t.subject === cpid && t.predicate === 'isSpouseOf') hideAncestors(t.object);
 					});
 				}
 			}
@@ -911,13 +902,13 @@ class TreeApp {
 		while (queue.length > 0) {
 			const current = queue.shift();
 			this.state.triplets.forEach(t => {
-				if ((t.predicate === 'MotherOf' || t.predicate === 'FatherOf') && t.subject === current) {
+				if ((t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') && t.subject === current) {
 					if (!toDelete.has(t.object)) {
 						toDelete.add(t.object);
 						queue.push(t.object);
 					}
 				}
-				if (t.predicate === 'ChildOf' && t.object === current) {
+				if (t.predicate === 'isChildOf' && t.object === current) {
 					if (!toDelete.has(t.subject)) {
 						toDelete.add(t.subject);
 						queue.push(t.subject);
@@ -940,11 +931,11 @@ class TreeApp {
 	addTriplet(subject, predicate, object) {
 		this.saveState();
 		this.state.triplets.push({ subject, predicate, object });
-		if (predicate === "SpouseOf") {
+		if (predicate === "isSpouseOf") {
 			// Automatically add reciprocal
-			const exists = this.state.triplets.some(t => t.subject === object && t.predicate === "SpouseOf" && t.object === subject);
+			const exists = this.state.triplets.some(t => t.subject === object && t.predicate === "isSpouseOf" && t.object === subject);
 			if (!exists) {
-				this.state.triplets.push({ subject: object, predicate: "SpouseOf", object: subject });
+				this.state.triplets.push({ subject: object, predicate: "isSpouseOf", object: subject });
 			}
 		}
 		this.isDirty = true;
@@ -955,9 +946,9 @@ class TreeApp {
 		const initialLen = this.state.triplets.length;
 		this.state.triplets = this.state.triplets.filter(t => !(t.subject === subject && t.predicate === predicate && t.object === object));
 
-		// If it was SpouseOf and we actually removed one, try removing reciprocal
-		if (predicate === "SpouseOf" && this.state.triplets.length < initialLen) {
-			this.state.triplets = this.state.triplets.filter(t => !(t.subject === object && t.predicate === "SpouseOf" && t.object === subject));
+		// If it was isSpouseOf and we actually removed one, try removing reciprocal
+		if (predicate === "isSpouseOf" && this.state.triplets.length < initialLen) {
+			this.state.triplets = this.state.triplets.filter(t => !(t.subject === object && t.predicate === "isSpouseOf" && t.object === subject));
 		}
 		this.isDirty = true;
 	}
@@ -1057,8 +1048,8 @@ class TreeApp {
 			.attr("font-size", "6px")
 			.attr("fill", "#666")
 			.text(d => {
-				const by = d.birth_year ? d.birth_year : "?";
-				const dy = d.death_year ? d.death_year : "?";
+				const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
+				const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
 				return `${by} – ${dy}`;
 			});
 
@@ -1153,8 +1144,8 @@ class TreeApp {
 		// Update core node editable data elements
 		nodeUpdate.select(".node-name").text(d => this.formatNodeName(d));
 		nodeUpdate.select(".node-years").text(d => {
-			const by = d.birth_year ? d.birth_year : "?";
-			const dy = d.death_year ? d.death_year : "?";
+			const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
+			const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
 			return `${by} – ${dy}`;
 		});
 		nodeUpdate.select(".node-bg")
@@ -1180,9 +1171,9 @@ class TreeApp {
 
 			this.state.triplets.forEach(t => {
 				if (t.subject === d.person_id || t.object === d.person_id) {
-					if (t.predicate === 'MotherOf' || t.predicate === 'FatherOf') {
+					if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') {
 						if (t.subject === d.person_id) hasBottomEdge = true;		// parent to child -> bottom
-					} else if (t.predicate === 'ChildOf') {
+					} else if (t.predicate === 'isChildOf') {
 						if (t.object === d.person_id) hasBottomEdge = true;		// parent to child -> bottom
 					}
 				}
@@ -1272,17 +1263,17 @@ class TreeApp {
 		});
 
 		vTriplets.forEach(t => {
-			if (t.predicate === 'MotherOf' || t.predicate === 'FatherOf') {
+			if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') {
 				parentsOf[t.object].push(t.subject);
 				childrenOf[t.subject].push(t.object);
-			} else if (t.predicate === 'ChildOf') {
+			} else if (t.predicate === 'isChildOf') {
 				parentsOf[t.subject].push(t.object);
 				childrenOf[t.object].push(t.subject);
 			}
-			if (t.predicate === 'SpouseOf') {
+			if (t.predicate === 'isSpouseOf') {
 				spousesOf[t.subject].push(t.object);
 			}
-			if (t.predicate === 'CousinOf') {
+			if (t.predicate === 'isCousinOf') {
 				cousinsOf[t.subject].push(t.object);
 			}
 		});
@@ -1473,24 +1464,24 @@ class TreeApp {
 			const o = this.getNode(t.object);
 			if (!s || !o) return;
 
-			if (t.predicate === 'SpouseOf') {
+			if (t.predicate === 'isSpouseOf') {
 				const pairKey = [t.subject, t.object].sort().join("-");
 				if (seenSpouses.has(pairKey)) return;
 				seenSpouses.add(pairKey);
-				edgeData.push({ type: 'SpouseOf', source: s, target: o, id: pairKey });
-			} else if (t.predicate === 'SiblingOf') {
+				edgeData.push({ type: 'isSpouseOf', source: s, target: o, id: pairKey });
+			} else if (t.predicate === 'isSiblingOf') {
 				const pairKey = [t.subject, t.object].sort().join("-");
 				if (seenSiblings.has(pairKey)) return;
 				seenSiblings.add(pairKey);
-				edgeData.push({ type: 'SiblingOf', source: s, target: o, id: pairKey + '-Sibling' });
-			} else if (t.predicate === 'CousinOf' || t.predicate === 'UncleOf' || t.predicate === 'AuntOf' || t.predicate === 'NiblingOf') {
+				edgeData.push({ type: 'isSiblingOf', source: s, target: o, id: pairKey + '-Sibling' });
+			} else if (t.predicate === 'isCousinOf' || t.predicate === 'isUncleOf' || t.predicate === 'isAuntOf' || t.predicate === 'isNiblingOf') {
 				const pairKey = [t.subject, t.object].sort().join("-");
 				if (seenExtended.has(pairKey)) return;
 				seenExtended.add(pairKey);
 				edgeData.push({ type: 'ExtendedOf', source: s, target: o, id: pairKey + '-Extended' });
-			} else if (t.predicate === 'MotherOf' || t.predicate === 'FatherOf' || t.predicate === 'ChildOf') {
+			} else if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf' || t.predicate === 'isChildOf') {
 				let parent = s, child = o;
-				if (t.predicate === 'ChildOf') { parent = o; child = s; }
+				if (t.predicate === 'isChildOf') { parent = o; child = s; }
 
 				if (!childToParents[child.person_id]) childToParents[child.person_id] = [];
 				if (!childToParents[child.person_id].includes(parent.person_id)) {
@@ -1528,7 +1519,7 @@ class TreeApp {
 			.attr("class", "edge-group");
 
 		// Spouse (Double curved line effect)
-		edgeGroups.filter(d => d.type === 'SpouseOf')
+		edgeGroups.filter(d => d.type === 'isSpouseOf')
 			.append("path")
 			.attr("class", "spouse-bg")
 			.attr("fill", "none")
@@ -1536,7 +1527,7 @@ class TreeApp {
 			.attr("stroke-width", 3)
 			.attr("d", d => this.drawSmartCurve(d.source, d.target));
 
-		edgeGroups.filter(d => d.type === 'SpouseOf')
+		edgeGroups.filter(d => d.type === 'isSpouseOf')
 			.append("path")
 			.attr("class", "spouse-fg")
 			.attr("fill", "none")
@@ -1608,7 +1599,7 @@ class TreeApp {
 			.attr("cy", d => Math.max(...d.parents.map(p => this.getAnchors(p).right.y)));
 
 		// Sibling
-		edgeGroups.filter(d => d.type === 'SiblingOf')
+		edgeGroups.filter(d => d.type === 'isSiblingOf')
 			.append("path")
 			.attr("class", "sibling-line")
 			.attr("fill", "none")

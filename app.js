@@ -1,30 +1,45 @@
 class App {
-	constructor() {
+	constructor()                                              // CONSTRUCTOR
+	{
 		this.assertions = [];
 		this.mentions = [];
 		this.isLoaded = false;
+		this.curPerson = -1;
 
 		this.curTree = {
 			treeName: "Family",
 			owner: "Bill",
-			person: {},
+			person: {
+				"P001": { person_id: "P001", first_name: "Mary:ALB-CN-1880-67", last_name: "Johnson:ALB-CN-1880-67", birth_year: 1820, death_year: 1890, gender: "F", x: 200, y: 200, mentions: [], relatives: [], verity: 2 },
+				"P002": { person_id: "P002", first_name: "James:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1815, death_year: 1878, gender: "M:ALB-CN-1870-765", x: 500, y: 200, mentions: [], relatives: [], verity: 32 },
+				"P003": { person_id: "P003", first_name: "Sarah:ALB-CN-1880-67", last_name: "Johnson:ALB-CN-1880-67", birth_year: 1845, death_year: null, gender: "F", x: 200, y: 450, mentions: [], relatives: [], verity: 2 },
+				"P004": { person_id: "P004", first_name: "Thomas:ALB-CN-1880-67", last_name: "Johnson:ALB-CN-1880-67", birth_year: "1842:ALB-CN-1870.765", death_year: 1910, gender: "M", x: 500, y: 450, mentions: [], relatives: [], verity: 2 },
+				"P005": { person_id: "P005", first_name: "Josh:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1872, death_year: 1940, gender: "M", x: -100, y: 200, mentions: [], relatives: [], verity: 1 }
+			},
 			relationships: []
 		};
+
+		this.addRelationship("P001", "isSpouseOf", "P002");
+		this.addRelationship("P001", "isMotherOf", "P003");
+		this.addRelationship("P001", "isMotherOf", "P004");
+		this.addRelationship("P002", "isFatherOf", "P003");
+		this.addRelationship("P002", "isFatherOf", "P004");
+		this.addRelationship("P003", "isSiblingOf", "P004");
+		this.addRelationship("P005", "isCousinOf", "P001");
 
 		this.init();
 	}
 
-	addRelationship(subject_id, predicate, object_id) {
+	addRelationship(subject_id, predicate, object_id)          // ADD RELATIONSHIP
+	{
 		const inverseMap = {
-			'MotherOf': 'ChildOf',
-			'FatherOf': 'ChildOf',
-			'ChildOf': 'ParentOf',
-			'SpouseOf': 'SpouseOf',
-			'SiblingOf': 'SiblingOf',
-			'CousinOf': 'CousinOf',
-			'UncleOf': 'NiblingOf',
-			'AuntOf': 'NiblingOf',
-			'NiblingOf': 'UncleOf' // simplification
+			'isMotherOf': 'isChildOf',
+			'isFatherOf': 'isChildOf',
+			'isChildOf': 'isParentOf',
+			'isSpouseOf': 'isSpouseOf',
+			'isSiblingOf': 'isSiblingOf',
+			'isCousinOf': 'isCousinOf',
+			'isNiblingOf': 'isNiblingOf',
 		};
 
 		// Add direct
@@ -41,7 +56,8 @@ class App {
 		}
 	}
 
-	rebuildRelatives(personId) {
+	rebuildRelatives(personId)                                 // REBUILD RELATIVES ARRAY
+	{
 		if (!this.curTree.person[personId]) return;
 		const relSet = new Set();
 		this.curTree.relationships.forEach(r => {
@@ -51,7 +67,8 @@ class App {
 		this.curTree.person[personId].relatives = Array.from(relSet);
 	}
 
-	async init() {
+	async init()                                               // INITIALIZATION
+	{
 		try {
 			await this.loadData();
 		} catch (err) {
@@ -59,7 +76,8 @@ class App {
 		}
 	}
 
-	showProgress(message, percentage = false) {
+	showProgress(message, percentage = false)                  // SHOW PROGRESS BAR
+	{
 		let $progressWrap = $('#loading-progress-wrap');
 		if ($progressWrap.length === 0) {
 			$progressWrap = $('<div id="loading-progress-wrap" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#fff; border:1px solid #ccc; box-shadow:0 4px 12px rgba(0,0,0,0.2); padding:20px; border-radius:8px; z-index:9999; width:300px; text-align:center;"></div>');
@@ -73,11 +91,13 @@ class App {
 		$progressWrap.show();
 	}
 
-	hideProgress() {
+	hideProgress()                                             // HIDE PROGRESS BAR
+	{
 		$('#loading-progress-wrap').fadeOut();
 	}
 
-	async fetchWithProgress(url, label, maxRecords = null) {
+	async fetchWithProgress(url, label, maxRecords = null)     // FETCH WITH PROGRESS
+	{
 		// 1. Get the total count
 		const headResp = await fetch(url, { method: 'HEAD', headers: { 'Prefer': 'count=exact' } });
 		if (!headResp.ok) throw new Error(`Failed to count ${label}`);
@@ -128,13 +148,14 @@ class App {
 		return allData;
 	}
 
-	selectNodeAndShowEditor(personId) {
-		if (!this.isLoaded) return;
-		window.curPerson = personId; // Highlighted person via index/ID
-		window.treeApp.state.selectedPid = personId;
-		window.treeApp.updateNodeSelection();
+	selectNodeAndShowEditor(personId)                          // SELECT NODE & SHOW EDITOR
+	{
+		if (!this.isLoaded) return;                            // Quit if not loaded
+		this.curPerson = window.treeApp ? window.treeApp.state.nodes.findIndex(n => n.person_id === personId) : -1; // Set curPerson index
+		window.treeApp.state.selectedPid = personId;           // Sync tree selection
+		window.treeApp.updateNodeSelection();                  // Update node UI
 
-		const rightPanel = $('#right-panel-content');
+		const rightPanel = $('#right-panel-content');          // Get right panel DOM
 		rightPanel.empty().append(`
 			<div id="editor-layout" style="display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5;">
 				<div class="editor-tabs" style="display: flex; background: #d4d4d4; border-bottom: 1px solid #ccc; user-select: none;">
@@ -149,58 +170,34 @@ class App {
 			</div>
 		`);
 
-		rightPanel.find('.tab-btn').on('click', (e) => {
-			const target = $(e.currentTarget).attr('data-target');
+		rightPanel.find('.tab-btn').on('click', (e) => {       // ON TAB CLICK
+			const target = $(e.currentTarget).attr('data-target'); // Get target ID
+			rightPanel.find('.tab-btn').css({ background: '#d4d4d4', borderTopColor: 'transparent', fontWeight: 'normal', color: '#666' }).removeClass('active'); // Reset styling
+			$(e.currentTarget).css({ background: '#e5e5e5', borderTopColor: '#0078d7', fontWeight: 'bold', color: '#333' }).addClass('active'); // Set active styling
 
-			// Reset all tabs
-			rightPanel.find('.tab-btn').css({ background: '#d4d4d4', borderTopColor: 'transparent', fontWeight: 'normal', color: '#666' }).removeClass('active');
-			$(e.currentTarget).css({ background: '#e5e5e5', borderTopColor: '#0078d7', fontWeight: 'bold', color: '#333' }).addClass('active');
-
-			if (target === 'tree-view') {
-				document.body.classList.add('show-tree');
-			} else {
-				document.body.classList.remove('show-tree');
-				rightPanel.find('#person-editor-container, #mentions-editor-container').hide();
-				rightPanel.find('#' + target).show();
+			if (target === 'tree-view') {                      // If tree view tab
+				document.body.classList.add('show-tree');      // Show tree
+			} else {                                           // If editor tab
+				document.body.classList.remove('show-tree');   // Hide tree
+				rightPanel.find('#person-editor-container, #mentions-editor-container').hide(); // Hide all panels
+				rightPanel.find('#' + target).show();          // Show target panel
 			}
 		});
 
-		// When showing editor for a node, ensure we switch to an editor tab if we are in tree view
-		if (document.body.classList.contains('show-tree')) {
-			rightPanel.find('.tab-btn[data-target="person-editor-container"]').click();
+		if (document.body.classList.contains('show-tree')) {   // If tree is shown
+			rightPanel.find('.tab-btn[data-target="person-editor-container"]').click(); // Switch to person editor
 		} else {
-			document.body.classList.remove('show-tree');
+			document.body.classList.remove('show-tree');       // Hide tree
 		}
 
-		window.PersonEditor.FAKE_PERSONS = window.PersonEditor.FAKE_PERSONS || {};
-		window.treeApp.state.nodes.forEach(n => {
-			window.PersonEditor.FAKE_PERSONS[n.person_id] = n;
-			// Populate curTree person initially
-			if (!this.curTree.person[n.person_id]) {
-				this.curTree.person[n.person_id] = {
-					person_id: n.person_id,
-					first_name: n.first_name,
-					last_name: n.last_name,
-					birth_year: n.birth_year,
-					death_year: n.death_year,
-					race: n.race,
-					gender: n.gender,
-					mentions: [],
-					relatives: []
-				};
-			}
-		});
-		window.treeApp.state.triplets.forEach(t => {
-			this.addRelationship(t.subject, t.predicate, t.object);
-		});
-		window.treeApp.state.nodes.forEach(n => {
-			this.rebuildRelatives(n.person_id);
+		window.treeApp.state.nodes.forEach(n => {              // For each tree node
+			this.rebuildRelatives(n.person_id);                // Rebuild relative links
 		});
 
-		let mEditor = null;
-		const node = window.treeApp.getNode(personId);
-		if (node) {
-			node.narrative_vector = node.narrative_vector || [0.5, 0.5, 0.5];
+		let mEditor = null;                                    // Mentions editor
+		const node = window.treeApp.getNode(personId);         // Get active node
+		if (node) {                                            // If node exists
+			node.narrative_vector = node.narrative_vector || [0.5, 0.5, 0.5]; // Init narrative
 		}
 
 		if (window.MentionsEditor) {
@@ -317,7 +314,8 @@ class App {
 		}
 	}
 
-	async loadData() {
+	async loadData()                                           // LOAD DATA
+	{
 		const isTest = window.location.search.toLowerCase().includes('test');
 		const maxRecords = isTest ? 1000 : null;
 		this.showProgress('Connecting to database...', false);
@@ -347,13 +345,32 @@ class App {
 			window.GlobalSources = null;
 		}
 
-		this.isLoaded = true;
-		this.showProgress(`Loaded ${this.assertions.length} assertions, ${this.mentions.length} mentions.`, 100);
-		setTimeout(() => this.hideProgress(), 1500);
+		this.isLoaded = true;                                  // Mark loaded
+		this.showProgress(`Loaded ${this.assertions.length} assertions, ${this.mentions.length} mentions.`, 100); // Done
+		setTimeout(() => this.hideProgress(), 1500);           // Hide popup
 
-		if (window.treeApp && window.treeApp.state.nodes.length > 0) {
-			const pid = window.treeApp.state.selectedPid || window.treeApp.state.nodes[0].person_id;
-			window.treeApp.selectNodeAndShowEditor(pid);
+		window.PersonEditor.FAKE_PERSONS = window.PersonEditor.FAKE_PERSONS || {}; // Init fake persons
+		if (window.treeApp) {                                  // If tree exists
+			Object.values(this.curTree.person).forEach(p => {  // For each person
+				window.PersonEditor.FAKE_PERSONS[p.person_id] = p; // Register
+				if (!window.treeApp.getNode(p.person_id)) {    // If missing
+					window.treeApp.addNode(p);                 // Add to tree
+				}
+			});
+			this.curTree.relationships.forEach(r => {          // For each relationship
+				if (r.predicate !== 'isChildOf' && r.predicate !== 'isParentOf' && r.predicate !== 'isUncleOf') { // Filter inverse
+					window.treeApp.addTriplet(r.subject_id, r.predicate, r.object_id); // Add triplet
+				}
+			});
+			window.treeApp.applyLayout();                      // Lay out nodes
+			window.treeApp.renderNodes();                      // Draw nodes
+			window.treeApp.renderEdges();                      // Draw edges
+			window.treeApp.fitToScreen();                      // Fit viewport
+		}
+
+		if (window.treeApp && window.treeApp.state.nodes.length > 0) { // If nodes present
+			const pid = window.treeApp.state.selectedPid || window.treeApp.state.nodes[0].person_id; // Get target PID
+			window.treeApp.selectNodeAndShowEditor(pid);       // Select node
 		}
 	}
 
