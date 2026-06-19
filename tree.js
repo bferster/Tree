@@ -36,7 +36,7 @@ class TreeApp {
 						<div class="dropdown-item" id="menu-undo">Undo</div>
 						<div class="dropdown-item" id="menu-redo">Redo</div>
 						<div class="dropdown-separator"></div>
-						<div class="dropdown-item" id="menu-edit-node">Edit Node</div>
+						<div class="dropdown-item" id="menu-add-node">Add Person</div>
 						<div class="dropdown-item" id="menu-delete-node">Delete Node</div>
 					</div>
 				</div>
@@ -45,8 +45,8 @@ class TreeApp {
 				<div class="menu-top-level">
 					View
 					<div class="dropdown">
-						<div class="dropdown-item" id="menu-this.zoom-in">Zoom In</div>
-						<div class="dropdown-item" id="menu-this.zoom-out">Zoom Out</div>
+						<div class="dropdown-item" id="menu-zoom-in">Zoom In</div>
+						<div class="dropdown-item" id="menu-zoom-out">Zoom Out</div>
 						<div class="dropdown-item" id="menu-fit-screen">Fit to Screen</div>
 						<div class="dropdown-item" id="menu-reset-layout">Reset Layout</div>
 						<div class="dropdown-separator"></div>
@@ -124,6 +124,7 @@ class TreeApp {
 					<p>How is this new person related to <strong id="add-node-target-name"></strong>?</p>
 					<select id="add-node-select" style="width: 100%; padding: 5px;">
 						<option value="isChildOf">is Child of</option>
+						<option value="isCousinOf">is Cousin of</option>
 						<option value="ParentOf">is Parent of</option>
 						<option value="isSiblingOf">is Sibling of</option>
 						<option value="isSpouseOf">is Spouse of</option>
@@ -237,8 +238,8 @@ class TreeApp {
 		this.nodeHeight = 116;
 
 		// Path definitions for gender silhouettes
-		this.femalePath = "M 25,90 L 42,45 A 15,15 0 1,1 58,45 L 75,90 Q 80,100 70,100 L 30,100 Q 20,100 25,90 Z";
-		this.malePath = "M 28,45 L 42.52,45 A 15,15 0 1,1 57.48,45 L 72,45 Q 77,45 77,50 L 77,95 Q 77,100 72,100 L 28,100 Q 23,100 23,95 L 23,50 Q 23,45 28,45 Z";
+		this.femalePath = "M 34,49 A 16,16 0 0,1 66,49 A 16,16 0 0,1 34,49 Z M 35,65 L 15,100 L 85,100 L 65,65 Z";
+		this.malePath = "M 34,49 A 16,16 0 0,1 66,49 A 16,16 0 0,1 34,49 Z M 15,100 A 35,35 0 0,1 85,100 Z";
 		this.circlePath = "M 50, 50 m -40, 0 a 40,40 0 1,0 80,0 a 40,40 0 1,0 -80,0";
 
 
@@ -378,17 +379,19 @@ class TreeApp {
 				this.renderEdges();
 			});
 
-			// Edit Menu Logic — editing is done in the right-panel PersonEditor (click a node to open)
-			$('#menu-edit-node').on('click', (e) => {
+			// Edit Menu Logic
+			$('#menu-add-node').on('click', (e) => {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (!this.state.selectedPid) {
-					alert("Please select a node first");
+					alert("Please select a node first to add a relative");
 					return;
 				}
-				// Focus the right panel editor — it opens when a node is clicked
-				this.selectNodeAndShowEditor(this.state.selectedPid);
-
+				const targetNode = this.getNode(this.state.selectedPid);
+				if (!targetNode) return;
+				document.getElementById("add-node-target-name").innerText = this.formatNodeName(targetNode);
+				document.getElementById("add-node-modal").dataset.sourcePid = this.state.selectedPid;
+				document.getElementById("add-node-modal").showModal();
 			});
 
 			$('#menu-delete-node').on('click', (e) => {
@@ -426,7 +429,7 @@ class TreeApp {
 			});
 
 			// View Menu Logic
-			$('#menu-this.zoom-in').on('click', (e) => {
+			$('#menu-zoom-in').on('click', (e) => {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (typeof this.svg !== 'undefined' && typeof this.zoom !== 'undefined') {
@@ -434,7 +437,7 @@ class TreeApp {
 				}
 			});
 
-			$('#menu-this.zoom-out').on('click', (e) => {
+			$('#menu-zoom-out').on('click', (e) => {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (typeof this.svg !== 'undefined' && typeof this.zoom !== 'undefined') {
@@ -581,6 +584,8 @@ class TreeApp {
 						newX += 0; newY -= 250;
 					} else if (relation === 'isSiblingOf') {
 						newX += 250; newY += 0;
+					} else if (relation === 'isCousinOf') {
+						newX += 300; newY += 0;
 					} else if (relation === 'isSpouseOf') {
 						newX += 200; newY += 0;
 					}
@@ -628,6 +633,8 @@ class TreeApp {
 						});
 					} else if (relation === 'isSpouseOf') {
 						this.addTriplet(newPid, 'isSpouseOf', sourcePid);
+					} else if (relation === 'isCousinOf') {
+						this.addTriplet(newPid, 'isCousinOf', sourcePid);
 					}
 
 					this.applyLayout(); this.renderNodes(); this.renderEdges();
@@ -762,7 +769,7 @@ class TreeApp {
 	getVisibleNodes() {
 		const visible = new Set(this.state.nodes.map(n => n.person_id));
 
-		function hideDirection(pid, dir) {
+		const hideDirection = (pid, dir) => {
 			const queue = [];
 			this.state.triplets.forEach(t => {
 				if (dir === 'down') {
@@ -783,7 +790,7 @@ class TreeApp {
 				}
 			});
 
-			function hideDescendants(cpid) {
+			const hideDescendants = (cpid) => {
 				if (visible.has(cpid)) {
 					visible.delete(cpid);
 					this.state.triplets.forEach(t => {
@@ -792,9 +799,9 @@ class TreeApp {
 						if (t.subject === cpid && t.predicate === 'isSpouseOf') hideDescendants(t.object);
 					});
 				}
-			}
+			};
 
-			function hideAncestors(cpid) {
+			const hideAncestors = (cpid) => {
 				if (visible.has(cpid)) {
 					visible.delete(cpid);
 					this.state.triplets.forEach(t => {
@@ -803,14 +810,14 @@ class TreeApp {
 						if (t.subject === cpid && t.predicate === 'isSpouseOf') hideAncestors(t.object);
 					});
 				}
-			}
+			};
 
 			queue.forEach(targetPid => {
 				if (dir === 'down') hideDescendants(targetPid);
 				else if (dir === 'up') hideAncestors(targetPid);
 				else hideAncestors(targetPid);									// For spouses, hiding their ancestral line is safe
 			});
-		}
+		};
 
 		this.state.nodes.forEach(n => {
 			if (n.hiddenDirs) {
@@ -876,6 +883,17 @@ class TreeApp {
 		};
 		this.state.nodes.push(newNode);
 		this.isDirty = true;
+
+		// Sync with backend data representation
+		if (window.app && window.app.curTree && window.app.curTree.person) {
+			if (!window.app.curTree.person[newNode.person_id]) {
+				window.app.curTree.person[newNode.person_id] = Object.assign({}, newNode, { linked_persons: [] });
+			}
+			if (window.PersonEditor && window.PersonEditor.FAKE_PERSONS) {
+				window.PersonEditor.FAKE_PERSONS[newNode.person_id] = window.app.curTree.person[newNode.person_id];
+			}
+		}
+
 		return newNode;
 	}
 
@@ -930,15 +948,32 @@ class TreeApp {
 
 	addTriplet(subject, predicate, object) {
 		this.saveState();
-		this.state.triplets.push({ subject, predicate, object });
+		const existsState = this.state.triplets.some(t => t.subject === subject && t.predicate === predicate && t.object === object);
+		if (!existsState) {
+			this.state.triplets.push({ subject, predicate, object });
+		}
 		if (predicate === "isSpouseOf") {
 			// Automatically add reciprocal
-			const exists = this.state.triplets.some(t => t.subject === object && t.predicate === "isSpouseOf" && t.object === subject);
-			if (!exists) {
+			const existsSpouse = this.state.triplets.some(t => t.subject === object && t.predicate === "isSpouseOf" && t.object === subject);
+			if (!existsSpouse) {
 				this.state.triplets.push({ subject: object, predicate: "isSpouseOf", object: subject });
 			}
 		}
 		this.isDirty = true;
+
+		// Sync with backend data representation
+		if (window.app && window.app.curTree && window.app.curTree.relationships) {
+			const existsApp = window.app.curTree.relationships.some(t => t.subject_id === subject && t.predicate === predicate && t.object_id === object);
+			if (!existsApp) {
+				window.app.curTree.relationships.push({ subject_id: subject, predicate, object_id: object });
+			}
+			if (predicate === "isSpouseOf") {
+				const existsAppSpouse = window.app.curTree.relationships.some(t => t.subject_id === object && t.predicate === "isSpouseOf" && t.object_id === subject);
+				if (!existsAppSpouse) {
+					window.app.curTree.relationships.push({ subject_id: object, predicate: "isSpouseOf", object_id: subject });
+				}
+			}
+		}
 	}
 
 	removeTriplet(subject, predicate, object) {
@@ -985,7 +1020,9 @@ class TreeApp {
 
 		container.find('.vpe-row').each(function () {
 			const label = $(this).find('.vpe-field-label').text().trim().toLowerCase();
-			const val = $(this).find('.vpe-chip').text().trim() || null;
+			const $chip = $(this).find('.vpe-chip').clone();
+			$chip.children('select').remove(); // Exclude the dropdown options text
+			const val = $chip.text().trim() || null;
 
 			if (label === 'first name') node.first_name = val || "";
 			else if (label === 'last name') node.last_name = val || "";
@@ -1024,7 +1061,7 @@ class TreeApp {
 			.attr("transform", "translate(22, 0) scale(1.16)")
 			.attr("fill", "#f5d506d9")
 			.attr("stroke", "#999999")
-			.attr("stroke-width", 1)
+			.attr("stroke-width", 3)
 			.attr("stroke-linejoin", "round")
 			.attr("stroke-linecap", "round");
 
@@ -1032,59 +1069,35 @@ class TreeApp {
 		nodeEnter.append("text")
 			.attr("class", "node-name")
 			.attr("x", this.nodeWidth / 2)
-			.attr("y", 135)
+			.attr("y", 134)
 			.attr("text-anchor", "middle")
 			.attr("font-weight", "bold")
-			.attr("font-size", "12px")
-			.attr("fill", "#333")
+			.attr("font-size", "14px")
+			.attr("fill", "#666")
 			.text(d => this.formatNodeName(d));
 
 		// 4. Year range
 		nodeEnter.append("text")
 			.attr("class", "node-years")
 			.attr("x", this.nodeWidth / 2)
-			.attr("y", 103)
+			.attr("y", 110)
 			.attr("text-anchor", "middle")
-			.attr("font-size", "6px")
-			.attr("fill", "#666")
+			.attr("font-size", "10px")
+			.attr("fill", "#000")
 			.text(d => {
 				const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
 				const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
 				return `${by} – ${dy}`;
 			});
 
-		// 5. Small '+' button (over dates)
-		const plusGroup = nodeEnter.append("g")
-			.attr("transform", `translate(${this.nodeWidth / 2}, 90)`)
-			.style("cursor", "pointer")
-			.on("mousedown", e => e.stopPropagation())
-			.on("click", (e, d) => {
-				e.stopPropagation();
-				const targetName = this.formatNodeName(d);
-				document.getElementById("add-node-target-name").innerText = targetName.trim() || d.person_id;
-				document.getElementById("add-node-modal").dataset.sourcePid = d.person_id;
-				document.getElementById("add-node-modal").showModal();
-			});
 
-		plusGroup.append("circle")
-			.attr("r", 4)
-			.attr("fill", "white")
-			.attr("stroke", "#999");
-
-		plusGroup.append("text")
-			.attr("text-anchor", "middle")
-			.attr("y", 2)
-			.attr("font-size", "7px")
-			.attr("font-weight", "bold")
-			.attr("fill", "#2ecc71")
-			.text("+");
 
 		// 6. Expand/Collapse triangles
 		const trianglesGroup = nodeEnter.append("g").attr("class", "triangles");
 
 		trianglesGroup.append("polygon")
 			.attr("class", "tri-right")
-			.attr("points", "0,-3 6,0 0,3")
+			.attr("points", "0,-5 10,0 0,5")
 			.attr("transform", `translate(${this.nodeWidth - 10}, ${this.nodeHeight / 2})`)
 			.attr("fill", "#999")
 			.style("display", "none")
@@ -1098,7 +1111,7 @@ class TreeApp {
 
 		trianglesGroup.append("polygon")
 			.attr("class", "tri-left")
-			.attr("points", "6,-3 0,0 6,3")
+			.attr("points", "10,-5 0,0 10,5")
 			.attr("transform", `translate(10, ${this.nodeHeight / 2})`)
 			.attr("fill", "#999")
 			.style("display", "none")
@@ -1112,21 +1125,24 @@ class TreeApp {
 
 		trianglesGroup.append("polygon")
 			.attr("class", "tri-bottom")
-			.attr("points", "-3,3 3,3 0,-3")
-			.attr("transform", `translate(${this.nodeWidth / 2}, ${this.nodeHeight - 7})`)
+			.attr("points", "-5,5 5,5 0,-5")
+			.attr("transform", `translate(${this.nodeWidth / 2}, ${this.nodeHeight + 25})`)
 			.attr("fill", "#999")
 			.style("display", "none")
+			.style("cursor", "pointer")
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.bottom = !d.hiddenDirs.bottom;
 				this.applyLayout(); this.renderNodes(); this.renderEdges();
-			});
+			})
+			.append("title")
+			.text("Collapse / Expand Children");
 
 		trianglesGroup.append("polygon")
 			.attr("class", "tri-top")
-			.attr("points", "-3,3 3,3 0,-3")
+			.attr("points", "-5,5 5,5 0,-5")
 			.attr("transform", `translate(${this.nodeWidth / 2}, 8)`)
 			.attr("fill", "#999")
 			.style("display", "none")
@@ -1157,40 +1173,56 @@ class TreeApp {
 		nodeUpdate.select(".tri-left").attr("fill", d => d.hiddenDirs && d.hiddenDirs.left ? "green" : "#999");
 		nodeUpdate.select(".tri-bottom")
 			.attr("fill", d => d.hiddenDirs && d.hiddenDirs.bottom ? "green" : "#999")
-			.attr("points", d => d.hiddenDirs && d.hiddenDirs.bottom ? "-3,-3 3,-3 0,3" : "-3,3 3,3 0,-3");
+			.attr("points", d => d.hiddenDirs && d.hiddenDirs.bottom ? "-5,-5 5,-5 0,5" : "-5,5 5,5 0,-5");
 		nodeUpdate.select(".tri-top").attr("fill", d => d.hiddenDirs && d.hiddenDirs.top ? "green" : "#999");
 
 		nodeSelection.exit().remove();
 
 		this.updateNodeSelection();
+		this.updateTriangleVisibility();
 	}
 
 	updateTriangleVisibility() {
-		this.gNodes.selectAll(".node-group").each(function (d) {
-			let hasBottomEdge = false;
+		// Group families by children
+		const childParents = {};
+		this.state.triplets.forEach(t => {
+			let p = null, c = null;
+			if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') { p = t.subject; c = t.object; }
+			else if (t.predicate === 'isChildOf') { p = t.object; c = t.subject; }
 
-			this.state.triplets.forEach(t => {
-				if (t.subject === d.person_id || t.object === d.person_id) {
-					if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') {
-						if (t.subject === d.person_id) hasBottomEdge = true;		// parent to child -> bottom
-					} else if (t.predicate === 'isChildOf') {
-						if (t.object === d.person_id) hasBottomEdge = true;		// parent to child -> bottom
-					}
-				}
-			});
+			if (p && c) {
+				childParents[c] = childParents[c] || new Set();
+				childParents[c].add(p);
+			}
+		});
 
-			const group = d3.select(e.currentTarget);
+		const arrowParents = new Set();
+		for (const c in childParents) {
+			const parents = Array.from(childParents[c]).map(pid => this.getNode(pid)).filter(Boolean);
+			if (parents.length > 0) {
+				parents.sort((a, b) => a.x - b.x); // first parent by X coordinate
+				arrowParents.add(parents[0].person_id);
+			}
+		}
+
+		this.gNodes.selectAll(".node-group").each((d, i, nodes) => {
+			const hasBottomEdge = arrowParents.has(d.person_id);
+
+			const group = d3.select(nodes[i]);
 			group.select(".tri-right").style("display", "none");
 			group.select(".tri-left").style("display", "none");
 			group.select(".tri-bottom").style("display", hasBottomEdge ? "block" : "none");
 			group.select(".tri-top").style("display", "none");
+
+			// Dynamic tooltip text
+			group.select(".tri-bottom title").text(d.hiddenDirs && d.hiddenDirs.bottom ? "Expand Children" : "Collapse Children");
 		});
 	}
 
 	updateNodeSelection() {
 		this.gNodes.selectAll(".node-bg")
-			.attr("stroke", d => d.person_id === this.state.selectedPid ? "#2ecc71" : "#999999")
-			.attr("stroke-width", 1);
+			.attr("stroke", d => d.person_id === this.state.selectedPid ? "#37c472ff" : "#999999")
+			.attr("stroke-width", 3);
 	}
 
 	fitToScreen(duration = 500) {
@@ -1254,12 +1286,14 @@ class TreeApp {
 		const childrenOf = {};
 		const spousesOf = {};
 		const cousinsOf = {};
+		const directedCousinsOf = {};
 
 		vNodes.forEach(n => {
 			parentsOf[n.person_id] = [];
 			childrenOf[n.person_id] = [];
 			spousesOf[n.person_id] = [];
 			cousinsOf[n.person_id] = [];
+			directedCousinsOf[n.person_id] = [];
 		});
 
 		vTriplets.forEach(t => {
@@ -1272,9 +1306,12 @@ class TreeApp {
 			}
 			if (t.predicate === 'isSpouseOf') {
 				spousesOf[t.subject].push(t.object);
+				spousesOf[t.object].push(t.subject);
 			}
 			if (t.predicate === 'isCousinOf') {
 				cousinsOf[t.subject].push(t.object);
+				cousinsOf[t.object].push(t.subject);
+				directedCousinsOf[t.object].push(t.subject);
 			}
 		});
 
@@ -1303,9 +1340,9 @@ class TreeApp {
 					queue.push(spouse);
 				}
 			});
-			cousinsOf[curr].forEach(cousin => {
-				if (depths[cousin] === undefined || depths[cousin] < d) {
-					depths[cousin] = d;
+			directedCousinsOf[curr].forEach(cousin => {
+				if (depths[cousin] === undefined || depths[cousin] === 0) {
+					depths[cousin] = d + 2;
 					queue.push(cousin);
 				}
 			});
@@ -1323,7 +1360,7 @@ class TreeApp {
 		const xSpacing = 220;
 		const ySpacing = 250;
 
-		Object.keys(nodesByDepth).sort().forEach((dStr, rowIdx) => {
+		Object.keys(nodesByDepth).sort((a, b) => parseInt(a) - parseInt(b)).forEach((dStr, rowIdx) => {
 			const d = parseInt(dStr);
 			const pids = nodesByDepth[d];
 
@@ -1335,7 +1372,7 @@ class TreeApp {
 				const node = this.getNode(pid);
 				if (!node.moved) {
 					node.x = currentX;
-					node.y = startY + rowIdx * ySpacing;
+					node.y = startY + d * ySpacing;
 				} else {
 					// Optionally handle currentX if we want alignment to respect moved nodes later
 					// For now just skip overwriting coordinates
@@ -1351,7 +1388,7 @@ class TreeApp {
 							currentX += this.nodeWidth + 20;							// Snug 20px physical gap between spouses
 							if (!snode.moved) {
 								snode.x = currentX;
-								snode.y = startY + rowIdx * ySpacing;
+								snode.y = startY + d * ySpacing;
 							}
 							placed.add(spid);
 							currentX += xSpacing;									// Resume standard spacing
@@ -1365,7 +1402,7 @@ class TreeApp {
 						if (cnode) {
 							if (!cnode.moved) {
 								cnode.x = currentX;
-								cnode.y = startY + rowIdx * ySpacing;
+								cnode.y = startY + d * ySpacing;
 							}
 							placed.add(cid);
 							currentX += xSpacing;
@@ -1386,12 +1423,12 @@ class TreeApp {
 			rx = node.x + 100;
 			y = node.y + 81;
 		} else if (g === 'male' || g === 'm') {
-			lx = node.x + 49;
-			rx = node.x + 111;
+			lx = node.x + 80;
+			rx = node.x + 80;
 			y = node.y + 81;
 		} else {
-			lx = node.x + 34;
-			rx = node.x + 126;
+			lx = node.x + 80;
+			rx = node.x + 80;
 			y = node.y + 58;
 		}
 		return {
@@ -1586,8 +1623,22 @@ class TreeApp {
 			});
 
 		// Family Pedigree (Junction Circle)
-		edgeGroups.filter(d => d.type === 'FamilyPedigree' && d.parents.length > 1)
-			.append("circle")
+		const familyJunctions = edgeGroups.filter(d => d.type === 'FamilyPedigree' && d.parents.length > 1);
+
+		familyJunctions.append("circle")
+			.attr("class", "family-junction-outer")
+			.attr("r", 4)
+			.attr("fill", "none")
+			.attr("stroke", "#666666")
+			.attr("stroke-width", 1)
+			.attr("cx", d => {
+				const minPx = Math.min(...d.parents.map(p => p.x));
+				const maxPx = Math.max(...d.parents.map(p => p.x));
+				return minPx + (maxPx - minPx) / 2 + this.nodeWidth / 2;
+			})
+			.attr("cy", d => Math.max(...d.parents.map(p => this.getAnchors(p).right.y)));
+
+		familyJunctions.append("circle")
 			.attr("class", "family-junction")
 			.attr("r", 1.5)
 			.attr("fill", "#666666")

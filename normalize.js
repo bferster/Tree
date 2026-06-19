@@ -161,3 +161,4 @@ window.Normalize = {
 		return "B";
 	}
 };
+

@@ -14,15 +14,34 @@ class PersonEditor {
 	   COLOR RAMPS (per field, light pill bg / dark text)
 	   ---------------------------------------------------------- */
 	static COLORS = {
-		first_name: 'c-purple', norm_first_name: 'c-purple', last_name: 'c-teal', nysiis_last_name: 'c-coral',
-		soundex_last_name: 'c-coral', suffix: 'c-amber', race: 'c-pink', gender: 'c-pink',
-		birth_year: 'c-blue', death_year: 'c-blue', linked_persons: 'c-green'
+		first_name: 'c-purple',
+		middle_name: 'c-indigo',
+		norm_first_name: 'c-pink',
+		last_name: 'c-teal',
+		nysiis_last_name: 'c-coral',
+		soundex_last_name: 'c-orange',
+		suffix: 'c-amber',
+		race: 'c-brown',
+		gender: 'c-cyan',
+		birth_year: 'c-blue',
+		death_year: 'c-lime',
+		linked_persons: 'c-green'
 	};
 
 	static RAMP = {
-		'c-purple': ['#EEEDFE', '#26215C'], 'c-teal': ['#E1F5EE', '#04342C'], 'c-coral': ['#FAECE7', '#4A1B0C'],
-		'c-pink': ['#FBEAF0', '#4B1528'], 'c-gray': ['#F1EFE8', '#2C2C2A'], 'c-blue': ['#E6F1FB', '#042C53'],
-		'c-amber': ['#FCEFD9', '#4A2E07'], 'c-green': ['#E5F4E9', '#0F3D1F']
+		'c-purple': ['#EEEDFE', '#26215C'],
+		'c-teal': ['#E1F5EE', '#04342C'],
+		'c-coral': ['#FAECE7', '#4A1B0C'],
+		'c-pink': ['#FBEAF0', '#4B1528'],
+		'c-blue': ['#E6F1FB', '#042C53'],
+		'c-amber': ['#FCEFD9', '#4A2E07'],
+		'c-green': ['#E5F4E9', '#0F3D1F'],
+		'c-indigo': ['#E8EAF6', '#1A237E'],
+		'c-cyan': ['#E0F7FA', '#006064'],
+		'c-lime': ['#F9FBE7', '#827717'],
+		'c-orange': ['#FFF3E0', '#E65100'],
+		'c-brown': ['#EFEBE9', '#3E2723'],
+		'c-gray': ['#F1EFE8', '#2C2C2A']
 	};
 
 	static STAR_FILL = '#EF9F27';
@@ -37,23 +56,27 @@ class PersonEditor {
 	static FIELD_CONFIG = [
 		{
 			key: 'first_name', label: 'First name', editKind: 'free',
-			compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi'
+			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
+		},
+		{
+			key: 'middle_name', label: 'Middle name', editKind: 'free',
+			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
 		},
 		{
 			key: 'norm_first_name', label: 'Nick name', editKind: 'locked',
-			compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi'
+			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
 		},
 		{
 			key: 'last_name', label: 'Last name', editKind: 'free',
-			compare: ['ignore', 'exact', 'fuzzy', 'rarity'], compareMode: 'multi'
+			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
 		},
 		{
 			key: 'nysiis_last_name', label: 'NYSIIS', editKind: 'locked',
-			compare: ['ignore', 'exact', 'rarity'], compareMode: 'multi'
+			compare: ['ignore', 'exact', 'rare'], compareMode: 'multi'
 		},
 		{
 			key: 'soundex_last_name', label: 'Soundex', editKind: 'locked',
-			compare: ['ignore', 'exact', 'rarity'], compareMode: 'multi'
+			compare: ['ignore', 'exact', 'rare'], compareMode: 'multi'
 		},
 		{
 			key: 'suffix', label: 'Suffix', editKind: 'choice', choices: ['Jr', 'Sr'],
@@ -119,9 +142,10 @@ class PersonEditor {
 			cfg.choices.forEach(c => {
 				let v = typeof c === 'object' ? c.v : c;
 				let valString = String(v);
+				let optString = valString;
 				if (!valString.includes(':')) valString = `${valString}:Added`;
 				if (!seen.has(valString)) {
-					options.push({ value: valString, option: valString });
+					options.push({ value: valString, option: optString });
 					seen.add(valString);
 				}
 			});
@@ -130,9 +154,12 @@ class PersonEditor {
 		const canonical = person[key];
 		if (canonical != null && canonical !== '') {
 			let valString = String(canonical);
-			if (!valString.includes(':')) valString = `${valString}:Added`;
+			let optString = valString.includes(':') ? valString : String(canonical);
+			if (!valString.includes(':')) {
+				valString = `${valString}:Added`;
+			}
 			if (!seen.has(valString)) {
-				options.push({ value: valString, option: valString });
+				options.push({ value: valString, option: optString });
 				seen.add(valString);
 			}
 		}
@@ -232,9 +259,9 @@ class PersonEditor {
 				sources[k] = { label: k, checked: true };
 			});
 		}
-		(person.mentions || []).forEach(m => { 
+		(person.mentions || []).forEach(m => {
 			if (!sources[m.source]) {
-				sources[m.source] = { label: m.source, checked: true }; 
+				sources[m.source] = { label: m.source, checked: true };
 			}
 		});
 
@@ -318,11 +345,11 @@ class PersonEditor {
 				val1 = fullVal;
 				val2 = fullVal;
 			}
-			
+
 			if (['norm_first_name', 'nysiis_last_name', 'soundex_last_name'].includes(cfg.key)) {
 				val1 = val1.toUpperCase();
 				val2 = "";
-			} else if (['first_name', 'last_name'].includes(cfg.key)) {
+			} else if (['first_name', 'middle_name', 'last_name'].includes(cfg.key)) {
 				val1 = val1.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 			}
 		}
@@ -382,15 +409,14 @@ class PersonEditor {
 			return $row;
 		}
 
-		const $chip = $(`<span class="vpe-chip" style="color:${ramp_[1]}"></span>`);
-		if (!isNull && val1) $chip.text(val1);
-		$val.append($chip);
+		const chipColor = cfg.key === 'soundex_last_name' ? '#000' : ramp_[1];
+		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${chipColor}"></span>`);
+		const $chipText = $(`<span></span>`);
+		if (!isNull && val1) $chipText.text(val1);
+		$chip.append($chipText);
 
 		if (cfg.editKind === 'free' || cfg.editKind === 'choice') {
-			const $selContainer = $(`<div style="position: relative; flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
-			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
-			const $visibleText = $(`<span style="color:${isNull ? 'transparent' : ramp_[1]}; padding:0 4px; font-size:12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayVal2}</span>`);
-			const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer;"></select>`);
+			const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"></select>`);
 
 			fstate.options.forEach((o, i) => {
 				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${PersonEditor.escapeHtml(o.option)}</option>`);
@@ -405,11 +431,32 @@ class PersonEditor {
 				else { fstate.selected = parseInt(v, 10); }
 				$row.trigger('vpe:changed');
 			});
+			$chip.append($sel);
 
-			$selContainer.append($visibleText, $sel);
-			$val.append($selContainer);
+			$val.append($chip);
+
+			const $rightContainer = $(`<div style="flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
+			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
+			const $sourceText = $(`<span style="color:${isNull ? 'transparent' : ramp_[1]}; padding:0 4px; font-size:12px; font-weight:normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
+
+			$sourceText.on('click', function () {
+				if (val2 && val2 !== 'Added') {
+					$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
+				}
+			});
+
+			$rightContainer.append($sourceText);
+			$val.append($rightContainer);
 		} else {
-			$val.append(`<span style="color:${ramp_[1]}; padding:0 4px; font-size:12px; margin-left:auto;">${PersonEditor.escapeHtml(val2)}</span>`);
+			$val.append($chip);
+			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
+			const $sourceText = $(`<span style="color:${ramp_[1]}; padding:0 4px; font-size:12px; font-weight:normal; margin-left:auto; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
+			$sourceText.on('click', function () {
+				if (val2 && val2 !== 'Added') {
+					$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
+				}
+			});
+			$val.append($sourceText);
 			$val.append(`<i class="ti ti-lock" style="color:${ramp_[1]};opacity:.6;margin-left:4px;" aria-label="Not editable"></i>`);
 		}
 		$row.append($val);
@@ -441,11 +488,16 @@ class PersonEditor {
 						fstate.active = ['ignore'];
 					} else {
 						fstate.active = fstate.active.filter(a => a !== 'ignore');
-						if (fstate.active.includes(label)) {
+						if (!fstate.active.includes(label)) {
+							if (label === 'fuzzy' && fstate.active.includes('exact')) {
+								fstate.active = fstate.active.filter(a => a !== 'exact');
+							} else if (label === 'exact' && fstate.active.includes('fuzzy')) {
+								fstate.active = fstate.active.filter(a => a !== 'fuzzy');
+							}
+							fstate.active = [...fstate.active, label];
+						} else {
 							fstate.active = fstate.active.filter(a => a !== label);
 							if (fstate.active.length === 0) fstate.active = ['ignore'];
-						} else {
-							fstate.active = [...fstate.active, label];
 						}
 					}
 				}
@@ -463,32 +515,41 @@ class PersonEditor {
 	static renderLinkedRow(person, cfg) {
 		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS.linked_persons];
 		const linked = person.linked_persons || [];
-		
-		const rels = (window.app && window.app.curTree) 
-			? window.app.curTree.relationships.filter(r => r.subject_id === person.person_id) 
+
+		const rels = (window.app && window.app.curTree)
+			? window.app.curTree.relationships.filter(r => r.subject_id === person.person_id)
 			: [];
 
 		const $row = $(`<div class="vpe-row vpe-row-linked"></div>`);
 		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
 
-		const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]}"></div>`);
-		const $chip = $(`<span class="vpe-chip" style="color:${ramp_[1]}">${linked.length + rels.length} linked people</span>`);
+		const $val = $(`<div class="vpe-value-pill" style="position: relative; background:${ramp_[0]}"></div>`);
+		const totalLinked = linked.length + rels.length;
+		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${ramp_[1]}">${totalLinked} linked ${totalLinked === 1 ? 'person' : 'people'}</span>`);
 		$val.append($chip);
 
-		const $sel = $(`<select style="color:${ramp_[1]}"></select>`);
-		$sel.append('<option value="">View linked people</option>');
+		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"></select>`);
 		linked.forEach((p, i) => {
 			$sel.append(`<option value="${i}" disabled style="color:${ramp_[1]}">${PersonEditor.escapeHtml(p.value)} (${PersonEditor.escapeHtml(p.source)})</option>`);
 		});
 		rels.forEach((r, i) => {
 			const objPerson = window.app.curTree.person[r.object_id];
-			const fname = objPerson ? (objPerson.first_name||'').split(':')[0] : '';
-			const lname = objPerson ? (objPerson.last_name||'').split(':')[0] : '';
-			const fullName = `${fname} ${lname}`.trim() || r.object_id;
-			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(fullName)} - ${PersonEditor.escapeHtml(r.predicate)}</option>`);
+			const fname = objPerson ? (objPerson.first_name || '').split(':')[0] : '';
+			const lname = objPerson ? (objPerson.last_name || '').split(':')[0] : '';
+			const linkedName = `${fname} ${lname}`.trim() || r.object_id;
+
+			const pFname = (person.first_name || '').split(':')[0];
+			const pLname = (person.last_name || '').split(':')[0];
+			const pFullName = `${pFname} ${pLname}`.trim();
+
+			const predRaw = r.predicate.replace(/^is/, '').replace(/Of$/, '').toUpperCase();
+			const toBoldMap = { 'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭' };
+			const pred = predRaw.split('').map(c => toBoldMap[c] || c).join('');
+
+			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)} is ${pred} of ${PersonEditor.escapeHtml(pFullName)}</option>`);
 		});
-		
-		$sel.on('change', function() {
+
+		$sel.on('change', function () {
 			const val = $(this).val();
 			if (val && val.startsWith('rel_')) {
 				const idx = parseInt(val.split('_')[1], 10);
@@ -500,8 +561,9 @@ class PersonEditor {
 			}
 		});
 
-		$val.append($sel);
-
+		$chip.append($sel);
+		const $rightContainer = $(`<div style="flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
+		$val.append($rightContainer);
 		$row.append($val);
 		return $row;
 	}
@@ -578,11 +640,15 @@ class PersonEditor {
 	static renderSourcesDropdown($wrap, state) {
 		$wrap.empty();
 		const ids = Object.keys(state.sources);
-		const checkedCount = ids.filter(id => state.sources[id].checked).length;
+		const checkedIds = ids.filter(id => state.sources[id].checked);
+		let btnLabel = `Sources${checkedIds.length ? ` (${checkedIds.length})` : ''}`;
+		if (checkedIds.length === 1) {
+			btnLabel = checkedIds[0];
+		}
 
 		const $btn = $(`
       <button type="button" class="vpe-sources-btn">
-        <span>Sources${checkedCount ? ` (${checkedCount})` : ''}</span>
+        <span>${PersonEditor.escapeHtml(btnLabel)}</span>
         <i class="ti ti-chevron-down"></i>
       </button>
     `);
@@ -608,7 +674,7 @@ class PersonEditor {
 			$headerRow.append('<div style="font-size:13px; font-weight:bold; color:#333;">Choose source(s) to search:</div>');
 
 			const $closeBtn = $(`<button type="button" style="background:none; border:none; cursor:pointer; color:#757575; padding:4px; display:flex; align-items:center; justify-content:center;"><i class="ti ti-x"></i></button>`);
-			$closeBtn.on('click', function(e) {
+			$closeBtn.on('click', function (e) {
 				e.stopPropagation();
 				open = false;
 				$wrap.find('.vpe-sources-panel').remove();
@@ -618,7 +684,7 @@ class PersonEditor {
 
 			const allChecked = ids.every(id => state.sources[id].checked);
 			const $toggleRow = $('<div class="vpe-toggle-all-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"></div>');
-			
+
 			const $leftGroup = $('<div style="display:flex; align-items:center; gap:8px;"></div>');
 			$leftGroup.append(`<span class="vpe-toggle-label">${allChecked ? 'All selected' : 'Select all'}</span>`);
 			const $toggleBtn = $(`<button type="button" class="vpe-toggle-btn">${allChecked ? 'Clear all' : 'Select all'}</button>`);
@@ -639,9 +705,9 @@ class PersonEditor {
 				const $row = $('<div class="vpe-source-row"></div>');
 				const $cb = $(`<input type="checkbox" ${src.checked ? 'checked' : ''}>`);
 				$cb.on('click', e => e.stopPropagation());
-				$cb.on('change', function () { 
-					src.checked = $cb.is(':checked'); 
-					PersonEditor.renderSourcesDropdown($wrap, state); 
+				$cb.on('change', function () {
+					src.checked = $cb.is(':checked');
+					PersonEditor.renderSourcesDropdown($wrap, state);
 					$wrap.find('.vpe-sources-btn').click(); // re-open
 				});
 				$row.append($cb, `<span>${PersonEditor.escapeHtml(src.label)}</span>`);

@@ -159,13 +159,21 @@ class App {
 		rightPanel.empty().append(`
 			<div id="editor-layout" style="display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5;">
 				<div class="editor-tabs" style="display: flex; background: #d4d4d4; border-bottom: 1px solid #ccc; user-select: none;">
-					<div class="tab-btn tree-tab-btn" data-target="tree-view" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666; display: none;">FAMILY TREE EDITOR</div>
-					<div class="tab-btn active" data-target="person-editor-container" style="padding: 10px 20px; cursor: pointer; background: #e5e5e5; border-top: 2px solid #0078d7; font-weight: bold; font-size: 14px; color: #333;">PERSONS EDITOR</div>
-					<div class="tab-btn" data-target="mentions-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">MENTIONS EDITOR</div>
+					<div class="tab-btn tree-tab-btn" data-target="tree-view" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666; display: none;">FAMILY TREE</div>
+					<div class="tab-btn active" data-target="person-editor-container" style="padding: 10px 20px; cursor: pointer; background: #e5e5e5; border-top: 2px solid #0078d7; font-weight: bold; font-size: 14px; color: #333;">PERSON EDITOR</div>
+					<div class="tab-btn" data-target="mentions-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">MENTIONS</div>
+					<div class="tab-btn" data-target="sources-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">SOURCES</div>
+					<div class="tab-btn" data-target="familysearch-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">FAMILY-SEARCH</div>
 				</div>
 				<div id="editor-scroll-area" style="flex: 1; position: relative; overflow: hidden; background: #e5e5e5;">
 					<div id="person-editor-container" class="person-editor" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box;"></div>
 					<div id="mentions-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box; display: none;"></div>
+					<div id="sources-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
+						<iframe src="https://stagetools.com/verite/search/" style="width: 100%; height: 100%; border: none;"></iframe>
+					</div>
+					<div id="familysearch-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
+					<br><br><p style="text-align:center">To be added soon!</p>
+					</div>
 				</div>
 			</div>
 		`);
@@ -179,7 +187,7 @@ class App {
 				document.body.classList.add('show-tree');      // Show tree
 			} else {                                           // If editor tab
 				document.body.classList.remove('show-tree');   // Hide tree
-				rightPanel.find('#person-editor-container, #mentions-editor-container').hide(); // Hide all panels
+				rightPanel.find('#person-editor-container, #mentions-editor-container, #sources-editor-container, #familysearch-editor-container').hide(); // Hide all panels
 				rightPanel.find('#' + target).show();          // Show target panel
 			}
 		});
@@ -322,6 +330,8 @@ class App {
 		this.assertions = await this.fetchWithProgress('/api/assertions', 'assertions', maxRecords);
 		this.mentions = await this.fetchWithProgress('/api/mentions', 'mentions', maxRecords);
 
+		this.BuildNameFrequencies(this.mentions);
+
 		try {
 			const sourceText = await (await fetch('sources.csv')).text();
 			window.GlobalSources = {};
@@ -375,9 +385,33 @@ class App {
 	}
 
 
+	BuildNameFrequencies(dataset)                                  // BUILD NAME FREQ MAPS
+	{
+		app.firstNameFreq = new Map();
+		app.lastNameFreq = new Map();
+		dataset.forEach(p => {
+			const f = (p.first_name || '').toLowerCase().trim();
+			const l = (p.last_name || p['last-_name'] || '').toLowerCase().trim();
+			if (f) app.firstNameFreq.set(f, (app.firstNameFreq.get(f) || 0) + 1);
+			if (l) app.lastNameFreq.set(l, (app.lastNameFreq.get(l) || 0) + 1);
+		});
+	}
 
+	GetNameWeightModifier(name, freqMap)                            // GET RARITY MODIFIER
+	{
+		if (!name || !freqMap) return 0;                            	// Missing/Not in map
+		const n = name.toLowerCase().trim();                      		// Convert to lower case
+		const count = freqMap.get(n) || 0;                          	// Get count from map
+		if (count === 0) return 0.0;                                 // Missing/Not in map
+		if (count <= 5) return 1.0;                                 // Very Rare
+		if (count <= 20) return .5;                                  // Uncommon
+		if (count >= 21 && count <= 100) return 0.0;                	// Average (Wait, spec said 21-100 is 0, so explicit return 0)
+		if (count > 500) return -1.0;                              	// Extremely Common
+		if (count > 100) return -.5;                                	// Common
+		return 0.0;                                               		// Fallback
+	}
 
 }
-// Create a global variable 'app' that points to an instance of the App class
-const app = new App();
+
+const app = new App();												// Create a global variable 'app' points to an instance of the App class
 window.app = app;

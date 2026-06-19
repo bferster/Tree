@@ -28,7 +28,6 @@ const server = http.createServer((req, res) => {
 		return;
 	}
 
-	trace(1)
 
 	if (req.url === '/sources.csv') {
 		const csvPath = path.resolve(__dirname, 'sources.csv');
