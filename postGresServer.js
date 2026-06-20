@@ -14,6 +14,7 @@ const MIME_TYPES = {
 	'.gif': 'image/gif',
 	'.svg': 'image/svg+xml',
 	'.ico': 'image/x-icon',
+	'.mp3': 'audio/mpeg',
 };
 
 const server = http.createServer((req, res) => {

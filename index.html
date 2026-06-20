@@ -157,6 +157,7 @@
 			background-size: 20px 20px;
 			position: relative;
 			overflow: hidden;
+			user-select: none;
 		}
 
 		#divider {
@@ -342,8 +343,10 @@
 
 		/* Responsive layout for < 1546px */
 		@media (max-width: 1545px) {
-			#divider { display: none !important; }
-			
+			#divider {
+				display: none !important;
+			}
+
 			.main-workspace {
 				position: relative;
 			}
@@ -351,7 +354,8 @@
 			.canvas-container {
 				position: absolute !important;
 				left: 0;
-				top: 40px; /* Leave space for tabs */
+				top: 40px;
+				/* Leave space for tabs */
 				width: 100% !important;
 				height: calc(100% - 40px) !important;
 				z-index: 10;
@@ -360,9 +364,9 @@
 			.matching-module-placeholder {
 				width: 100% !important;
 				position: absolute !important;
-				left: 0; 
-				top: 0; 
-				right: 0; 
+				left: 0;
+				top: 0;
+				right: 0;
 				bottom: 0;
 				z-index: 20;
 				background: transparent !important;
@@ -371,16 +375,19 @@
 			.tree-tab-btn {
 				display: block !important;
 			}
-			
+
 			body.show-tree .canvas-container {
 				z-index: 30;
 			}
+
 			body.show-tree #editor-scroll-area {
 				display: none !important;
 			}
+
 			body.show-tree #editor-layout {
 				background: transparent !important;
 			}
+
 			body:not(.show-tree) #menubar {
 				opacity: 0.5;
 				pointer-events: none;
@@ -391,15 +398,54 @@
 			.tree-tab-btn {
 				display: none !important;
 			}
-			body.show-tree .canvas-container { z-index: auto; }
-			body.show-tree #editor-scroll-area { display: block; }
-			body.show-tree #editor-layout { background: #e5e5e5 !important; }
+
+			body.show-tree .canvas-container {
+				z-index: auto;
+			}
+
+			body.show-tree #editor-scroll-area {
+				display: block;
+			}
+
+			body.show-tree #editor-layout {
+				background: #e5e5e5 !important;
+			}
 		}
 	</style>
-	<script> function trace(a, b, c, d) { console.log(a, b, c, d); } </script>
-</head>
 
 <body>
+	<script>
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+		// HELPERS 
+		/////////////////////////////////////////////////////////////////////////////////////////////////
+
+		function trace(msg, p1, p2, p3, p4)																// CONSOLE 
+		{
+			if (p4 != undefined)
+				console.log(msg, p1, p2, p3, p4);
+			else if (p3 != undefined)
+				console.log(msg, p1, p2, p3);
+			else if (p2 != undefined)
+				console.log(msg, p1, p2);
+			else if (p1 != undefined)
+				console.log(msg, p1);
+			else
+				console.log(msg);
+		}
+
+		function Sound(sound, mute)																		// PLAY SOUND
+		{
+			var snd = new Audio();																			// Init audio object
+			var ts = "?v=" + new Date().getTime();
+			if (sound.match(/\.mp3/i)) snd = new Audio(sound + ts)												// If an MP3 file
+			else snd = new Audio("img/" + sound + ".mp3" + ts);													// Use built in mp3
+			if (!mute) {																					// If not initing or muting	
+				snd.volume = 100 / 100;																		// Set volume
+				snd.play().catch(e => console.error("Audio playback error:", e));							// Play it
+			}
+		}
+	</script>
 </body>
+-</head>
 
 </html>

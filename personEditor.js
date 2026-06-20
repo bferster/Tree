@@ -135,6 +135,7 @@ class PersonEditor {
 	   ---------------------------------------------------------- */
 	static buildOptions(person, key) {
 		const seen = new Set();
+		const seenValues = new Set();
 		const options = [];
 
 		const cfg = PersonEditor.FIELD_CONFIG.find(c => c.key === key);
@@ -144,32 +145,54 @@ class PersonEditor {
 				let valString = String(v);
 				let optString = valString;
 				if (!valString.includes(':')) valString = `${valString}:Added`;
+				let baseVal = valString.split(':')[0].toLowerCase();
 				if (!seen.has(valString)) {
 					options.push({ value: valString, option: optString });
 					seen.add(valString);
+					seenValues.add(baseVal);
 				}
 			});
 		}
 
-		const canonical = person[key];
+		let canonical = person[key];
+		if (!canonical) {
+			if (key === 'norm_first_name' && person.first_name) {
+				canonical = window.Normalize.getNickname(person.first_name.split(':')[0]);
+			} else if (key === 'nysiis_last_name' && person.last_name) {
+				canonical = window.Normalize.getNYSIIS(person.last_name.split(':')[0]);
+			} else if (key === 'soundex_last_name' && person.last_name) {
+				canonical = window.Normalize.getSoundex(person.last_name.split(':')[0]);
+			}
+		}
+
 		if (canonical != null && canonical !== '') {
 			let valString = String(canonical);
 			let optString = valString.includes(':') ? valString : String(canonical);
 			if (!valString.includes(':')) {
 				valString = `${valString}:Added`;
 			}
+			let baseVal = valString.split(':')[0].toLowerCase();
 			if (!seen.has(valString)) {
 				options.push({ value: valString, option: optString });
 				seen.add(valString);
+				seenValues.add(baseVal);
 			}
 		}
 
-		(person.mentions || []).forEach(m => {
-			const v = m.field_values && m.field_values[key];
+		(person.mentions || []).forEach(m_id => {
+			let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
+			if (!m) return;
+			
+			let v = m.field_values ? m.field_values[key] : m[key];
+			
 			if (v != null && v !== '') {
-				let valString = `${v}:${m.source}`;
-				if (!seen.has(valString)) {
+				let baseVal = String(v).trim();
+				let lowerBaseVal = baseVal.toLowerCase();
+				
+				if (!seenValues.has(lowerBaseVal)) {
+					let valString = `${baseVal}:${m.mention_id}`;
 					seen.add(valString);
+					seenValues.add(lowerBaseVal);
 					options.push({ value: valString, option: valString });
 				}
 			}
@@ -218,22 +241,24 @@ class PersonEditor {
 	   State initialization
 	   ---------------------------------------------------------- */
 	static buildState(person) {
-		if (person.first_name && !person.norm_first_name) {
-			person.norm_first_name = window.Normalize.getNickname(person.first_name.split(':')[0]);
-		}
-		if (person.last_name) {
-			const lnBase = person.last_name.split(':')[0];
-			if (!person.nysiis_last_name) person.nysiis_last_name = window.Normalize.getNYSIIS(lnBase);
-			if (!person.soundex_last_name) person.soundex_last_name = window.Normalize.getSoundex(lnBase);
-		}
-
 		const fields = {};
 		PersonEditor.FIELD_CONFIG.forEach(cfg => {
 			if (cfg.editKind === 'linked') return;
 
 			const options = PersonEditor.buildOptions(person, cfg.key);
-			let selectedIdx = 0;
-			const canonical = person[cfg.key];
+			let selectedIdx = (cfg.key === 'suffix') ? -1 : 0;
+			
+			let canonical = person[cfg.key];
+			if (!canonical) {
+				if (cfg.key === 'norm_first_name' && person.first_name) {
+					canonical = window.Normalize.getNickname(person.first_name.split(':')[0]);
+				} else if (cfg.key === 'nysiis_last_name' && person.last_name) {
+					canonical = window.Normalize.getNYSIIS(person.last_name.split(':')[0]);
+				} else if (cfg.key === 'soundex_last_name' && person.last_name) {
+					canonical = window.Normalize.getSoundex(person.last_name.split(':')[0]);
+				}
+			}
+			
 			let found = -1;
 			if (canonical != null && canonical !== '') {
 				let canStr = String(canonical);
@@ -535,7 +560,7 @@ class PersonEditor {
 			$sel.append(`<option value="${i}" disabled style="color:${ramp_[1]}">${PersonEditor.escapeHtml(p.value)} (${PersonEditor.escapeHtml(p.source)})</option>`);
 		});
 		rels.forEach((r, i) => {
-			const objPerson = window.app.curTree.person[r.object_id];
+			const objPerson = Array.isArray(window.app.curTree.persons) ? window.app.curTree.persons.find(p => p.person_id === r.object_id) : window.app.curTree.persons[r.object_id];
 			const fname = objPerson ? (objPerson.first_name || '').split(':')[0] : '';
 			const lname = objPerson ? (objPerson.last_name || '').split(':')[0] : '';
 			const linkedName = `${fname} ${lname}`.trim() || r.object_id;
@@ -630,6 +655,7 @@ class PersonEditor {
 		// Search button
 		const $searchBtn = $(`<button type="button" class="vpe-search-btn"><i class="ti ti-search"></i>Search</button>`);
 		$searchBtn.on('click', function () {
+			if (window.Sound) window.Sound("ding");
 			$dialog.trigger('vpe:search', [PersonEditor.collectCriteria(person, state)]);
 		});
 

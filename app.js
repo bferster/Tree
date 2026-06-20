@@ -1,6 +1,7 @@
 class App {
 	constructor()                                              // CONSTRUCTOR
 	{
+		let i, o;
 		this.assertions = [];
 		this.mentions = [];
 		this.isLoaded = false;
@@ -9,21 +10,22 @@ class App {
 		this.curTree = {
 			treeName: "Family",
 			owner: "Bill",
-			person: [
-				{ person_id: "P001", first_name: "William:ALB-CN-1880-257", middle_name: null, last_name: "Spears:ALB-CN-1880-257", birth_year: "1840:ALB-CN-1880-257", death_year: "1910:added", gender: "M:ALB-CN-1880-257", race: "B:ALB-CN-1880-257", x: 200, y: 200, mentions: [], relatives: [], verity: 2 },
-				{ person_id: "P002", first_name: "Georgiana:ALB-CN-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", birth_year: "1848:ALB-CN-1880-258", death_year: "1910:added", gender: "F:ALB-CN-1880-258", race: "B:ALB-CN-1880-258", x: 500, y: 200, mentions: [], relatives: [], verity: 2 },
-				{ person_id: "P003", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, mentions: [], relatives: [], verity: 2 },
-				{ person_id: "P004", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, mentions: [], relatives: [], verity: 2 },
+			persons: [
+				{ person_id: "P001", mentions: ["ALB-CN-1880-257"], anchor: null, first_name: "William:ALB-CN-1880-257", middle_name: null, last_name: "Spears:ALB-CN-1880-257", suffix: null, birth_year: "1840:ALB-CN-1880-257", death_year: "1910:Added", gender: "M:ALB-CN-1880-257", race: "B:ALB-CN-1880-257", x: 200, y: 200, verity: 2 },
+				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgiana:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2 },
+				{ person_id: "P003", mentions: ["ALB-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", suffix: null, birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, verity: 2 },
+				{ person_id: "P004", mentions: ["ALB-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", suffix: null, birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, verity: 2 },
 			],
 			relationships: []
 		};
 
-		this.addRelationship("P001", "isSpouseOf", "P002");
-		this.addRelationship("P001", "isParentOf", "P003");
-		this.addRelationship("P001", "isParentOf", "P004");
-		this.addRelationship("P002", "isParentOf", "P003");
-		this.addRelationship("P002", "isParentOf", "P004");
-		this.addRelationship("P003", "isSiblingOf", "P004");
+		for (i = 0; i < this.curTree.persons.length; i++) {
+			o = this.curTree.persons[i];
+			if (o.anchor) {
+				this.addRelationship(o.person_id, o.anchor.split(":")[0], o.anchor.split(":")[1]);
+			}
+		}
+
 		this.init();
 	}
 
@@ -31,6 +33,7 @@ class App {
 	{
 		const inverseMap = {
 			'isParentOf': 'isChildOf',
+			'isChildOf': 'isParentOf',
 			'isSpouseOf': 'isSpouseOf',
 			'isSiblingOf': 'isSiblingOf',
 			'isCousinOf': 'isCousinOf',
@@ -38,8 +41,10 @@ class App {
 		};
 
 		// Add direct
+		let added = false;
 		if (!this.curTree.relationships.some(r => r.subject_id === subject_id && r.predicate === predicate && r.object_id === object_id)) {
 			this.curTree.relationships.push({ subject_id, predicate, object_id });
+			added = true;
 		}
 
 		// Add inverse
@@ -47,13 +52,62 @@ class App {
 			const invPred = inverseMap[predicate];
 			if (!this.curTree.relationships.some(r => r.subject_id === object_id && r.predicate === invPred && r.object_id === subject_id)) {
 				this.curTree.relationships.push({ subject_id: object_id, predicate: invPred, object_id: subject_id });
+				added = true;
 			}
+		}
+
+		if (!added) return; // Prevent infinite recursion!
+		// Automatically infer siblings
+		if (predicate === 'isChildOf') {
+			const siblings = this.curTree.relationships
+				.filter(r => r.predicate === 'isChildOf' && r.object_id === object_id && r.subject_id !== subject_id)
+				.map(r => r.subject_id);
+			siblings.forEach(siblingPid => {
+				this.addRelationship(subject_id, 'isSiblingOf', siblingPid);
+			});
+
+			// Infer parent's spouse as another parent
+			const spouses = this.curTree.relationships
+				.filter(r => r.predicate === 'isSpouseOf' && r.subject_id === object_id)
+				.map(r => r.object_id);
+			spouses.forEach(spousePid => {
+				this.addRelationship(subject_id, 'isChildOf', spousePid);
+			});
+		} else if (predicate === 'isParentOf') {
+			const siblings = this.curTree.relationships
+				.filter(r => r.predicate === 'isParentOf' && r.subject_id === subject_id && r.object_id !== object_id)
+				.map(r => r.object_id);
+			siblings.forEach(siblingPid => {
+				this.addRelationship(object_id, 'isSiblingOf', siblingPid);
+			});
+
+			// Infer spouse as another parent
+			const spouses = this.curTree.relationships
+				.filter(r => r.predicate === 'isSpouseOf' && r.subject_id === subject_id)
+				.map(r => r.object_id);
+			spouses.forEach(spousePid => {
+				this.addRelationship(spousePid, 'isParentOf', object_id);
+			});
+		} else if (predicate === 'isSpouseOf') {
+			// Cross-link existing children if a spouse is added later
+			const children1 = this.curTree.relationships
+				.filter(r => r.predicate === 'isParentOf' && r.subject_id === subject_id)
+				.map(r => r.object_id);
+			children1.forEach(childPid => {
+				this.addRelationship(object_id, 'isParentOf', childPid);
+			});
+			const children2 = this.curTree.relationships
+				.filter(r => r.predicate === 'isParentOf' && r.subject_id === object_id)
+				.map(r => r.object_id);
+			children2.forEach(childPid => {
+				this.addRelationship(subject_id, 'isParentOf', childPid);
+			});
 		}
 	}
 
 	rebuildRelatives(personId)                                 // REBUILD RELATIVES ARRAY
 	{
-		const p = Array.isArray(this.curTree.person) ? this.curTree.person.find(x => x.person_id === personId) : this.curTree.person[personId];
+		const p = Array.isArray(this.curTree.persons) ? this.curTree.persons.find(x => x.person_id === personId) : this.curTree.persons[personId];
 		if (!p) return;
 		const relSet = new Set();
 		this.curTree.relationships.forEach(r => {
@@ -175,6 +229,7 @@ class App {
 		`);
 
 		rightPanel.find('.tab-btn').on('click', (e) => {       // ON TAB CLICK
+			if (window.Sound) window.Sound("click");
 			const target = $(e.currentTarget).attr('data-target'); // Get target ID
 			rightPanel.find('.tab-btn').css({ background: '#d4d4d4', borderTopColor: 'transparent', fontWeight: 'normal', color: '#666' }).removeClass('active'); // Reset styling
 			$(e.currentTarget).css({ background: '#e5e5e5', borderTopColor: '#0078d7', fontWeight: 'bold', color: '#333' }).addClass('active'); // Set active styling
@@ -211,10 +266,10 @@ class App {
 					const mention = mEditor.getCurrentMention();
 					if (!mention) return;
 
-					// Add mention to curTree.person
-					if (this.curTree.person[pid]) {
-						if (!this.curTree.person[pid].mentions.includes(mentionId)) {
-							this.curTree.person[pid].mentions.push(mentionId);
+					// Add mention to curTree.persons
+					if (this.curTree.persons[pid]) {
+						if (!this.curTree.persons[pid].mentions.includes(mentionId)) {
+							this.curTree.persons[pid].mentions.push(mentionId);
 						}
 					}
 
@@ -226,7 +281,7 @@ class App {
 						if (confirm(`Do you want to add relative "${relName}" from this mention?`)) {
 							// Pull data from relative's mention and add to curTree
 							const newPid = 'P' + Math.floor(Math.random() * 10000); // temp id generation
-							this.curTree.person[newPid] = {
+							this.curTree.persons[newPid] = {
 								person_id: newPid,
 								first_name: rel.first_name || '',
 								last_name: rel.last_name || '',
@@ -241,36 +296,38 @@ class App {
 							// Add relationship
 							const predicate = rel.predicate || 'RelativeOf';
 							this.addRelationship(pid, predicate, newPid);
-							window.treeApp.addNode(this.curTree.person[newPid]);
+							window.treeApp.addNode(this.curTree.persons[newPid]);
 							window.treeApp.addTriplet(pid, predicate, newPid);
 							window.treeApp.applyLayout(); window.treeApp.renderNodes(); window.treeApp.renderEdges();
 						}
 					});
 					this.rebuildRelatives(pid);
 
-					const n = window.treeApp.getNode(pid);
-					if (n) {
-						n.mentions = n.mentions || [];
-						const exists = n.mentions.some(m => m.mention_id === mentionId);
-						if (!exists) {
-							n.mentions.push({
-								mention_id: mention.mention_id,
-								source: mention.source,
-								label: mention.source + ' (' + mention.source_year + ')',
-								field_values: {
-									first_name: mention.first_name,
-									last_name: mention.last_name,
-									birth_year: mention.birth_year ? String(mention.birth_year) : undefined,
-									death_year: mention.death_year ? String(mention.death_year) : undefined,
-									gender: mention.gender === 'female' ? 'F' : (mention.gender === 'male' ? 'M' : ''),
-									race: mention.race
-								}
-							});
-							window.treeApp.isDirty = true;
-							window.treeApp.selectNodeAndShowEditor(pid);
-						}
-					}
+					/*					const n = window.treeApp.getNode(pid);
+										if (n) {
+											n.mentions = n.mentions || [];
+											const exists = n.mentions.some(m => m.mention_id === mentionId);
+											if (!exists) {
+												n.mentions.push({
+													mention_id: mention.mention_id,
+													source: mention.source,
+													label: mention.source + ' (' + mention.source_year + ')',
+													field_values: {
+														first_name: mention.first_name,
+														last_name: mention.last_name,
+														birth_year: mention.birth_year ? String(mention.birth_year) : undefined,
+														death_year: mention.death_year ? String(mention.death_year) : undefined,
+														gender: mention.gender === 'female' ? 'F' : (mention.gender === 'male' ? 'M' : ''),
+														race: mention.race
+													}
+												});
+												window.treeApp.isDirty = true;
+												window.treeApp.selectNodeAndShowEditor(pid);
+											}
+										}
+						*/
 				}
+
 			});
 
 			if (node) {
@@ -321,15 +378,22 @@ class App {
 	async loadData()                                           // LOAD DATA
 	{
 		const isTest = window.location.search.toLowerCase().includes('test');
-		const maxRecords = isTest ? 1000 : null;
-		this.showProgress('Connecting to database...', false);
-		this.assertions = await this.fetchWithProgress('/api/assertions', 'assertions', maxRecords);
-		this.mentions = await this.fetchWithProgress('/api/mentions', 'mentions', maxRecords);
+
+		if (isTest) {
+			this.showProgress('Loading data from CSV...', false);
+			this.assertions = await d3.csv('img/assertions.csv');
+			this.mentions = await d3.csv('img/mentions.csv');
+		}
+		else {
+			this.showProgress('Connecting to database...', false);
+			this.assertions = await this.fetchWithProgress('/api/assertions', 'assertions');
+			this.mentions = await this.fetchWithProgress('/api/mentions', 'mentions');
+		}
 
 		this.BuildNameFrequencies(this.mentions);
 
 		try {
-			const sourceText = await (await fetch('sources.csv')).text();
+			const sourceText = await (await fetch('img/sources.csv')).text();
 			window.GlobalSources = {};
 			const lines = sourceText.split('\n');
 			if (lines.length > 0) {
@@ -355,9 +419,8 @@ class App {
 		this.showProgress(`Loaded ${this.assertions.length} assertions, ${this.mentions.length} mentions.`, 100); // Done
 		setTimeout(() => this.hideProgress(), 1500);           // Hide popup
 
-		window.PersonEditor.FAKE_PERSONS = window.PersonEditor.FAKE_PERSONS || {}; // Init fake persons
 		if (window.treeApp) {                                  // If tree exists
-			Object.values(this.curTree.person).forEach(p => {  // For each person
+			Object.values(this.curTree.persons).forEach(p => {  // For each person
 				window.PersonEditor.FAKE_PERSONS[p.person_id] = p; // Register
 				if (!window.treeApp.getNode(p.person_id)) {    // If missing
 					window.treeApp.addNode(p);                 // Add to tree

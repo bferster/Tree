@@ -89,8 +89,6 @@ class TreeApp {
 				</div>
 			</div>
 		
-			<!-- node-modal removed: editing is done via the right-panel PersonEditor -->
-		
 			<dialog id="predicate-modal" class="modern-dialog" style="min-width: 250px;">
 				<div class="dialog-header">
 					<h3 style="margin:0;">Select Relationship</h3>
@@ -98,8 +96,7 @@ class TreeApp {
 				<div class="dialog-body" style="margin-bottom: 20px;">
 					<p>Relationship to <strong id="pred-target-name"></strong>:</p>
 					<select id="pred-select" style="width: 100%; padding: 5px;">
-						<option value="isMotherOf">isMotherOf</option>
-						<option value="isFatherOf">isFatherOf</option>
+						<option value="isParentOf">isParentOf</option>
 						<option value="isSpouseOf">isSpouseOf</option>
 						<option value="isChildOf">isChildOf</option>
 						<option value="isSiblingOf">isSiblingOf</option>
@@ -125,7 +122,7 @@ class TreeApp {
 					<select id="add-node-select" style="width: 100%; padding: 5px;">
 						<option value="isChildOf">is Child of</option>
 						<option value="isCousinOf">is Cousin of</option>
-						<option value="ParentOf">is Parent of</option>
+						<option value="isParentOf">is Parent of</option>
 						<option value="isSiblingOf">is Sibling of</option>
 						<option value="isSpouseOf">is Spouse of</option>
 					</select>
@@ -294,7 +291,10 @@ class TreeApp {
 					// It was a click (no dragging occurred)
 					if (typeof this.linkMode !== 'undefined' && this.linkMode) {
 						this.handleLinkTargetClick(d.person_id);
-					} else this.selectNodeAndShowEditor(d.person_id);
+					} else {
+						if (window.Sound) window.Sound("click");
+						this.selectNodeAndShowEditor(d.person_id);
+					}
 
 				}
 			});
@@ -405,6 +405,7 @@ class TreeApp {
 				if (n && confirm('Are you sure you want to delete ' + this.formatNodeName(n) + '?')) {
 					this.deleteNode(this.state.selectedPid);
 					this.applyLayout(); this.renderNodes(); this.renderEdges();
+					this.fitToScreen();
 				}
 			});
 
@@ -580,7 +581,7 @@ class TreeApp {
 							}
 						}
 						newY += 250;
-					} else if (relation === 'ParentOf') {
+					} else if (relation === 'isParentOf') {
 						newX += 0; newY -= 250;
 					} else if (relation === 'isSiblingOf') {
 						newX += 250; newY += 0;
@@ -613,7 +614,7 @@ class TreeApp {
 						siblings.forEach(siblingPid => {
 							this.addTriplet(newPid, 'isSiblingOf', siblingPid);
 						});
-					} else if (relation === 'ParentOf') {
+					} else if (relation === 'isParentOf') {
 						this.addTriplet(sourcePid, 'isChildOf', newPid);
 					} else if (relation === 'isSiblingOf') {
 						this.addTriplet(newPid, 'isSiblingOf', sourcePid);
@@ -639,6 +640,7 @@ class TreeApp {
 
 					this.applyLayout(); this.renderNodes(); this.renderEdges();
 					this.selectNodeAndShowEditor(newPid);
+					this.fitToScreen();
 
 				}
 			});
@@ -885,12 +887,26 @@ class TreeApp {
 		this.isDirty = true;
 
 		// Sync with backend data representation
-		if (window.app && window.app.curTree && window.app.curTree.person) {
-			if (!window.app.curTree.person[newNode.person_id]) {
-				window.app.curTree.person[newNode.person_id] = Object.assign({}, newNode, { linked_persons: [] });
+		if (window.app && window.app.curTree && window.app.curTree.persons) {
+			let personCollection = window.app.curTree.persons;
+			let existingAppNode = null;
+
+			if (Array.isArray(personCollection)) {
+				existingAppNode = personCollection.find(p => p.person_id === newNode.person_id);
+				if (!existingAppNode) {
+					existingAppNode = Object.assign({}, newNode, { linked_persons: [] });
+					personCollection.push(existingAppNode);
+				}
+			} else {
+				existingAppNode = personCollection[newNode.person_id];
+				if (!existingAppNode) {
+					existingAppNode = Object.assign({}, newNode, { linked_persons: [] });
+					personCollection[newNode.person_id] = existingAppNode;
+				}
 			}
+
 			if (window.PersonEditor && window.PersonEditor.FAKE_PERSONS) {
-				window.PersonEditor.FAKE_PERSONS[newNode.person_id] = window.app.curTree.person[newNode.person_id];
+				window.PersonEditor.FAKE_PERSONS[newNode.person_id] = existingAppNode;
 			}
 		}
 
@@ -1072,8 +1088,8 @@ class TreeApp {
 			.attr("y", 135)
 			.attr("text-anchor", "middle")
 			.attr("font-weight", "bold")
-			.attr("font-size", "14px")
-			.attr("fill", "#666")
+			.attr("font-size", "13px")
+			.attr("fill", "#000099")
 			.text(d => this.formatNodeName(d));
 
 		// 4. Year range
@@ -1104,6 +1120,7 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
+				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.right = !d.hiddenDirs.right;
 				this.applyLayout(); this.renderNodes(); this.renderEdges();
@@ -1118,6 +1135,7 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
+				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.left = !d.hiddenDirs.left;
 				this.applyLayout(); this.renderNodes(); this.renderEdges();
@@ -1133,6 +1151,7 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
+				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.bottom = !d.hiddenDirs.bottom;
 				this.applyLayout(); this.renderNodes(); this.renderEdges();
@@ -1149,6 +1168,7 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
+				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.top = !d.hiddenDirs.top;
 				this.applyLayout(); this.renderNodes(); this.renderEdges();
@@ -1523,6 +1543,20 @@ class TreeApp {
 				if (!childToParents[child.person_id]) childToParents[child.person_id] = [];
 				if (!childToParents[child.person_id].includes(parent.person_id)) {
 					childToParents[child.person_id].push(parent.person_id);
+				}
+			}
+		});
+
+		// Implicitly connect children of a single parent to that parent's spouse for rendering
+		Object.keys(childToParents).forEach(childPid => {
+			if (childToParents[childPid].length === 1) {
+				const parentPid = childToParents[childPid][0];
+				const spouseEdge = vTriplets.find(t => t.predicate === 'isSpouseOf' && (t.subject === parentPid || t.object === parentPid));
+				if (spouseEdge) {
+					const spousePid = spouseEdge.subject === parentPid ? spouseEdge.object : spouseEdge.subject;
+					if (!childToParents[childPid].includes(spousePid)) {
+						childToParents[childPid].push(spousePid);
+					}
 				}
 			}
 		});
