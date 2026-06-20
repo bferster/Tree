@@ -36,8 +36,8 @@ class TreeApp {
 						<div class="dropdown-item" id="menu-undo">Undo</div>
 						<div class="dropdown-item" id="menu-redo">Redo</div>
 						<div class="dropdown-separator"></div>
-						<div class="dropdown-item" id="menu-add-node">Add Person</div>
-						<div class="dropdown-item" id="menu-delete-node">Delete Node</div>
+						<div class="dropdown-item" id="menu-add-node">Add person</div>
+						<div class="dropdown-item" id="menu-delete-node">Remove person</div>
 					</div>
 				</div>
 		
@@ -624,7 +624,7 @@ class TreeApp {
 							if (t.predicate === 'isChildOf' && t.subject === sourcePid) {
 								parents.add(t.object);
 							}
-							if ((t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') && t.object === sourcePid) {
+							if (t.predicate === 'isParentOf' && t.object === sourcePid) {
 								parents.add(t.subject);
 							}
 						});
@@ -773,10 +773,10 @@ class TreeApp {
 			const queue = [];
 			this.state.triplets.forEach(t => {
 				if (dir === 'down') {
-					if (t.subject === pid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) queue.push(t.object);
+					if (t.subject === pid && t.predicate === 'isParentOf') queue.push(t.object);
 					if (t.object === pid && t.predicate === 'isChildOf') queue.push(t.subject);
 				} else if (dir === 'up') {
-					if (t.object === pid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) queue.push(t.subject);
+					if (t.object === pid && t.predicate === 'isParentOf') queue.push(t.subject);
 					if (t.subject === pid && t.predicate === 'isChildOf') queue.push(t.object);
 				} else if (dir === 'right' || dir === 'left') {
 					if (t.subject === pid && t.predicate === 'isSpouseOf') {
@@ -794,7 +794,7 @@ class TreeApp {
 				if (visible.has(cpid)) {
 					visible.delete(cpid);
 					this.state.triplets.forEach(t => {
-						if (t.subject === cpid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) hideDescendants(t.object);
+						if (t.subject === cpid && t.predicate === 'isParentOf') hideDescendants(t.object);
 						if (t.object === cpid && t.predicate === 'isChildOf') hideDescendants(t.subject);
 						if (t.subject === cpid && t.predicate === 'isSpouseOf') hideDescendants(t.object);
 					});
@@ -805,7 +805,7 @@ class TreeApp {
 				if (visible.has(cpid)) {
 					visible.delete(cpid);
 					this.state.triplets.forEach(t => {
-						if (t.object === cpid && (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf')) hideAncestors(t.subject);
+						if (t.object === cpid && t.predicate === 'isParentOf') hideAncestors(t.subject);
 						if (t.subject === cpid && t.predicate === 'isChildOf') hideAncestors(t.object);
 						if (t.subject === cpid && t.predicate === 'isSpouseOf') hideAncestors(t.object);
 					});
@@ -920,7 +920,7 @@ class TreeApp {
 		while (queue.length > 0) {
 			const current = queue.shift();
 			this.state.triplets.forEach(t => {
-				if ((t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') && t.subject === current) {
+				if (t.predicate === 'isParentOf' && t.subject === current) {
 					if (!toDelete.has(t.object)) {
 						toDelete.add(t.object);
 						queue.push(t.object);
@@ -1069,7 +1069,7 @@ class TreeApp {
 		nodeEnter.append("text")
 			.attr("class", "node-name")
 			.attr("x", this.nodeWidth / 2)
-			.attr("y", 134)
+			.attr("y", 135)
 			.attr("text-anchor", "middle")
 			.attr("font-weight", "bold")
 			.attr("font-size", "14px")
@@ -1126,7 +1126,7 @@ class TreeApp {
 		trianglesGroup.append("polygon")
 			.attr("class", "tri-bottom")
 			.attr("points", "-5,5 5,5 0,-5")
-			.attr("transform", `translate(${this.nodeWidth / 2}, ${this.nodeHeight + 25})`)
+			.attr("transform", `translate(${this.nodeWidth / 2}, 87)`)
 			.attr("fill", "#999")
 			.style("display", "none")
 			.style("cursor", "pointer")
@@ -1187,7 +1187,7 @@ class TreeApp {
 		const childParents = {};
 		this.state.triplets.forEach(t => {
 			let p = null, c = null;
-			if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') { p = t.subject; c = t.object; }
+			if (t.predicate === 'isParentOf') { p = t.subject; c = t.object; }
 			else if (t.predicate === 'isChildOf') { p = t.object; c = t.subject; }
 
 			if (p && c) {
@@ -1297,7 +1297,7 @@ class TreeApp {
 		});
 
 		vTriplets.forEach(t => {
-			if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf') {
+			if (t.predicate === 'isParentOf') {
 				parentsOf[t.object].push(t.subject);
 				childrenOf[t.subject].push(t.object);
 			} else if (t.predicate === 'isChildOf') {
@@ -1516,7 +1516,7 @@ class TreeApp {
 				if (seenExtended.has(pairKey)) return;
 				seenExtended.add(pairKey);
 				edgeData.push({ type: 'ExtendedOf', source: s, target: o, id: pairKey + '-Extended' });
-			} else if (t.predicate === 'isMotherOf' || t.predicate === 'isFatherOf' || t.predicate === 'isChildOf') {
+			} else if (t.predicate === 'isParentOf' || t.predicate === 'isChildOf') {
 				let parent = s, child = o;
 				if (t.predicate === 'isChildOf') { parent = o; child = s; }
 

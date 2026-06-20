@@ -9,33 +9,28 @@ class App {
 		this.curTree = {
 			treeName: "Family",
 			owner: "Bill",
-			person: {
-				"P001": { person_id: "P001", first_name: "Mary:ALB-CN-1880-67", last_name: "Johnson:ALB-CN-1880-67", birth_year: 1820, death_year: 1890, gender: "F", x: 200, y: 200, mentions: [], relatives: [], verity: 2 },
-				"P002": { person_id: "P002", first_name: "James:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1815, death_year: 1878, gender: "M:ALB-CN-1870-765", x: 500, y: 200, mentions: [], relatives: [], verity: 32 },
-				"P003": { person_id: "P003", first_name: "Sarah:ALB-CN-1880-67", last_name: "Johnson:ALB-CN-1880-67", birth_year: 1845, death_year: null, gender: "F", x: 200, y: 450, mentions: [], relatives: [], verity: 2 },
-				"P004": { person_id: "P004", first_name: "Thomas:ALB-CN-1880-67", last_name: "Johnson:ALB-CN-1880-67", birth_year: "1842:ALB-CN-1870.765", death_year: 1910, gender: "M", x: 500, y: 450, mentions: [], relatives: [], verity: 2 },
-				"P005": { person_id: "P005", first_name: "Josh:Added", last_name: "Johnson:ALB-CN-1870", birth_year: 1872, death_year: 1940, gender: "M", x: -100, y: 200, mentions: [], relatives: [], verity: 1 }
-			},
+			person: [
+				{ person_id: "P001", first_name: "William:ALB-CN-1880-257", middle_name: null, last_name: "Spears:ALB-CN-1880-257", birth_year: "1840:ALB-CN-1880-257", death_year: "1910:added", gender: "M:ALB-CN-1880-257", race: "B:ALB-CN-1880-257", x: 200, y: 200, mentions: [], relatives: [], verity: 2 },
+				{ person_id: "P002", first_name: "Georgiana:ALB-CN-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", birth_year: "1848:ALB-CN-1880-258", death_year: "1910:added", gender: "F:ALB-CN-1880-258", race: "B:ALB-CN-1880-258", x: 500, y: 200, mentions: [], relatives: [], verity: 2 },
+				{ person_id: "P003", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, mentions: [], relatives: [], verity: 2 },
+				{ person_id: "P004", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, mentions: [], relatives: [], verity: 2 },
+			],
 			relationships: []
 		};
 
 		this.addRelationship("P001", "isSpouseOf", "P002");
-		this.addRelationship("P001", "isMotherOf", "P003");
-		this.addRelationship("P001", "isMotherOf", "P004");
-		this.addRelationship("P002", "isFatherOf", "P003");
-		this.addRelationship("P002", "isFatherOf", "P004");
+		this.addRelationship("P001", "isParentOf", "P003");
+		this.addRelationship("P001", "isParentOf", "P004");
+		this.addRelationship("P002", "isParentOf", "P003");
+		this.addRelationship("P002", "isParentOf", "P004");
 		this.addRelationship("P003", "isSiblingOf", "P004");
-		this.addRelationship("P005", "isCousinOf", "P001");
-
 		this.init();
 	}
 
 	addRelationship(subject_id, predicate, object_id)          // ADD RELATIONSHIP
 	{
 		const inverseMap = {
-			'isMotherOf': 'isChildOf',
-			'isFatherOf': 'isChildOf',
-			'isChildOf': 'isParentOf',
+			'isParentOf': 'isChildOf',
 			'isSpouseOf': 'isSpouseOf',
 			'isSiblingOf': 'isSiblingOf',
 			'isCousinOf': 'isCousinOf',
@@ -58,13 +53,14 @@ class App {
 
 	rebuildRelatives(personId)                                 // REBUILD RELATIVES ARRAY
 	{
-		if (!this.curTree.person[personId]) return;
+		const p = Array.isArray(this.curTree.person) ? this.curTree.person.find(x => x.person_id === personId) : this.curTree.person[personId];
+		if (!p) return;
 		const relSet = new Set();
 		this.curTree.relationships.forEach(r => {
 			if (r.subject_id === personId) relSet.add(r.object_id);
 			if (r.object_id === personId) relSet.add(r.subject_id);
 		});
-		this.curTree.person[personId].relatives = Array.from(relSet);
+		p.relatives = Array.from(relSet);
 	}
 
 	async init()                                               // INITIALIZATION
@@ -368,7 +364,7 @@ class App {
 				}
 			});
 			this.curTree.relationships.forEach(r => {          // For each relationship
-				if (r.predicate !== 'isChildOf' && r.predicate !== 'isParentOf' && r.predicate !== 'isUncleOf') { // Filter inverse
+				if (r.predicate !== 'isChildOf' && r.predicate !== 'isUncleOf') { // Filter inverse
 					window.treeApp.addTriplet(r.subject_id, r.predicate, r.object_id); // Add triplet
 				}
 			});

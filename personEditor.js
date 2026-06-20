@@ -278,10 +278,12 @@ class PersonEditor {
 	static renderShell($dialog, person, state) {
 		const fname = (person.first_name || '').split(':')[0];
 		const lname = (person.last_name || '').split(':')[0];
+		const byear = person.birth_year ? String(person.birth_year).split(':')[0] : '?';
+		const dyear = person.death_year ? String(person.death_year).split(':')[0] : '?';
 		$dialog.append(`
       <div class="vpe-header">
         <div>
-          <p class="vpe-target-summary">${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} ${PersonEditor.escapeHtml(person.birth_year || '?')}-${PersonEditor.escapeHtml(person.death_year || '?')}</p>
+          <p class="vpe-target-summary">${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} &nbsp;&nbsp;(${PersonEditor.escapeHtml(byear)} - ${PersonEditor.escapeHtml(dyear)})</p>
         </div>
         <i class="ti ti-x vpe-close" aria-label="Close"></i>
       </div>

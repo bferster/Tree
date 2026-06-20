@@ -432,11 +432,19 @@ class MentionsEditor {
 
 	_renderList() {
 		const target = this.targetPerson;
-		const fname = target ? (target.norm_first_name || target.first_name || '').split(':')[0] : '';
-		const lname = target ? (target.last_name || '').split(':')[0] : '';
-		this.targetSummaryEl.textContent = target
-			? `${fname} ${lname} ${target.birth_year || '?'}-${target.death_year || '?'}`
-			: '';
+		const toTitleCase = (str) => {
+			if (!str) return '';
+			return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+		};
+		const fname = target ? toTitleCase((target.norm_first_name || target.first_name || '').split(':')[0]) : '';
+		const lname = target ? toTitleCase((target.last_name || '').split(':')[0]) : '';
+		if (target) {
+			const byear = target.birth_year ? String(target.birth_year).split(':')[0] : '?';
+			const dyear = target.death_year ? String(target.death_year).split(':')[0] : '?';
+			this.targetSummaryEl.innerHTML = `${MentionsEditor._esc(fname)} ${MentionsEditor._esc(lname)} &nbsp;&nbsp;(${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})`;
+		} else {
+			this.targetSummaryEl.innerHTML = '';
+		}
 		this.countEl.textContent = `${this.matches.length} matches`;
 
 		if (this.matches.length === 0) {
