@@ -59,6 +59,7 @@ class App {
 		if (!added) return; // Prevent infinite recursion!
 		// Automatically infer siblings
 		if (predicate === 'isChildOf') {
+			// 1. If adding a child to a parent, the child becomes a sibling to all other children of that parent
 			const siblings = this.curTree.relationships
 				.filter(r => r.predicate === 'isChildOf' && r.object_id === object_id && r.subject_id !== subject_id)
 				.map(r => r.subject_id);
@@ -66,12 +67,51 @@ class App {
 				this.addRelationship(subject_id, 'isSiblingOf', siblingPid);
 			});
 
-			// Infer parent's spouse as another parent
+			// 2. If adding a child to a parent who has a spouse, automatically link the child to the spouse as well.
 			const spouses = this.curTree.relationships
 				.filter(r => r.predicate === 'isSpouseOf' && r.subject_id === object_id)
 				.map(r => r.object_id);
 			spouses.forEach(spousePid => {
 				this.addRelationship(subject_id, 'isChildOf', spousePid);
+			});
+
+			// 3. If adding a parent to a child who already has siblings, automatically link the siblings to the new parent
+			const childSiblings = this.curTree.relationships
+				.filter(r => r.predicate === 'isSiblingOf' && r.subject_id === subject_id)
+				.map(r => r.object_id);
+			childSiblings.forEach(siblingPid => {
+				this.addRelationship(siblingPid, 'isChildOf', object_id);
+			});
+
+			// 4. If adding a parent to a child who already has another parent, automatically link the new parent to the other parent as a spouse
+			const otherParents = this.curTree.relationships
+				.filter(r => r.predicate === 'isChildOf' && r.subject_id === subject_id && r.object_id !== object_id)
+				.map(r => r.object_id);
+			otherParents.forEach(otherParentPid => {
+				this.addRelationship(object_id, 'isSpouseOf', otherParentPid);
+			});
+		} else if (predicate === 'isSiblingOf') {
+			// Infer parents for the new sibling
+			const parents = this.curTree.relationships
+				.filter(r => r.predicate === 'isChildOf' && r.subject_id === subject_id)
+				.map(r => r.object_id);
+			parents.forEach(parentPid => {
+				this.addRelationship(object_id, 'isChildOf', parentPid);
+			});
+
+			const siblings = this.curTree.relationships
+				.filter(r => r.predicate === 'isSiblingOf' && r.subject_id === subject_id && r.object_id !== object_id)
+				.map(r => r.object_id);
+			siblings.forEach(siblingPid => {
+				this.addRelationship(object_id, 'isSiblingOf', siblingPid);
+			});
+		} else if (predicate === 'isSpouseOf') {
+			// Infer children for the new spouse
+			const children = this.curTree.relationships
+				.filter(r => r.predicate === 'isParentOf' && r.subject_id === subject_id)
+				.map(r => r.object_id);
+			children.forEach(childPid => {
+				this.addRelationship(object_id, 'isParentOf', childPid);
 			});
 		} else if (predicate === 'isParentOf') {
 			const siblings = this.curTree.relationships
@@ -198,14 +238,15 @@ class App {
 		return allData;
 	}
 
-	selectNodeAndShowEditor(personId)                          // SELECT NODE & SHOW EDITOR
+	selectNodeAndShowEditor(personId, forceTab = null)                          // SELECT NODE & SHOW EDITOR
 	{
 		if (!this.isLoaded) return;                            // Quit if not loaded
 		this.curPerson = window.treeApp ? window.treeApp.state.nodes.findIndex(n => n.person_id === personId) : -1; // Set curPerson index
 		window.treeApp.state.selectedPid = personId;           // Sync tree selection
-		window.treeApp.updateNodeSelection();                  // Update node UI
+		window.treeApp.UpdateNodeSelection();                  // Update node UI
 
 		const rightPanel = $('#right-panel-content');          // Get right panel DOM
+		let currentActiveTab = forceTab || rightPanel.find('.tab-btn.active').attr('data-target') || 'person-editor-container';
 		rightPanel.empty().append(`
 			<div id="editor-layout" style="display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5;">
 				<div class="editor-tabs" style="display: flex; background: #d4d4d4; border-bottom: 1px solid #ccc; user-select: none;">
@@ -229,7 +270,6 @@ class App {
 		`);
 
 		rightPanel.find('.tab-btn').on('click', (e) => {       // ON TAB CLICK
-			if (window.Sound) window.Sound("click");
 			const target = $(e.currentTarget).attr('data-target'); // Get target ID
 			rightPanel.find('.tab-btn').css({ background: '#d4d4d4', borderTopColor: 'transparent', fontWeight: 'normal', color: '#666' }).removeClass('active'); // Reset styling
 			$(e.currentTarget).css({ background: '#e5e5e5', borderTopColor: '#0078d7', fontWeight: 'bold', color: '#333' }).addClass('active'); // Set active styling
@@ -244,7 +284,7 @@ class App {
 		});
 
 		if (document.body.classList.contains('show-tree')) {   // If tree is shown
-			rightPanel.find('.tab-btn[data-target="person-editor-container"]').click(); // Switch to person editor
+			rightPanel.find('.tab-btn[data-target="' + currentActiveTab + '"]').click(); // Restore active tab
 		} else {
 			document.body.classList.remove('show-tree');       // Hide tree
 		}
@@ -254,7 +294,7 @@ class App {
 		});
 
 		let mEditor = null;                                    // Mentions editor
-		const node = window.treeApp.getNode(personId);         // Get active node
+		const node = window.treeApp.GetNode(personId);         // Get active node
 		if (node) {                                            // If node exists
 			node.narrative_vector = node.narrative_vector || [0.5, 0.5, 0.5]; // Init narrative
 		}
@@ -296,14 +336,14 @@ class App {
 							// Add relationship
 							const predicate = rel.predicate || 'RelativeOf';
 							this.addRelationship(pid, predicate, newPid);
-							window.treeApp.addNode(this.curTree.persons[newPid]);
-							window.treeApp.addTriplet(pid, predicate, newPid);
-							window.treeApp.applyLayout(); window.treeApp.renderNodes(); window.treeApp.renderEdges();
+							window.treeApp.AddNode(this.curTree.persons[newPid]);
+							window.treeApp.AddTriplet(pid, predicate, newPid);
+							window.treeApp.ApplyLayout(); window.treeApp.RenderNodes(); window.treeApp.RenderEdges();
 						}
 					});
 					this.rebuildRelatives(pid);
 
-					/*					const n = window.treeApp.getNode(pid);
+					/*					const n = window.treeApp.GetNode(pid);
 										if (n) {
 											n.mentions = n.mentions || [];
 											const exists = n.mentions.some(m => m.mention_id === mentionId);
@@ -322,7 +362,7 @@ class App {
 													}
 												});
 												window.treeApp.isDirty = true;
-												window.treeApp.selectNodeAndShowEditor(pid);
+												window.treeApp.SelectNodeAndShowEditor(pid);
 											}
 										}
 						*/
@@ -339,9 +379,9 @@ class App {
 			const pEditor = new window.PersonEditor($('#person-editor-container'));
 			pEditor.load(personId);
 			$('#person-editor-container').on('change vpe:changed vpe:rerender', () => {
-				const n = window.treeApp.getNode(personId);
+				const n = window.treeApp.GetNode(personId);
 				if (n) {
-					window.treeApp.syncEditorToNode(n);
+					window.treeApp.SyncEditorToNode(n);
 					if (mEditor && n) {
 						n.narrative_vector = n.narrative_vector || [0.5, 0.5, 0.5];
 						mEditor.load(n, ['ALB-CN1870', 'ALB-CN1880', 'ALB-MARR', 'ALB-TAX'], mEditor.getMockMentions(n));
@@ -405,7 +445,7 @@ class App {
 						const parts = lines[i].split(',');
 						if (parts.length > displayIdx && parts[displayIdx]) {
 							const name = parts[displayIdx].trim();
-							window.GlobalSources[name] = true;
+							if (name) window.GlobalSources[name] = true;
 						}
 					}
 				}
@@ -421,25 +461,24 @@ class App {
 
 		if (window.treeApp) {                                  // If tree exists
 			Object.values(this.curTree.persons).forEach(p => {  // For each person
-				window.PersonEditor.FAKE_PERSONS[p.person_id] = p; // Register
-				if (!window.treeApp.getNode(p.person_id)) {    // If missing
-					window.treeApp.addNode(p);                 // Add to tree
+				if (!window.treeApp.GetNode(p.person_id)) {    // If missing
+					window.treeApp.AddNode(p);                 // Add to tree
 				}
 			});
 			this.curTree.relationships.forEach(r => {          // For each relationship
 				if (r.predicate !== 'isChildOf' && r.predicate !== 'isUncleOf') { // Filter inverse
-					window.treeApp.addTriplet(r.subject_id, r.predicate, r.object_id); // Add triplet
+					window.treeApp.AddTriplet(r.subject_id, r.predicate, r.object_id); // Add triplet
 				}
 			});
-			window.treeApp.applyLayout();                      // Lay out nodes
-			window.treeApp.renderNodes();                      // Draw nodes
-			window.treeApp.renderEdges();                      // Draw edges
-			window.treeApp.fitToScreen();                      // Fit viewport
+			window.treeApp.ApplyLayout();                      // Lay out nodes
+			window.treeApp.RenderNodes();                      // Draw nodes
+			window.treeApp.RenderEdges();                      // Draw edges
+			window.treeApp.FitToScreen();                      // Fit viewport
 		}
 
 		if (window.treeApp && window.treeApp.state.nodes.length > 0) { // If nodes present
 			const pid = window.treeApp.state.selectedPid || window.treeApp.state.nodes[0].person_id; // Get target PID
-			window.treeApp.selectNodeAndShowEditor(pid);       // Select node
+			window.treeApp.SelectNodeAndShowEditor(pid);       // Select node
 		}
 	}
 

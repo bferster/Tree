@@ -1,9 +1,13 @@
 class TreeApp {
-	constructor() {
-		this.init();
+	constructor()																		// CONSTRUCTOR
+	{
+
+		this.Init();
 	}
 
-	init() {
+	Init()																		// INITIALIZE APP
+	{
+
 		// Dynamically generate structural HTML elements and prepend to document.body
 		document.body.insertAdjacentHTML('afterbegin', `
 			<!-- Link Banner -->
@@ -117,15 +121,20 @@ class TreeApp {
 				<div class="dialog-header">
 					<h3 style="margin:0;">Add New Person</h3>
 				</div>
-				<div class="dialog-body" style="margin-bottom: 20px;">
-					<p>How is this new person related to <strong id="add-node-target-name"></strong>?</p>
-					<select id="add-node-select" style="width: 100%; padding: 5px;">
-						<option value="isChildOf">is Child of</option>
-						<option value="isCousinOf">is Cousin of</option>
-						<option value="isParentOf">is Parent of</option>
-						<option value="isSiblingOf">is Sibling of</option>
-						<option value="isSpouseOf">is Spouse of</option>
-					</select>
+				<div class="dialog-body" style="margin-bottom: 20px; text-align: center;">
+					<p style="margin-bottom: 15px; font-size: 16px;">How is this new person related to <strong id="add-node-target-name"></strong>?</p>
+					<div class="vpe-value-pill" style="position: relative; background: #E6F1FB; width: max-content; margin: 0 auto; padding: 12px 20px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+						<span class="vpe-chip" style="position: relative; color: #042C53; font-size: 18px; font-weight: 600;">
+							<span id="add-node-select-display">is Child of</span>
+							<select id="add-node-select" style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;">
+								<option value="isChildOf">is Child of</option>
+								<option value="isCousinOf">is Cousin of</option>
+								<option value="isParentOf">is Parent of</option>
+								<option value="isSiblingOf">is Sibling of</option>
+								<option value="isSpouseOf">is Spouse of</option>
+							</select>
+						</span>
+					</div>
 				</div>
 				<div class="dialog-footer">
 					<button id="add-node-cancel">Cancel</button>
@@ -159,28 +168,23 @@ class TreeApp {
 		this.currentPassword = null;
 		this.currentEncryptedData = null;
 
-
-
 		// State management
-
-
-
 
 		// Bind keyboard shortcuts for Undo/Redo
 		$(document).on('keydown', (e) => {
 			// Ctrl+Z
 			if (e.ctrlKey && e.key === 'z') {
 				e.preventDefault();
-				this.undo();
-				this.applyLayout();
-				this.renderNodes(); this.renderEdges();
+				this.Undo();
+				this.ApplyLayout();
+				this.RenderNodes(); this.RenderEdges();
 			}
 			// Ctrl+Y
 			if (e.ctrlKey && e.key === 'y') {
 				e.preventDefault();
-				this.redo();
-				this.applyLayout();
-				this.renderNodes(); this.renderEdges();
+				this.Redo();
+				this.ApplyLayout();
+				this.RenderNodes(); this.RenderEdges();
 			}
 		});
 
@@ -189,13 +193,7 @@ class TreeApp {
 
 		// Core Functions
 
-
-
-
-
-
 		// Reciprocal removal of triplets
-
 
 		// Global function to query triplets
 
@@ -222,7 +220,7 @@ class TreeApp {
 		this.svg.on("click", (e) => {
 			if (e.target.tagName === 'svg') {
 				this.state.selectedPid = null;
-				this.updateNodeSelection();
+				this.UpdateNodeSelection();
 			}
 		});
 
@@ -239,7 +237,6 @@ class TreeApp {
 		this.malePath = "M 34,49 A 16,16 0 0,1 66,49 A 16,16 0 0,1 34,49 Z M 15,100 A 35,35 0 0,1 85,100 Z";
 		this.circlePath = "M 50, 50 m -40, 0 a 40,40 0 1,0 80,0 a 40,40 0 1,0 -80,0";
 
-
 		// Drag Behavior
 		this.drag = d3.drag()
 			.filter(function (e) {
@@ -249,7 +246,7 @@ class TreeApp {
 			.on("start", (e, d) => {
 				d3.select(e.currentTarget).raise();
 				this.state.selectedPid = d.person_id;
-				this.updateNodeSelection();
+				this.UpdateNodeSelection();
 
 				// Build list of all downstream descendants to this.drag along
 				e.sourceEvent.stopPropagation();
@@ -273,7 +270,7 @@ class TreeApp {
 
 				// Vertically align spouses (keep on the same horizontal plane)
 				d.spouseSet.forEach(spid => {
-					const spouseNode = this.getNode(spid);
+					const spouseNode = this.GetNode(spid);
 					if (spouseNode) {
 						spouseNode.y = d.y;
 					}
@@ -281,7 +278,7 @@ class TreeApp {
 
 				// Fast DOM update for all nodes uniformly
 				this.gNodes.selectAll(".node-group").attr("transform", nd => `translate(${nd.x},${nd.y})`);
-				this.renderEdges();														// Update edges in real time dynamically
+				this.RenderEdges();														// Update edges in real time dynamically
 			})
 			.on("end", (e, d) => {
 				delete d.spouseSet;
@@ -290,10 +287,9 @@ class TreeApp {
 				} else {
 					// It was a click (no dragging occurred)
 					if (typeof this.linkMode !== 'undefined' && this.linkMode) {
-						this.handleLinkTargetClick(d.person_id);
+						this.HandleLinkTargetClick(d.person_id);
 					} else {
-						if (window.Sound) window.Sound("click");
-						this.selectNodeAndShowEditor(d.person_id);
+						this.SelectNodeAndShowEditor(d.person_id);
 					}
 
 				}
@@ -301,17 +297,9 @@ class TreeApp {
 
 		// Live synchronization helper
 
-
-
-
 		// Layout and Edge rendering
 
-
-
-
-
-
-		this.clearAll();																	// Ensure clean this.state before injecting our persistent test data
+		this.ClearAll();																	// Ensure clean this.state before injecting our persistent test data
 		this.undoStack = [];																// clear test data from undo
 		this.isDirty = false;
 
@@ -319,11 +307,9 @@ class TreeApp {
 		this.linkMode = false;
 		this.linkSourcePid = null;
 
-
 		// jQuery Document Ready handlers
 		$(document).ready(() => {
-			this.restoreNotepadSizeAndPosition();
-
+			this.RestoreNotepadSizeAndPosition();
 
 			$('#menu-search-sources').on('click', (e) => {
 				window.open('/verite/search', '_blank');
@@ -374,9 +360,9 @@ class TreeApp {
 
 			// Re-apply layout on window resize
 			$(window).on('resize', () => {
-				this.applyLayout();
-				this.renderNodes();
-				this.renderEdges();
+				this.ApplyLayout();
+				this.RenderNodes();
+				this.RenderEdges();
 			});
 
 			// Edit Menu Logic
@@ -387,9 +373,9 @@ class TreeApp {
 					alert("Please select a node first to add a relative");
 					return;
 				}
-				const targetNode = this.getNode(this.state.selectedPid);
+				const targetNode = this.GetNode(this.state.selectedPid);
 				if (!targetNode) return;
-				document.getElementById("add-node-target-name").innerText = this.formatNodeName(targetNode);
+				document.getElementById("add-node-target-name").innerText = this.FormatNodeName(targetNode);
 				document.getElementById("add-node-modal").dataset.sourcePid = this.state.selectedPid;
 				document.getElementById("add-node-modal").showModal();
 			});
@@ -401,11 +387,11 @@ class TreeApp {
 					alert("Please select a node first");
 					return;
 				}
-				const n = this.getNode(this.state.selectedPid);
-				if (n && confirm('Are you sure you want to delete ' + this.formatNodeName(n) + '?')) {
-					this.deleteNode(this.state.selectedPid);
-					this.applyLayout(); this.renderNodes(); this.renderEdges();
-					this.fitToScreen();
+				const n = this.GetNode(this.state.selectedPid);
+				if (n && confirm('Are you sure you want to delete ' + this.FormatNodeName(n) + '?')) {
+					this.DeleteNode(this.state.selectedPid);
+					this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
+					this.FitToScreen();
 				}
 			});
 
@@ -413,9 +399,9 @@ class TreeApp {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (this.undoStack.length > 0) {
-					this.undo();
-					this.applyLayout();
-					this.renderNodes(); this.renderEdges();
+					this.Undo();
+					this.ApplyLayout();
+					this.RenderNodes(); this.RenderEdges();
 				}
 			});
 
@@ -423,9 +409,9 @@ class TreeApp {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (this.redoStack.length > 0) {
-					this.redo();
-					this.applyLayout();
-					this.renderNodes(); this.renderEdges();
+					this.Redo();
+					this.ApplyLayout();
+					this.RenderNodes(); this.RenderEdges();
 				}
 			});
 
@@ -449,7 +435,7 @@ class TreeApp {
 			$('#menu-fit-screen').on('click', (e) => {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
-				this.fitToScreen();
+				this.FitToScreen();
 
 			});
 
@@ -458,10 +444,10 @@ class TreeApp {
 				$('.menu-top-level').removeClass('active');
 				if (this.state && this.state.nodes) {
 					this.state.nodes.forEach(n => n.moved = false);
-					this.applyLayout();
-					this.renderNodes(); this.renderEdges();
+					this.ApplyLayout();
+					this.RenderNodes(); this.RenderEdges();
 				}
-				this.fitToScreen();
+				this.FitToScreen();
 
 			});
 
@@ -532,7 +518,7 @@ class TreeApp {
 					this.isDirty = true;
 				});
 				npText.addEventListener('blur', function () {
-					this.saveState();														// push notepad change to undo history so it is saved natively in tree history
+					this.SaveState();														// push notepad change to undo history so it is saved natively in tree history
 				});
 			}
 
@@ -548,8 +534,8 @@ class TreeApp {
 				const targetPid = document.getElementById("predicate-modal").dataset.target;
 				document.getElementById("predicate-modal").close();
 				if (pred && targetPid && this.linkSourcePid) {
-					this.addTriplet(this.linkSourcePid, pred, targetPid);
-					this.applyLayout(); this.renderNodes(); this.renderEdges();
+					this.AddTriplet(this.linkSourcePid, pred, targetPid);
+					this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
 				}
 				this.linkMode = false;
 				document.getElementById("link-banner").style.display = "none";
@@ -560,14 +546,19 @@ class TreeApp {
 				document.getElementById("add-node-modal").close();
 			});
 
+			document.getElementById("add-node-select").addEventListener("change", (e) => {
+				const select = e.target;
+				document.getElementById("add-node-select-display").innerText = select.options[select.selectedIndex].text;
+			});
+
 			document.getElementById("add-node-confirm").addEventListener("click", () => {
 				const sourcePid = document.getElementById("add-node-modal").dataset.sourcePid;
 				const relation = document.getElementById("add-node-select").value;
 				document.getElementById("add-node-modal").close();
 
 				if (sourcePid && relation) {
-					const sourceNode = this.getNode(sourcePid);
-					const newPid = this.generatePid();
+					const sourceNode = this.GetNode(sourcePid);
+					const newPid = this.GeneratePid();
 					let newX = sourceNode ? sourceNode.x : 0;
 					let newY = sourceNode ? sourceNode.y : 0;
 
@@ -575,7 +566,7 @@ class TreeApp {
 						const spouses = this.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
 						if (spouses.length > 0) {
 							const spouseId = spouses[0].subject === sourcePid ? spouses[0].object : spouses[0].subject;
-							const spouseNode = this.getNode(spouseId);
+							const spouseNode = this.GetNode(spouseId);
 							if (spouseNode) {
 								newX = (sourceNode.x + spouseNode.x) / 2;
 							}
@@ -591,20 +582,54 @@ class TreeApp {
 						newX += 200; newY += 0;
 					}
 
-					const newNode = this.addNode({
+					const newNodeInfo = {
 						person_id: newPid,
 						first_name: '',
 						last_name: sourceNode ? (sourceNode.last_name || '') : '',
 						x: newX,
 						y: newY
-					});
+					};
+					if (sourceNode) {
+						newNodeInfo.linked_persons = sourceNode.linked_persons ? JSON.parse(JSON.stringify(sourceNode.linked_persons)) : [];
+						
+						// Add the source node's formal relatives as plain text
+						if (window.app && window.app.curTree && window.app.curTree.relationships) {
+							const parentRels = window.app.curTree.relationships.filter(r => r.subject_id === sourceNode.person_id);
+							parentRels.forEach(r => {
+								let objPerson = null;
+								if (Array.isArray(window.app.curTree.persons)) {
+									objPerson = window.app.curTree.persons.find(p => p.person_id === r.object_id);
+								} else {
+									objPerson = window.app.curTree.persons[r.object_id];
+								}
+
+								if (objPerson) {
+									const fname = (objPerson.first_name || '').split(':')[0];
+									const lname = (objPerson.last_name || '').split(':')[0];
+									const fullName = `${fname} ${lname}`.trim() || r.object_id;
+									
+									const sourceName = (sourceNode.first_name || '').split(':')[0] || sourceNode.person_id;
+									
+									// Avoid duplicates
+									const existing = newNodeInfo.linked_persons.find(lp => lp.value === fullName);
+									if (!existing) {
+										newNodeInfo.linked_persons.push({
+											value: fullName,
+											source: `Relative of ${sourceName}`
+										});
+									}
+								}
+							});
+						}
+					}
+					const newNode = this.AddNode(newNodeInfo);
 
 					if (relation === 'isChildOf') {
-						this.addTriplet(newPid, 'isChildOf', sourcePid);
+						this.AddTriplet(newPid, 'isChildOf', sourcePid);
 						const spouses = this.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
 						spouses.forEach(t => {
 							const spousePid = t.subject === sourcePid ? t.object : t.subject;
-							this.addTriplet(newPid, 'isChildOf', spousePid);
+							this.AddTriplet(newPid, 'isChildOf', spousePid);
 						});
 
 						// Connect to existing siblings
@@ -612,12 +637,12 @@ class TreeApp {
 							.filter(t => t.predicate === 'isChildOf' && t.object === sourcePid && t.subject !== newPid)
 							.map(t => t.subject);
 						siblings.forEach(siblingPid => {
-							this.addTriplet(newPid, 'isSiblingOf', siblingPid);
+							this.AddTriplet(newPid, 'isSiblingOf', siblingPid);
 						});
 					} else if (relation === 'isParentOf') {
-						this.addTriplet(sourcePid, 'isChildOf', newPid);
+						this.AddTriplet(sourcePid, 'isChildOf', newPid);
 					} else if (relation === 'isSiblingOf') {
-						this.addTriplet(newPid, 'isSiblingOf', sourcePid);
+						this.AddTriplet(newPid, 'isSiblingOf', sourcePid);
 
 						// Connect the new sibling to all known parents of the source node
 						const parents = new Set();
@@ -630,22 +655,20 @@ class TreeApp {
 							}
 						});
 						parents.forEach(parentPid => {
-							this.addTriplet(newPid, 'isChildOf', parentPid);
+							this.AddTriplet(newPid, 'isChildOf', parentPid);
 						});
 					} else if (relation === 'isSpouseOf') {
-						this.addTriplet(newPid, 'isSpouseOf', sourcePid);
+						this.AddTriplet(newPid, 'isSpouseOf', sourcePid);
 					} else if (relation === 'isCousinOf') {
-						this.addTriplet(newPid, 'isCousinOf', sourcePid);
+						this.AddTriplet(newPid, 'isCousinOf', sourcePid);
 					}
 
-					this.applyLayout(); this.renderNodes(); this.renderEdges();
-					this.selectNodeAndShowEditor(newPid);
-					this.fitToScreen();
+					this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
+					this.SelectNodeAndShowEditor(newPid);
+					this.FitToScreen();
 
 				}
 			});
-
-
 
 			// Splitter Resizing Interaction logic
 			const splitDivider = document.getElementById('divider');
@@ -682,7 +705,7 @@ class TreeApp {
 					detailsPanel.style.width = `calc(${rightPercent}% - 6px)`;
 
 					// Recenter and fit the D3 canvas tree instantly as the divider is dragged
-					this.fitToScreen(0);
+					this.FitToScreen(0);
 				});
 
 				document.addEventListener('mouseup', () => {
@@ -693,26 +716,26 @@ class TreeApp {
 						document.body.style.userSelect = 'auto';
 
 						// Smoothly settle the tree position once dragging is finished
-						this.fitToScreen(200);
+						this.FitToScreen(200);
 					}
 				});
 			}
 
 			// Apply automatic hierarchical layout and initial draw on load
-			this.applyLayout();
-			this.renderNodes();
-			this.renderEdges();
-			this.fitToScreen(0);
+			this.ApplyLayout();
+			this.RenderNodes();
+			this.RenderEdges();
+			this.FitToScreen(0);
 			if (this.state.nodes && this.state.nodes.length > 0) {
-				this.selectNodeAndShowEditor(this.state.nodes[0].person_id);
+				this.SelectNodeAndShowEditor(this.state.nodes[0].person_id);
 			}
 		});
 
-
-
 	}
 
-	restoreNotepadSizeAndPosition() {
+	RestoreNotepadSizeAndPosition()																		// RESTORE NOTEPAD SIZE AND POSITION
+	{
+
 		const npEl = document.getElementById('notepad-container');
 		if (npEl && this.state) {
 			if (this.state.notepadWidth) npEl.style.width = this.state.notepadWidth;
@@ -728,7 +751,9 @@ class TreeApp {
 		}
 	}
 
-	updateUndoRedoMenu() {
+	UpdateUndoRedoMenu()																		// UPDATE UNDO REDO MENU
+	{
+
 		const undoEl = document.getElementById('menu-undo');
 		const redoEl = document.getElementById('menu-redo');
 		if (undoEl) {
@@ -741,34 +766,42 @@ class TreeApp {
 		}
 	}
 
-	saveState() {
+	SaveState()																		// SAVE STATE TO UNDO STACK
+	{
+
 		// Deep copy using JSON (safe since our data is simple JS objects)
 		this.undoStack.push(JSON.parse(JSON.stringify(this.state)));
 		this.redoStack = [];															// Clear redo stack on new action
-		this.updateUndoRedoMenu();
+		this.UpdateUndoRedoMenu();
 	}
 
-	undo() {
+	Undo()																		// UNDO STATE
+	{
+
 		if (this.undoStack.length > 0) {
 			this.redoStack.push(JSON.parse(JSON.stringify(this.state)));
 			this.state = this.undoStack.pop();
-			this.updateUndoRedoMenu();
+			this.UpdateUndoRedoMenu();
 			if (document.getElementById("notepad-text")) document.getElementById("notepad-text").value = this.state.notepad || "";
 			this.isDirty = true;
 		}
 	}
 
-	redo() {
+	Redo()																		// REDO STATE
+	{
+
 		if (this.redoStack.length > 0) {
 			this.undoStack.push(JSON.parse(JSON.stringify(this.state)));
 			this.state = this.redoStack.pop();
-			this.updateUndoRedoMenu();
+			this.UpdateUndoRedoMenu();
 			if (document.getElementById("notepad-text")) document.getElementById("notepad-text").value = this.state.notepad || "";
 			this.isDirty = true;
 		}
 	}
 
-	getVisibleNodes() {
+	GetVisibleNodes()																		// GET LIST OF VISIBLE NODES
+	{
+
 		const visible = new Set(this.state.nodes.map(n => n.person_id));
 
 		const hideDirection = (pid, dir) => {
@@ -782,8 +815,8 @@ class TreeApp {
 					if (t.subject === pid && t.predicate === 'isChildOf') queue.push(t.object);
 				} else if (dir === 'right' || dir === 'left') {
 					if (t.subject === pid && t.predicate === 'isSpouseOf') {
-						const other = this.getNode(t.object);
-						const me = this.getNode(pid);
+						const other = this.GetNode(t.object);
+						const me = this.GetNode(pid);
 						if (other && me) {
 							if (dir === 'right' && other.x > me.x) queue.push(t.object);
 							if (dir === 'left' && other.x < me.x) queue.push(t.object);
@@ -832,17 +865,21 @@ class TreeApp {
 		return visible;
 	}
 
-	generatePid() {
+	GeneratePid()																		// GENERATE UNIQUE PID
+	{
+
 		let newPid;
 		do {
 			newPid = "P" + String(this.pidCounter).padStart(3, '0');
 			this.pidCounter++;
-		} while (this.getNode(newPid) !== null);
+		} while (this.GetNode(newPid) !== null);
 		return newPid;
 	}
 
-	clearAll() {
-		this.saveState();
+	ClearAll()																		// CLEAR ALL NODES AND TRIPLETS
+	{
+
+		this.SaveState();
 		this.state = {
 			nodes: [],
 			triplets: [],
@@ -856,12 +893,15 @@ class TreeApp {
 		this.isDirty = true;
 	}
 
-	addNode(fields) {
-		this.saveState();
-		const pid = fields.person_id || this.generatePid();
+	AddNode(fields)																		// ADD PERSON NODE TO STATE
+	{
+
+		this.SaveState();
+		const pid = fields.person_id || this.GeneratePid();
 		const newNode = {
 			person_id: pid,
 			first_name: fields.first_name || "",
+			middle_name: fields.middle_name || "",
 			norm_first_name: fields.norm_first_name || "",
 			last_name: fields.last_name || "",
 			nysiis_last_name: fields.nysiis_last_name || "",
@@ -894,13 +934,15 @@ class TreeApp {
 			if (Array.isArray(personCollection)) {
 				existingAppNode = personCollection.find(p => p.person_id === newNode.person_id);
 				if (!existingAppNode) {
-					existingAppNode = Object.assign({}, newNode, { linked_persons: [] });
+					existingAppNode = Object.assign({}, newNode);
+					existingAppNode.linked_persons = newNode.linked_persons ? JSON.parse(JSON.stringify(newNode.linked_persons)) : [];
 					personCollection.push(existingAppNode);
 				}
 			} else {
 				existingAppNode = personCollection[newNode.person_id];
 				if (!existingAppNode) {
-					existingAppNode = Object.assign({}, newNode, { linked_persons: [] });
+					existingAppNode = Object.assign({}, newNode);
+					existingAppNode.linked_persons = newNode.linked_persons ? JSON.parse(JSON.stringify(newNode.linked_persons)) : [];
 					personCollection[newNode.person_id] = existingAppNode;
 				}
 			}
@@ -913,9 +955,11 @@ class TreeApp {
 		return newNode;
 	}
 
-	editNode(pid, fields) {
-		this.saveState();
-		const node = this.getNode(pid);
+	EditNode(pid, fields)																		// EDIT PERSON NODE FIELDS
+	{
+
+		this.SaveState();
+		const node = this.GetNode(pid);
 		if (node) {
 			Object.keys(fields).forEach(key => {
 				if (fields[key] !== undefined && key !== 'person_id') {
@@ -926,8 +970,10 @@ class TreeApp {
 		}
 	}
 
-	deleteNode(pid) {
-		this.saveState();
+	DeleteNode(pid)																		// DELETE PERSON NODE AND DESCENDANTS
+	{
+
+		this.SaveState();
 
 		const toDelete = new Set([pid]);
 		const queue = [pid];
@@ -962,38 +1008,41 @@ class TreeApp {
 		this.isDirty = true;
 	}
 
-	addTriplet(subject, predicate, object) {
-		this.saveState();
-		const existsState = this.state.triplets.some(t => t.subject === subject && t.predicate === predicate && t.object === object);
-		if (!existsState) {
-			this.state.triplets.push({ subject, predicate, object });
-		}
-		if (predicate === "isSpouseOf") {
-			// Automatically add reciprocal
-			const existsSpouse = this.state.triplets.some(t => t.subject === object && t.predicate === "isSpouseOf" && t.object === subject);
-			if (!existsSpouse) {
-				this.state.triplets.push({ subject: object, predicate: "isSpouseOf", object: subject });
-			}
-		}
-		this.isDirty = true;
+	AddTriplet(subject, predicate, object)																		// ADD RELATIONSHIP TRIPLET
+	{
 
-		// Sync with backend data representation
-		if (window.app && window.app.curTree && window.app.curTree.relationships) {
-			const existsApp = window.app.curTree.relationships.some(t => t.subject_id === subject && t.predicate === predicate && t.object_id === object);
-			if (!existsApp) {
-				window.app.curTree.relationships.push({ subject_id: subject, predicate, object_id: object });
+		this.SaveState();
+		// Sync to backend via app.js to leverage smart inference logic (siblings, spouses, inverses, etc.)
+		if (window.app && typeof window.app.addRelationship === 'function') {
+			window.app.addRelationship(subject, predicate, object);
+			
+			// Rebuild local triplets from the canonical app.curTree to capture all inferred edges
+			this.state.triplets = [];
+			if (window.app.curTree && window.app.curTree.relationships) {
+				window.app.curTree.relationships.forEach(r => {
+					this.state.triplets.push({ subject: r.subject_id, predicate: r.predicate, object: r.object_id });
+				});
+			}
+		} else {
+			const existsState = this.state.triplets.some(t => t.subject === subject && t.predicate === predicate && t.object === object);
+			if (!existsState) {
+				this.state.triplets.push({ subject, predicate, object });
 			}
 			if (predicate === "isSpouseOf") {
-				const existsAppSpouse = window.app.curTree.relationships.some(t => t.subject_id === object && t.predicate === "isSpouseOf" && t.object_id === subject);
-				if (!existsAppSpouse) {
-					window.app.curTree.relationships.push({ subject_id: object, predicate: "isSpouseOf", object_id: subject });
+				// Automatically add reciprocal
+				const existsSpouse = this.state.triplets.some(t => t.subject === object && t.predicate === "isSpouseOf" && t.object === subject);
+				if (!existsSpouse) {
+					this.state.triplets.push({ subject: object, predicate: "isSpouseOf", object: subject });
 				}
 			}
 		}
+		this.isDirty = true;
 	}
 
-	removeTriplet(subject, predicate, object) {
-		this.saveState();
+	RemoveTriplet(subject, predicate, object)																		// REMOVE RELATIONSHIP TRIPLET
+	{
+
+		this.SaveState();
 		const initialLen = this.state.triplets.length;
 		this.state.triplets = this.state.triplets.filter(t => !(t.subject === subject && t.predicate === predicate && t.object === object));
 
@@ -1004,15 +1053,21 @@ class TreeApp {
 		this.isDirty = true;
 	}
 
-	getNode(pid) {
+	GetNode(pid)																		// GET NODE BY PID
+	{
+
 		return this.state.nodes.find(n => n.person_id === pid) || null;
 	}
 
-	getRelationships(pid) {
+	GetRelationships(pid)																		// GET RELATIONSHIPS FOR PID
+	{
+
 		return this.state.triplets.filter(t => t.subject === pid);
 	}
 
-	getGenderPath(gender) {
+	GetGenderPath(gender)																		// GET SILHOUETTE PATH BY GENDER
+	{
+
 		if (!gender) return this.circlePath;
 		const g = gender.split(':')[0].toLowerCase();
 		if (g === 'female' || g === 'f') return this.femalePath;
@@ -1020,17 +1075,25 @@ class TreeApp {
 		return this.circlePath;
 	}
 
-	formatNodeName(d) {
+	FormatNodeName(d)																		// FORMAT FULL NAME FOR NODE
+	{
+
 		const toTitleCase = (str) => {
 			if (!str) return "";
 			return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 		};
 		const fn = (d.first_name || "?").split(':')[0];
+		const mn = (d.middle_name || "").split(':')[0];
 		const ln = (d.last_name || "").split(':')[0];
-		return (toTitleCase(fn) + " " + toTitleCase(ln)).trim();
+		let fullName = toTitleCase(fn);
+		if (mn) fullName += " " + toTitleCase(mn);
+		fullName += " " + toTitleCase(ln);
+		return fullName.trim();
 	}
 
-	syncEditorToNode(node) {
+	SyncEditorToNode(node)																		// SYNC PERSON EDITOR FIELDS TO NODE
+	{
+
 		const container = $('#person-editor-container');
 		if (!container.length) return;
 
@@ -1041,6 +1104,7 @@ class TreeApp {
 			const val = $chip.text().trim() || null;
 
 			if (label === 'first name') node.first_name = val || "";
+			else if (label === 'middle name') node.middle_name = val || "";
 			else if (label === 'last name') node.last_name = val || "";
 			else if (label === 'nick name') node.norm_first_name = val || "";
 			else if (label === 'suffix') node.suffix = val || "";
@@ -1051,13 +1115,15 @@ class TreeApp {
 		});
 
 		// Re-render tree nodes and edges
-		this.renderNodes();
-		this.renderEdges();
+		this.RenderNodes();
+		this.RenderEdges();
 	}
 
-	renderNodes() {
+	RenderNodes()																		// RENDER NODE GROUPS
+	{
+
 		// Bind data mapped against visibility
-		const visibleSet = this.getVisibleNodes();
+		const visibleSet = this.GetVisibleNodes();
 		const vNodes = this.state.nodes.filter(n => visibleSet.has(n.person_id));
 
 		const nodeSelection = this.gNodes.selectAll(".node-group")
@@ -1068,12 +1134,16 @@ class TreeApp {
 			.append("g")
 			.attr("class", "node-group")
 			.attr("transform", d => `translate(${d.x},${d.y})`)
+			.on("dblclick", (e, d) => {
+				e.stopPropagation();
+				this.SelectNodeAndShowEditor(d.person_id, "person-editor-container");
+			})
 			.call(this.drag);
 
 		// 1. Background Shape (Gendered Silhouette)
 		nodeEnter.append("path")
 			.attr("class", "node-bg")
-			.attr("d", d => this.getGenderPath(d.gender))
+			.attr("d", d => this.GetGenderPath(d.gender))
 			.attr("transform", "translate(22, 0) scale(1.16)")
 			.attr("fill", "#f5d506d9")
 			.attr("stroke", "#999999")
@@ -1088,9 +1158,9 @@ class TreeApp {
 			.attr("y", 135)
 			.attr("text-anchor", "middle")
 			.attr("font-weight", "bold")
-			.attr("font-size", "13px")
+			.attr("font-size", "12px")
 			.attr("fill", "#000099")
-			.text(d => this.formatNodeName(d));
+			.text(d => this.FormatNodeName(d));
 
 		// 4. Year range
 		nodeEnter.append("text")
@@ -1106,7 +1176,35 @@ class TreeApp {
 				return `${by} – ${dy}`;
 			});
 
+		// 5. Add Person Button (Under Name)
+		const addBtnGroup = nodeEnter.append("g")
+			.attr("class", "add-btn")
+			.attr("transform", `translate(${this.nodeWidth / 2}, 147)`)
+			.style("cursor", "pointer")
+			.style("opacity", "0.85")
+			.on("mouseover", function() { d3.select(this).style("opacity", "1").select("circle").attr("fill", "#e6f1fb"); })
+			.on("mouseout", function() { d3.select(this).style("opacity", "0.85").select("circle").attr("fill", "#ffffff"); })
+			.on("mousedown", e => e.stopPropagation())
+			.on("click", (e, d) => {
+				e.stopPropagation();
+				this.state.actionNodeId = d.person_id;
+				document.getElementById("add-node-target-name").innerText = this.FormatNodeName(d);
+				document.getElementById("add-node-modal").dataset.sourcePid = d.person_id;
+				document.getElementById("add-node-modal").showModal();
+			});
 
+		addBtnGroup.append("circle")
+			.attr("r", 6)
+			.attr("fill", "#ffffff")
+			.attr("stroke", "#185fa5")
+			.attr("stroke-width", 1)
+			.style("transition", "fill 0.15s");
+
+		addBtnGroup.append("path")
+			.attr("d", "M-3,0 L3,0 M0,-3 L0,3")
+			.attr("stroke", "#185fa5")
+			.attr("stroke-width", 1.5)
+			.attr("stroke-linecap", "round");
 
 		// 6. Expand/Collapse triangles
 		const trianglesGroup = nodeEnter.append("g").attr("class", "triangles");
@@ -1120,10 +1218,9 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
-				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.right = !d.hiddenDirs.right;
-				this.applyLayout(); this.renderNodes(); this.renderEdges();
+				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
 			});
 
 		trianglesGroup.append("polygon")
@@ -1135,10 +1232,9 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
-				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.left = !d.hiddenDirs.left;
-				this.applyLayout(); this.renderNodes(); this.renderEdges();
+				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
 			});
 
 		trianglesGroup.append("polygon")
@@ -1151,10 +1247,9 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
-				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.bottom = !d.hiddenDirs.bottom;
-				this.applyLayout(); this.renderNodes(); this.renderEdges();
+				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
 			})
 			.append("title")
 			.text("Collapse / Expand Children");
@@ -1168,24 +1263,23 @@ class TreeApp {
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();
-				if (window.Sound) window.Sound("click");
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.top = !d.hiddenDirs.top;
-				this.applyLayout(); this.renderNodes(); this.renderEdges();
+				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
 			});
 
 		const nodeUpdate = nodeSelection.merge(nodeEnter);
 		nodeUpdate.attr("transform", d => `translate(${d.x},${d.y})`);
 
 		// Update core node editable data elements
-		nodeUpdate.select(".node-name").text(d => this.formatNodeName(d));
+		nodeUpdate.select(".node-name").text(d => this.FormatNodeName(d));
 		nodeUpdate.select(".node-years").text(d => {
 			const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
 			const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
 			return `${by} – ${dy}`;
 		});
 		nodeUpdate.select(".node-bg")
-			.attr("d", d => this.getGenderPath(d.gender))
+			.attr("d", d => this.GetGenderPath(d.gender))
 			.attr("fill", "#ffe0b2");
 
 		// Update triangle fill colors if they are actively hiding a branch
@@ -1198,11 +1292,13 @@ class TreeApp {
 
 		nodeSelection.exit().remove();
 
-		this.updateNodeSelection();
-		this.updateTriangleVisibility();
+		this.UpdateNodeSelection();
+		this.UpdateTriangleVisibility();
 	}
 
-	updateTriangleVisibility() {
+	UpdateTriangleVisibility()																		// UPDATE TRIANGLE VISIBILITY
+	{
+
 		// Group families by children
 		const childParents = {};
 		this.state.triplets.forEach(t => {
@@ -1218,7 +1314,7 @@ class TreeApp {
 
 		const arrowParents = new Set();
 		for (const c in childParents) {
-			const parents = Array.from(childParents[c]).map(pid => this.getNode(pid)).filter(Boolean);
+			const parents = Array.from(childParents[c]).map(pid => this.GetNode(pid)).filter(Boolean);
 			if (parents.length > 0) {
 				parents.sort((a, b) => a.x - b.x); // first parent by X coordinate
 				arrowParents.add(parents[0].person_id);
@@ -1239,14 +1335,18 @@ class TreeApp {
 		});
 	}
 
-	updateNodeSelection() {
+	UpdateNodeSelection()																		// UPDATE SELECTED NODE HIGHLIGHT
+	{
+
 		this.gNodes.selectAll(".node-bg")
 			.attr("stroke", d => d.person_id === this.state.selectedPid ? "#37c472ff" : "#999999")
 			.attr("stroke-width", 3);
 	}
 
-	fitToScreen(duration = 500) {
-		const visibleSet = this.getVisibleNodes();
+	FitToScreen(duration = 500)																		// FIT VIEWPORT TO TREE BOUNDING BOX
+	{
+
+		const visibleSet = this.GetVisibleNodes();
 		const vNodes = this.state.nodes.filter(n => visibleSet.has(n.person_id));
 		if (vNodes.length === 0) return;
 
@@ -1297,8 +1397,10 @@ class TreeApp {
 		}
 	}
 
-	applyLayout() {
-		const visibleSet = this.getVisibleNodes();
+	ApplyLayout()																		// APPLY HIERARCHICAL LAYOUT
+	{
+
+		const visibleSet = this.GetVisibleNodes();
 		const vNodes = this.state.nodes.filter(n => visibleSet.has(n.person_id));
 		const vTriplets = this.state.triplets.filter(t => visibleSet.has(t.subject) && visibleSet.has(t.object));
 
@@ -1389,7 +1491,7 @@ class TreeApp {
 
 			pids.forEach(pid => {
 				if (placed.has(pid)) return;
-				const node = this.getNode(pid);
+				const node = this.GetNode(pid);
 				if (!node.moved) {
 					node.x = currentX;
 					node.y = startY + d * ySpacing;
@@ -1402,7 +1504,7 @@ class TreeApp {
 
 				spousesOf[pid].forEach(spid => {
 					if (!placed.has(spid) && depths[spid] === d) {
-						const snode = this.getNode(spid);
+						const snode = this.GetNode(spid);
 						if (snode) {
 							currentX -= xSpacing;									// Undo standard gap
 							currentX += this.nodeWidth + 20;							// Snug 20px physical gap between spouses
@@ -1418,7 +1520,7 @@ class TreeApp {
 
 				cousinsOf[pid].forEach(cid => {
 					if (!placed.has(cid) && depths[cid] === d) {
-						const cnode = this.getNode(cid);
+						const cnode = this.GetNode(cid);
 						if (cnode) {
 							if (!cnode.moved) {
 								cnode.x = currentX;
@@ -1434,7 +1536,9 @@ class TreeApp {
 
 	}
 
-	getAnchors(node) {
+	GetAnchors(node)																		// GET NODE ANCHOR COORDINATES
+	{
+
 		const g = (node.gender || "unknown").split(':')[0].toLowerCase();
 		let lx, rx, y;
 
@@ -1457,7 +1561,9 @@ class TreeApp {
 		};
 	}
 
-	drawSmartCurve(source, target) {
+	DrawSmartCurve(source, target)																		// DRAW CURVED LINES BETWEEN ANCHORS
+	{
+
 		const cy1 = source.y + this.nodeHeight / 2;
 		const cy2 = target.y + this.nodeHeight / 2;
 
@@ -1465,10 +1571,10 @@ class TreeApp {
 		if (Math.abs(cy1 - cy2) < 50) {
 			let s = source, t = target;
 			if (source.x > target.x) { s = target; t = source; }						// s is left
-			const startX = this.getAnchors(s).right.x;
-			const startY = this.getAnchors(s).right.y;
-			const endX = this.getAnchors(t).left.x;
-			const endY = this.getAnchors(t).left.y;
+			const startX = this.GetAnchors(s).right.x;
+			const startY = this.GetAnchors(s).right.y;
+			const endX = this.GetAnchors(t).left.x;
+			const endY = this.GetAnchors(t).left.y;
 
 			const cp1X = startX + 30;
 			const cp2X = endX - 30;
@@ -1476,8 +1582,8 @@ class TreeApp {
 		}
 
 		// 2. Otherwise, connect closest sides
-		const a1 = this.getAnchors(source);
-		const a2 = this.getAnchors(target);
+		const a1 = this.GetAnchors(source);
+		const a2 = this.GetAnchors(target);
 		let minD = Infinity;
 		let p1, p2;
 
@@ -1505,8 +1611,10 @@ class TreeApp {
 		return `M ${p1.x} ${p1.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
 	}
 
-	renderEdges() {
-		const visibleSet = this.getVisibleNodes();
+	RenderEdges()																		// RENDER ALL EDGES
+	{
+
+		const visibleSet = this.GetVisibleNodes();
 
 		const edgeData = [];
 		const seenSpouses = new Set();
@@ -1517,8 +1625,8 @@ class TreeApp {
 		const vTriplets = this.state.triplets.filter(t => visibleSet.has(t.subject) && visibleSet.has(t.object));
 
 		vTriplets.forEach(t => {
-			const s = this.getNode(t.subject);
-			const o = this.getNode(t.object);
+			const s = this.GetNode(t.subject);
+			const o = this.GetNode(t.object);
 			if (!s || !o) return;
 
 			if (t.predicate === 'isSpouseOf') {
@@ -1570,8 +1678,8 @@ class TreeApp {
 
 		Object.keys(familyGroups).forEach(parentKey => {
 			const fam = familyGroups[parentKey];
-			const parents = fam.parents.map(pid => this.getNode(pid)).filter(Boolean);
-			const children = fam.children.map(pid => this.getNode(pid)).filter(Boolean);
+			const parents = fam.parents.map(pid => this.GetNode(pid)).filter(Boolean);
+			const children = fam.children.map(pid => this.GetNode(pid)).filter(Boolean);
 			if (parents.length > 0 && children.length > 0) {
 				// Use stable ID: sorted parent PIDs + sorted child PIDs
 				const stableId = 'fam-' + fam.parents.sort().join(',') + '--' + fam.children.slice().sort().join(',');
@@ -1596,7 +1704,7 @@ class TreeApp {
 			.attr("fill", "none")
 			.attr("stroke", "#999999")
 			.attr("stroke-width", 3)
-			.attr("d", d => this.drawSmartCurve(d.source, d.target));
+			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
 
 		edgeGroups.filter(d => d.type === 'isSpouseOf')
 			.append("path")
@@ -1604,7 +1712,7 @@ class TreeApp {
 			.attr("fill", "none")
 			.attr("stroke", "var(--canvas-bg, #e5e5e5)")
 			.attr("stroke-width", 1)
-			.attr("d", d => this.drawSmartCurve(d.source, d.target));
+			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
 
 		// Family Pedigree (parent→child lines)
 		edgeGroups.filter(d => d.type === 'FamilyPedigree')
@@ -1620,22 +1728,22 @@ class TreeApp {
 					const p = d.parents[0];
 					const avgChildX = d.children.reduce((sum, c) => sum + c.x, 0) / d.children.length;
 					if (avgChildX > p.x) {
-						parentX = this.getAnchors(p).right.x;
+						parentX = this.GetAnchors(p).right.x;
 					} else {
-						parentX = this.getAnchors(p).left.x;
+						parentX = this.GetAnchors(p).left.x;
 					}
-					parentY = this.getAnchors(p).right.y;
+					parentY = this.GetAnchors(p).right.y;
 				} else {
 					const minPx = Math.min(...d.parents.map(p => p.x));
 					const maxPx = Math.max(...d.parents.map(p => p.x));
 					parentX = minPx + (maxPx - minPx) / 2 + this.nodeWidth / 2;
-					parentY = Math.max(...d.parents.map(p => this.getAnchors(p).right.y));
+					parentY = Math.max(...d.parents.map(p => this.GetAnchors(p).right.y));
 				}
 
 				let pathStr = "";
 				d.children.forEach(c => {
 					const isRight = c.x > parentX;
-					const anchors = this.getAnchors(c);
+					const anchors = this.GetAnchors(c);
 					const cx = isRight ? anchors.left.x : anchors.right.x;
 					const cy = anchors.left.y;
 
@@ -1670,7 +1778,7 @@ class TreeApp {
 				const maxPx = Math.max(...d.parents.map(p => p.x));
 				return minPx + (maxPx - minPx) / 2 + this.nodeWidth / 2;
 			})
-			.attr("cy", d => Math.max(...d.parents.map(p => this.getAnchors(p).right.y)));
+			.attr("cy", d => Math.max(...d.parents.map(p => this.GetAnchors(p).right.y)));
 
 		familyJunctions.append("circle")
 			.attr("class", "family-junction")
@@ -1681,7 +1789,7 @@ class TreeApp {
 				const maxPx = Math.max(...d.parents.map(p => p.x));
 				return minPx + (maxPx - minPx) / 2 + this.nodeWidth / 2;
 			})
-			.attr("cy", d => Math.max(...d.parents.map(p => this.getAnchors(p).right.y)));
+			.attr("cy", d => Math.max(...d.parents.map(p => this.GetAnchors(p).right.y)));
 
 		// Sibling
 		edgeGroups.filter(d => d.type === 'isSiblingOf')
@@ -1691,7 +1799,7 @@ class TreeApp {
 			.attr("stroke", "#666666")
 			.attr("stroke-width", 1)
 			.attr("stroke-dasharray", "5,5")
-			.attr("d", d => this.drawSmartCurve(d.source, d.target));
+			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
 
 		// Extended relationships
 		edgeGroups.filter(d => d.type === 'ExtendedOf')
@@ -1701,27 +1809,29 @@ class TreeApp {
 			.attr("stroke", "#666666")
 			.attr("stroke-width", 1)
 			.attr("stroke-dasharray", "2,4")
-			.attr("d", d => this.drawSmartCurve(d.source, d.target));
+			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
 
-		if (typeof updateTriangleVisibility !== 'undefined') this.updateTriangleVisibility();
+		if (typeof updateTriangleVisibility !== 'undefined') this.UpdateTriangleVisibility();
 	}
 
-	handleLinkTargetClick(targetPid) {
+	HandleLinkTargetClick(targetPid)																		// HANDLE LINK MODE CLICK TARGET
+	{
+
 		this.linkMode = false;
 		document.getElementById("link-banner").style.display = "none";
-		const targetNode = this.getNode(targetPid);
+		const targetNode = this.GetNode(targetPid);
 		if (!targetNode) return;
 
-		document.getElementById("pred-target-name").innerText = this.formatNodeName(targetNode);
+		document.getElementById("pred-target-name").innerText = this.FormatNodeName(targetNode);
 		document.getElementById("predicate-modal").dataset.target = targetPid;
 		document.getElementById("predicate-modal").showModal();
 	}
 
+	SelectNodeAndShowEditor(personId, forceTab = null)																		// SELECT NODE AND LAUNCH EDITOR
+	{
 
-
-	selectNodeAndShowEditor(personId) {
 		if (window.app && typeof window.app.selectNodeAndShowEditor === 'function') {
-			window.app.selectNodeAndShowEditor(personId);
+			window.app.selectNodeAndShowEditor(personId, forceTab);
 		}
 	}
 }

@@ -7,9 +7,6 @@
 
 class PersonEditor {
 
-	static FAKE_PERSONS = {
-	};
-
 	/* ----------------------------------------------------------
 	   COLOR RAMPS (per field, light pill bg / dark text)
 	   ---------------------------------------------------------- */
@@ -216,7 +213,15 @@ class PersonEditor {
 
 	load(personId) {
 		const $target = this.$target;
-		const person = PersonEditor.FAKE_PERSONS[personId];
+		let person = null;
+		if (window.app && window.app.curTree && window.app.curTree.persons) {
+			const persons = window.app.curTree.persons;
+			if (Array.isArray(persons)) {
+				person = persons.find(p => p.person_id === personId);
+			} else {
+				person = persons[personId];
+			}
+		}
 
 		if (!person) {
 			$target.empty().append($('<p>').text('Person not found: ' + personId));
@@ -284,8 +289,9 @@ class PersonEditor {
 				sources[k] = { label: k, checked: true };
 			});
 		}
-		(person.mentions || []).forEach(m => {
-			if (!sources[m.source]) {
+		(person.mentions || []).forEach(m_id => {
+			let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
+			if (m && m.source && !sources[m.source]) {
 				sources[m.source] = { label: m.source, checked: true };
 			}
 		});
@@ -555,7 +561,7 @@ class PersonEditor {
 		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${ramp_[1]}">${totalLinked} linked ${totalLinked === 1 ? 'person' : 'people'}</span>`);
 		$val.append($chip);
 
-		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"></select>`);
+		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"><option value="" selected disabled>Select to jump...</option></select>`);
 		linked.forEach((p, i) => {
 			$sel.append(`<option value="${i}" disabled style="color:${ramp_[1]}">${PersonEditor.escapeHtml(p.value)} (${PersonEditor.escapeHtml(p.source)})</option>`);
 		});
@@ -572,8 +578,7 @@ class PersonEditor {
 			const predRaw = r.predicate.replace(/^is/, '').replace(/Of$/, '').toUpperCase();
 			const toBoldMap = { 'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭' };
 			const pred = predRaw.split('').map(c => toBoldMap[c] || c).join('');
-
-			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)} is ${pred} of ${PersonEditor.escapeHtml(pFullName)}</option>`);
+			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(pFullName)} is ${pred} of ${PersonEditor.escapeHtml(linkedName)}</option>`);
 		});
 
 		$sel.on('change', function () {
@@ -849,4 +854,4 @@ class PersonEditor {
 }
 
 window.PersonEditor = PersonEditor;
-window._VPE_FAKE_PERSONS = PersonEditor.FAKE_PERSONS; // for testing/dev
+// window._VPE_FAKE_PERSONS = PersonEditor.FAKE_PERSONS; // for testing/dev

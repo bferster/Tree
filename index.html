@@ -12,11 +12,22 @@
 	<script src="https://d3js.org/d3.v7.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-	<script src="app.js" defer></script>
-	<script src="normalize.js" defer></script>
-	<script src="personEditor.js" defer></script>
-	<script src="mentionsEditor.js" defer></script>
-	<script src="tree.js" defer></script>
+	<script>
+		const scripts = [
+			'app.js',
+			'normalize.js',
+			'personEditor.js',
+			'mentionsEditor.js',
+			'tree.js'
+		];
+		const version = new Date().getTime();
+		scripts.forEach(src => {
+			const s = document.createElement('script');
+			s.src = `${src}?v=${version}`;
+			s.defer = true;
+			document.head.appendChild(s);
+		});
+	</script>
 
 	<style>
 		/* Base Styling for a desktop application feel */
