@@ -179,13 +179,13 @@ class PersonEditor {
 		(person.mentions || []).forEach(m_id => {
 			let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
 			if (!m) return;
-			
+
 			let v = m.field_values ? m.field_values[key] : m[key];
-			
+
 			if (v != null && v !== '') {
 				let baseVal = String(v).trim();
 				let lowerBaseVal = baseVal.toLowerCase();
-				
+
 				if (!seenValues.has(lowerBaseVal)) {
 					let valString = `${baseVal}:${m.mention_id}`;
 					seen.add(valString);
@@ -252,7 +252,7 @@ class PersonEditor {
 
 			const options = PersonEditor.buildOptions(person, cfg.key);
 			let selectedIdx = (cfg.key === 'suffix') ? -1 : 0;
-			
+
 			let canonical = person[cfg.key];
 			if (!canonical) {
 				if (cfg.key === 'norm_first_name' && person.first_name) {
@@ -263,7 +263,7 @@ class PersonEditor {
 					canonical = window.Normalize.getSoundex(person.last_name.split(':')[0]);
 				}
 			}
-			
+
 			let found = -1;
 			if (canonical != null && canonical !== '') {
 				let canStr = String(canonical);
@@ -286,13 +286,13 @@ class PersonEditor {
 		const sources = {};
 		if (window.GlobalSources) {
 			Object.keys(window.GlobalSources).forEach(k => {
-				sources[k] = { label: k, checked: true };
+				sources[k] = { label: k, checked: (k === 'ALB-CN-1880' || k === 'ALB_CN_1880') };
 			});
 		}
 		(person.mentions || []).forEach(m_id => {
 			let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
 			if (m && m.source && !sources[m.source]) {
-				sources[m.source] = { label: m.source, checked: true };
+				sources[m.source] = { label: m.source, checked: (m.source === 'ALB-CN-1880' || m.source === 'ALB_CN_1880') };
 			}
 		});
 
@@ -336,7 +336,15 @@ class PersonEditor {
 
 		$factors.append(`
       <div class="vpe-row vpe-row-header">
-        <div>FIELD</div><div>VALUE</div><div>IMPACT</div><div>COMPARE</div>
+        <div>FIELD</div>
+        <div>VALUE</div>
+        <div>IMPACT</div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span>COMPARE</span>
+          <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; font-size: 11px; text-transform: none; cursor: pointer; color: #333;">
+            <input type="checkbox" id="vpe-smart-name-cb" checked> Smart name matching
+          </label>
+        </div>
       </div>
     `);
 
@@ -759,19 +767,29 @@ class PersonEditor {
 		}
 	}
 
-	/* ----------------------------------------------------------
-	   Collect current criteria for "Search"
-	   ---------------------------------------------------------- */
+
 	static collectCriteria(person, state) {
-		const criteria = { person_id: person.person_id, fields: {}, sources: [] };
+		const useSmartName = $('#vpe-smart-name-cb').is(':checked');
+		const criteria = { person_id: person.person_id, factors: [], sources: [], useSmartName };
 		Object.keys(state.fields).forEach(key => {
 			const f = state.fields[key];
 			const sel = f.selected;
-			criteria.fields[key] = {
-				value: (sel === -1 || sel == null) ? null : f.options[sel].value,
-				weight: f.weight,
-				compare: f.active
-			};
+			const val = (sel === -1 || sel == null) ? null : f.options[sel].value;
+			if (val) {
+				const splitVal = String(val).split(':')[0].trim();
+
+				const isRare = f.active.includes('rare');
+				let compareOpts = f.active.filter(opt => opt !== 'rare');
+
+				criteria.factors.push({
+					field: key,
+					value: splitVal,
+					impact: f.weight / 5,
+					compare: compareOpts,
+					rare: isRare,
+					score: 0
+				});
+			}
 		});
 		Object.keys(state.sources).forEach(id => {
 			if (state.sources[id].checked) criteria.sources.push(id);

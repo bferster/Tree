@@ -45,10 +45,9 @@ class MentionsEditor {
 		exactNysiisLast: { enabled: true, weight: 4 },
 		fuzzyNysiisLast: { enabled: true, weight: 2 },
 		rarityNysiisLast: { enabled: true, weight: 2 },
-		birthYear: { enabled: true, weight: 3, tolerance: 2 },
-		deathYear: { enabled: true, weight: 3, tolerance: 2 },
-		familyMember: { enabled: true, weight: 4 },
-		narrativeSim: { enabled: true, weight: 16 }
+		birthYear: { enabled: true, weight: 15, tolerance: 2 },
+		deathYear: { enabled: true, weight: 15, tolerance: 2 },
+		familyMember: { enabled: true, weight: 10 }
 	};
 
 	static FIELD_LABELS = {
@@ -75,6 +74,7 @@ class MentionsEditor {
 	};
 
 	static FACTOR_LABELS = {
+		smartName: "Smart name",
 		exactLastName: "Exact last",
 		fuzzyLastName: "Fuzzy last",
 		rarityLastName: "Rarity last",
@@ -84,13 +84,13 @@ class MentionsEditor {
 		exactNysiisLast: "NYSIIS last",
 		fuzzyNysiisLast: "Fuzzy NYSIIS",
 		rarityNysiisLast: "Rarity NYSIIS",
-		birthYear: "Birth",
-		deathYear: "Death",
-		familyMember: "Family",
-		narrativeSim: "Narrative"
+		birthYear: "Birth Year",
+		deathYear: "Death Year",
+		familyMember: "Relative match"
 	};
 
 	static FACTOR_COLORS = {
+		smartName: 'c-blue',
 		exactLastName: 'c-teal',
 		fuzzyLastName: 'c-teal',
 		rarityLastName: 'c-teal',
@@ -102,8 +102,7 @@ class MentionsEditor {
 		rarityNysiisLast: 'c-coral',
 		birthYear: 'c-blue',
 		deathYear: 'c-blue',
-		familyMember: 'c-green',
-		narrativeSim: 'c-pink'
+		familyMember: 'c-purple'
 	};
 
 	static RAMP = {
@@ -155,11 +154,10 @@ class MentionsEditor {
 	 * @param {Array} sources - list of source identifiers/types to search
 	 * @param {Array} [mentions] - optional pre-fetched mention list (skips fetchAssertions)
 	 */
-	async load(targetPerson, sources, mentions = null) {
+	async load(targetPerson, sources, mentions = null, factors = null) {
 		this.targetPerson = targetPerson;
 		this.sources = sources;
 		this.currentMentionId = null;
-
 		let candidateMentions = mentions;
 		if (!candidateMentions) {
 			if (!this.fetchAssertions) {
@@ -183,12 +181,7 @@ class MentionsEditor {
 	/** Update scoring criteria (weights/enabled flags) and re-score current matches. */
 	setCriteria(criteria) {
 		this.criteria = MentionsEditor._mergeCriteria(this.criteria, criteria);
-		if (this.targetPerson) {
-			const mentions = this.matches.map(m => m.mention);
-			this.matches = this._buildMatchList(mentions, this.targetPerson);
-			this._renderList();
-			this._renderDetail();
-		}
+		// Scoring is now handled externally, so this no longer recalculates scores.
 	}
 
 	/** Returns the currently selected mention object, or null. */
@@ -202,197 +195,21 @@ class MentionsEditor {
 	// ---------------------------------------------------------------------
 
 	_buildMatchList(mentions, target) {
-
 		const results = [];
 		for (const mention of mentions) {
-			const scored = this._scoreMention(mention, target);
-			if (scored === null) continue; // hard filter (gender/race) failed
-			results.push({ id: mention.mention_id, score: scored.score, mention, factors: scored.factors });
+			results.push({
+				id: mention.mention_id,
+				score: mention.score || 0,
+				mention: mention,
+				factors: mention.factors || {}
+			});
 		}
 		results.sort((a, b) => b.score - a.score);
-		return results.slice(0, 50);
+		return results;
 	}
 
 
-	_scoreMention(mention, target) {
-		const c = this.criteria;
-		if (!mention) return { score: 0, factors: {} };
 
-		// Hard filter
-
-
-		//	if (window.Normalize.NormalizeRace(mention.race) !== target.race) return null;
-		//	if (mention.gender !== target.gender) return null;
-
-		const factors = {}; // key -> { value, enabled }
-
-		const addFactor = (key, value) => {
-			if (c[key] && c[key].enabled) {
-				factors[key] = { value, enabled: true };
-			}
-		};
-
-		// --- Name similarity scoring ---
-		if (c.exactLastName.enabled && MentionsEditor._exactMatch(mention.last_name, target.last_name)) {
-			addFactor('exactLastName', c.exactLastName.weight);
-		}
-		if (c.fuzzyLastName.enabled && MentionsEditor._fuzzyMatch(mention.last_name, target.last_name)) {
-			addFactor('fuzzyLastName', c.fuzzyLastName.weight);
-		}
-		if (c.rarityLastName.enabled) {
-			const bonus = MentionsEditor._rarityBonus(mention.last_name, target.last_name, c.rarityLastName.weight);
-			if (bonus !== 0) addFactor('rarityLastName', bonus);
-		}
-
-		if (c.exactFirstName.enabled && MentionsEditor._exactMatch(mention.norm_first_name, target.norm_first_name)) {
-			addFactor('exactFirstName', c.exactFirstName.weight);
-		}
-		if (c.fuzzyFirstName.enabled && MentionsEditor._fuzzyMatch(mention.norm_first_name, target.norm_first_name)) {
-			addFactor('fuzzyFirstName', c.fuzzyFirstName.weight);
-		}
-		if (c.rarityFirstName.enabled) {
-			const bonus = MentionsEditor._rarityBonus(mention.norm_first_name, target.norm_first_name, c.rarityFirstName.weight);
-			if (bonus !== 0) addFactor('rarityFirstName', bonus);
-		}
-
-		if (c.exactNysiisLast.enabled && MentionsEditor._exactMatch(mention.nysiis_last_name, target.nysiis_last_name)) {
-			addFactor('exactNysiisLast', c.exactNysiisLast.weight);
-		}
-		if (c.fuzzyNysiisLast.enabled && MentionsEditor._fuzzyMatch(mention.nysiis_last_name, target.nysiis_last_name)) {
-			addFactor('fuzzyNysiisLast', c.fuzzyNysiisLast.weight);
-		}
-		if (c.rarityNysiisLast.enabled) {
-			const bonus = MentionsEditor._rarityBonus(mention.nysiis_last_name, target.nysiis_last_name, c.rarityNysiisLast.weight);
-			if (bonus !== 0) addFactor('rarityNysiisLast', bonus);
-		}
-
-		// --- Date similarity scoring ---
-		if (c.birthYear.enabled && MentionsEditor._yearMatches(mention.birth_year, target.birth_year, c.birthYear.tolerance)) {
-			addFactor('birthYear', c.birthYear.weight);
-		}
-		if (c.deathYear.enabled && MentionsEditor._yearMatches(mention.death_year, target.death_year, c.deathYear.tolerance)) {
-			addFactor('deathYear', c.deathYear.weight);
-		}
-
-		// --- Family members scoring ---
-		if (c.familyMember.enabled) {
-			const n = (target.persons || []).length;
-			if (n > 0) addFactor('familyMember', n * c.familyMember.weight);
-		}
-
-		// --- Narrative similarity scoring ---
-		if (c.narrativeSim.enabled) {
-			const cos = MentionsEditor._cosineSim(mention.narrative_vector, target.narrative_vector);
-			if (cos > 0) addFactor('narrativeSim', cos * c.narrativeSim.weight);
-		}
-
-		const score = Object.values(factors).reduce((sum, f) => sum + f.value, 0);
-		return { score, factors };
-	}
-
-	// ---- comparator helpers ----
-
-	static _exactMatch(a, b) {
-		if (!a || !b) return false;
-		return a.toString().toLowerCase() === b.toString().toLowerCase();
-	}
-
-	/** Simple fuzzy match placeholder using Jaro-Winkler-style threshold. */
-	static _fuzzyMatch(a, b, threshold = 0.85) {
-		if (!a || !b) return false;
-		return MentionsEditor._jaroWinkler(a.toLowerCase(), b.toLowerCase()) >= threshold;
-	}
-
-	/** Minimal Jaro-Winkler implementation. */
-	static _jaroWinkler(s1, s2) {
-		if (s1 === s2) return 1.0;
-		const len1 = s1.length, len2 = s2.length;
-		if (len1 === 0 || len2 === 0) return 0.0;
-
-		const matchDistance = Math.floor(Math.max(len1, len2) / 2) - 1;
-		const s1Matches = new Array(len1).fill(false);
-		const s2Matches = new Array(len2).fill(false);
-		let matches = 0, transpositions = 0;
-
-		for (let i = 0; i < len1; i++) {
-			const start = Math.max(0, i - matchDistance);
-			const end = Math.min(i + matchDistance + 1, len2);
-			for (let j = start; j < end; j++) {
-				if (s2Matches[j]) continue;
-				if (s1[i] !== s2[j]) continue;
-				s1Matches[i] = true;
-				s2Matches[j] = true;
-				matches++;
-				break;
-			}
-		}
-
-		if (matches === 0) return 0.0;
-
-		let k = 0;
-		for (let i = 0; i < len1; i++) {
-			if (!s1Matches[i]) continue;
-			while (!s2Matches[k]) k++;
-			if (s1[i] !== s2[k]) transpositions++;
-			k++;
-		}
-		transpositions = Math.floor(transpositions / 2);
-
-		const jaro = (matches / len1 + matches / len2 + (matches - transpositions) / matches) / 3;
-
-		let prefix = 0;
-		for (let i = 0; i < Math.min(4, len1, len2); i++) {
-			if (s1[i] === s2[i]) prefix++;
-			else break;
-		}
-
-		return jaro + prefix * 0.1 * (1 - jaro);
-	}
-
-	/**
-	 * Rarity bonus/penalty: rare names get a positive bonus on match, common
-	 * names get a small penalty. Placeholder logic pending corpus frequency table.
-	 */
-	static _rarityBonus(mentionVal, targetVal, weight) {
-		if (!mentionVal || !targetVal) return 0;
-		if (!MentionsEditor._exactMatch(mentionVal, targetVal) && !MentionsEditor._fuzzyMatch(mentionVal, targetVal)) return 0;
-		// Placeholder: treat names longer than 6 chars as "rarer" -> bonus, else penalty
-		const isRare = mentionVal.length > 6;
-		return isRare ? weight : -Math.round(weight / 1.5 * 10) / 10;
-	}
-
-	/**
-	 * Year matching with tolerance and hyphenated-range support.
-	 * @param {number|string} mentionYear - may be a number or "1810-1890" range
-	 * @param {number} targetYear
-	 * @param {number} tolerance - +/- years allowed for exact comparisons
-	 */
-	static _yearMatches(mentionYear, targetYear, tolerance = 0) {
-		if (mentionYear == null || targetYear == null) return false;
-
-		if (typeof mentionYear === 'string' && mentionYear.includes('-')) {
-			const [start, end] = mentionYear.split('-').map(s => parseInt(s.trim(), 10));
-			if (isNaN(start) || isNaN(end)) return false;
-			return targetYear >= start && targetYear <= end;
-		}
-
-		const my = typeof mentionYear === 'string' ? parseInt(mentionYear, 10) : mentionYear;
-		if (isNaN(my)) return false;
-		return Math.abs(my - targetYear) <= tolerance;
-	}
-
-	/** Cosine similarity between two equal-length numeric vectors. */
-	static _cosineSim(vecA, vecB) {
-		if (!Array.isArray(vecA) || !Array.isArray(vecB) || vecA.length !== vecB.length || vecA.length === 0) return 0;
-		let dot = 0, normA = 0, normB = 0;
-		for (let i = 0; i < vecA.length; i++) {
-			dot += vecA[i] * vecB[i];
-			normA += vecA[i] * vecA[i];
-			normB += vecB[i] * vecB[i];
-		}
-		if (normA === 0 || normB === 0) return 0;
-		return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-	}
 
 	// ---------------------------------------------------------------------
 	// Rendering
@@ -524,7 +341,7 @@ class MentionsEditor {
 
 		const originalData = match.mention.original_data;
 		const originalDataHtml = originalData
-			? `<div class="me-raw-block"><p class="me-raw-label">Original data</p><pre class="me-raw-json">${MentionsEditor._esc(JSON.stringify(originalData, null, 2))}</pre></div>`
+			? `<div class="me-raw-block"><p class="me-raw-label">Original data</p><pre class="me-raw-json">${typeof originalData === 'string' ? originalData : JSON.stringify(originalData, null, 2)}</pre></div>`
 			: '';
 
 		const verity = Math.max(0, Math.min(4, Math.round(match.mention.confidence || (match.score / 5))));
@@ -745,11 +562,6 @@ class MentionsEditor {
     `;
 	}
 
-	getMockMentions(node) {
-		if (!node) return [];
-		const o = [app.mentions[0], app.mentions[1], app.mentions[2], app.mentions[3]];
-		return o;
-	}
 }
 
 
