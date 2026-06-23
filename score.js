@@ -10,21 +10,52 @@ class Score {
 		this.SmartNameScore = 0.0;
 	}
 
-	ScoreMentions(blockedMentions, factors, sources)            // SCORE ALL MENTIONS
+	ScoreMentions(blockedMentions, factors, sources, smartName)            // SCORE ALL MENTIONS
 	{
-		let i;
-		let mention_ids = [];                                    // Init array
-		let me = app.findMention("ALB-CN-1880-257");             // Find mention
-		this.ScoreFactor(factors, me);           				 // Score factor
-		let totalScore = 0;
-		for (i = 0; i < factors.length; i++) {                	 // Loop factors
-			if (factors[i].compare != "ignore")					 // If active
-				totalScore += factors[i].score
-			if (this.useSmartName)
+		let i, mention;
+		let useSmart = smartName !== undefined ? smartName : this.useSmartName;
+		for (i = 0; i < blockedMentions.length; i++) {
+			mention = blockedMentions[i];
+			if (!mention) continue;
+			this.ScoreFactor(factors, mention, useSmart);			// Run ScoreFactor to calculate individual factor scores for this mention
+			let totalScore = 0;
+			let mentionFactors = {};
+
+			// Map SmartNameScore
+			if (useSmart) {
 				totalScore += this.SmartNameScore;
+				mentionFactors['smartName'] = { value: this.SmartNameScore };
+			}
+
+			for (let f of factors) {			// Map to MentionsEditor FACTOR_LABELS format
+				if (f.compare === "ignore") continue;
+				totalScore += f.score;
+				if (f.field === 'birth_year') {
+					mentionFactors['birthYear'] = { value: f.score };
+				} else if (f.field === 'death_year') {
+					mentionFactors['deathYear'] = { value: f.score };
+				} else if (f.field === 'first_name') {
+					if (f.compare.includes('exact')) mentionFactors['exactFirstName'] = { value: f.score };
+					else if (f.compare.includes('fuzzy')) mentionFactors['fuzzyFirstName'] = { value: f.score };
+				} else if (f.field === 'last_name') {
+					if (f.compare.includes('exact')) mentionFactors['exactLastName'] = { value: f.score };
+					else if (f.compare.includes('fuzzy')) mentionFactors['fuzzyLastName'] = { value: f.score };
+				} else if (f.field === 'norm_first_name') {
+					mentionFactors['rarityFirstName'] = { value: f.score };
+				} else if (f.field === 'nysiis_last_name') {
+					mentionFactors['exactNysiisLast'] = { value: f.score };
+				} else if (f.field === 'soundex_last_name') {
+					mentionFactors['exactNysiisLast'] = { value: f.score };
+				}
+			}
+
+			mention.score = totalScore;
+			mention.factors = mentionFactors;
 		}
-		trace(totalScore)
-		return { mention_ids, factors, totalScore };               // Return results
+
+		blockedMentions.sort((a, b) => (b.score || 0) - (a.score || 0)); 		// Sort the mention objects by score in descending order
+		let mention_ids = blockedMentions.map(m => m.mention_id);
+		return { mention_ids, factors, totalScore: 0 };
 	}
 
 	ScoreFactor(factors, mention, smartName)              // SCORE SINGLE FACTOR
@@ -33,30 +64,50 @@ class Score {
 		for (let f of factors) byField[f.field] = f;             // Populate lookup
 		let consumed = new Set();                                // Init consumed set
 		this.SmartNameScore = 0.0;
-		if (this.useSmartName) {                                  // If smart name matching
+		let useSmart = smartName !== undefined ? smartName : this.useSmartName;
+		if (useSmart) {                                  // If smart name matching
 			let v = (field) => (byField[field] ? byField[field].value : undefined); // Value helper
 			let firstMatch = Score.StrEq(v('first_name'), mention.first_name); // First name match
 			let middleMatch = Score.StrEq(v('middle_name'), mention.middle_name); // Middle name match
 			let lastMatch = Score.StrEq(v('last_name'), mention.last_name); // Last name match
-			let initialMatch = Score.InitialEq(v('first_name'), mention.first_name) && Score.InitialEq(v('last_name'), mention.last_name); // Initials match
-			let normLast = Score.StrEq(v('norm_first_name'), mention.norm_first_name) && lastMatch; // Norm first and last match
-			let jwBoth = this.JwAbove(v('norm_first_name'), mention.norm_first_name, 'norm_first_name') && this.JwAbove(v('last_name'), mention.last_name, 'last_name'); // JW both
-			let nysiisMatch = Score.StrEq(v('nysiis_last_name'), mention.nysiis_last_name); // NYSIIS match
-			let soundexMatch = Score.StrEq(v('soundex_last_name'), mention.soundex_last_name); // Soundex match
 
 			let matchScore = 0.0;                                // Init score
-			if (firstMatch && middleMatch && lastMatch) matchScore = 1.0; // Exact match
-			else if (firstMatch && lastMatch) matchScore = 0.95; // First and last
-			else if (initialMatch) matchScore = 0.9;             // Initials
-			else if (normLast) matchScore = 0.90;                // Norm last
-			else if (jwBoth) matchScore = 0.70;                  // JW both
-			else if (nysiisMatch) matchScore = 0.60;             // NYSIIS
-			else if (soundexMatch) matchScore = 0.50;            // Soundex
+			if (firstMatch && middleMatch && lastMatch) {
+				matchScore = 1.0; // Exact match
+			} else if (firstMatch && lastMatch) {
+				matchScore = 0.95; // First and last
+			} else {
+				let initialMatch = Score.InitialEq(v('first_name'), mention.first_name) && Score.InitialEq(v('last_name'), mention.last_name); // Initials match
+				if (initialMatch) {
+					matchScore = 0.9;             // Initials
+				} else {
+					let normLast = Score.StrEq(v('norm_first_name'), mention.norm_first_name) && lastMatch; // Norm first and last match
+					if (normLast) {
+						matchScore = 0.90;                // Norm last
+					} else {
+						// Only perform expensive Jaro-Winkler string comparison if fast matches fail
+						let jwBoth = this.JwAbove(v('norm_first_name'), mention.norm_first_name, 'norm_first_name') && this.JwAbove(v('last_name'), mention.last_name, 'last_name'); // JW both
+						if (jwBoth) {
+							matchScore = 0.70;                  // JW both
+						} else {
+							let nysiisMatch = Score.StrEq(v('nysiis_last_name'), mention.nysiis_last_name); // NYSIIS match
+							if (nysiisMatch) {
+								matchScore = 0.60;             // NYSIIS
+							} else {
+								let soundexMatch = Score.StrEq(v('soundex_last_name'), mention.soundex_last_name); // Soundex match
+								if (soundexMatch) {
+									matchScore = 0.50;            // Soundex
+								}
+							}
+						}
+					}
+				}
+			}
 
-			this.SmartNameScore = matchScore;                    // Store score
-			for (let field of this.nameFields) {               // Loop name fields
-				if (byField[field]) byField[field].score = 0; // Distribute score
-				consumed.add(field);                           // Mark consumed
+			this.SmartNameScore = matchScore;                   // Store score
+			for (let field of this.nameFields) {               	// Loop name fields
+				if (byField[field]) byField[field].score = 0;	// Distribute score
+				consumed.add(field);                           	// Mark consumed
 			}
 		}
 
@@ -91,11 +142,10 @@ class Score {
 					let jw = this.JaroWinkler(String(factor.value), String(candidate)); // Calc JW score
 					factor.score = jw > this.JwThresholdFor(field) ? jw : 0.0; 	// Assign actual JW
 				}
-			} else {                                           // Else
-				factor.score = 0.0;                              // Unknown mode
+			} else {                                           	// Else
+				factor.score = 0.0;                            	// Unknown mode
 			}
 		}
-
 		return factors;                                        // Return factors
 	}
 

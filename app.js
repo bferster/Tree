@@ -12,7 +12,7 @@ class App {
 			owner: "Bill",
 			persons: [
 				{ person_id: "P001", mentions: ["ALB-CN-1880-257"], anchor: null, first_name: "William:ALB-CN-1880-257", middle_name: null, last_name: "Spears:ALB-CN-1880-257", suffix: null, birth_year: "1840:ALB-CN-1880-257", death_year: "1910:Added", gender: "M:ALB-CN-1880-257", race: "B:ALB-CN-1880-257", x: 200, y: 200, verity: 2 },
-				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgiana:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2 },
+				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeana:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2 },
 				{ person_id: "P003", mentions: ["ALB-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", suffix: null, birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, verity: 2 },
 				{ person_id: "P004", mentions: ["ALB-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", suffix: null, birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, verity: 2 },
 			],
@@ -267,7 +267,7 @@ class App {
 					<div id="person-editor-container" class="person-editor" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box;"></div>
 					<div id="mentions-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box; display: none;"></div>
 					<div id="sources-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
-						<iframe src="https://stagetools.com/verite/search/" style="width: 100%; height: 100%; border: none;"></iframe>
+						<iframe src="https://stagetools.com/verite/search/?rand=${Math.floor(Math.random() * 10000)}" style="width: 100%; height: 100%; border: none;"></iframe>
 					</div>
 					<div id="familysearch-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
 					<br><br><p style="text-align:center">To be added soon!</p>
@@ -301,6 +301,7 @@ class App {
 		});
 
 		let mEditor = null;                                    // Mentions editor
+		let pEditor = null;
 		const node = window.treeApp.GetNode(personId);         // Get active node
 		if (node) {                                            // If node exists
 			node.narrative_vector = node.narrative_vector || [0.5, 0.5, 0.5]; // Init narrative
@@ -386,10 +387,14 @@ class App {
 				pEditor.load(node.person_id);
 				mEditor.load(node, [], []);
 			};
+
+			if (mEditor && node) {
+				mEditor.load(node, [], []);
+			}
 		}
 
 		if (window.PersonEditor) {
-			const pEditor = new window.PersonEditor($('#person-editor-container'));
+			pEditor = new window.PersonEditor($('#person-editor-container'));
 			pEditor.load(personId);
 			$('#person-editor-container').on('change vpe:changed vpe:rerender', () => {
 				const n = window.treeApp.GetNode(personId);
@@ -403,66 +408,97 @@ class App {
 
 			$('#person-editor-container').on('vpe:search', (e, criteria) => {
 				if (criteria && criteria.factors) {
-					// The user wants to send factors and sources to the new Score class
-					let blockedMentions = this.MakeBlockedMentions(["race", "gender", "birth_year"], criteria.factors, criteria.sources);
-
-					//const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName);
-					const mentionIdsArray = scoreResult.mention_ids || [];
-					const resultFactors = scoreResult.factors || null;
-
-					const foundMentions = window.app.mentions.filter(m => mentionIdsArray.includes(m.mention_id));
-					const n = window.treeApp.GetNode(criteria.person_id);
-
-					if (mEditor && n) {
-						mEditor.load(n, criteria.sources, foundMentions, resultFactors);
-						$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
-					}
+					this.showProgress("Filtering mentions...", 25);
+					setTimeout(() => {
+						let blockedMentions = this.MakeBlockedMentions(["race", "gender"], criteria.factors, criteria.sources);
+						this.showProgress("Scoring mentions...", 60);
+						setTimeout(() => {
+							const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName);
+							const resultFactors = scoreResult.factors || null;
+							const foundMentions = blockedMentions;
+							const n = window.treeApp.GetNode(criteria.person_id);
+							this.showProgress("Rendering matches...", 90);
+							setTimeout(() => {
+								if (mEditor && n) {
+									mEditor.load(n, criteria.sources, foundMentions, resultFactors);
+									$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
+								}
+								this.hideProgress();
+							}, 50);
+						}, 50);
+					}, 50);
 				}
 			});
 		}
 	}
 
 	MakeBlockedMentions(blockingFields, factors, sources) {
-		let mention_ids = [];
-		let byField = {};
+		let i, m;
+		let matchedMentions = [];
+		let activeFactors = {};
 		if (factors) {
 			for (let f of factors) {
-				if (blockingFields.includes(f.field) && !f.compare.includes('ignore')) {
-					byField[f.field] = f.value;
+				if (blockingFields.includes(f.field)) {
+					activeFactors[f.field] = f.value;
 				}
 			}
 		}
 
-		for (let m of this.mentions) {
+		if (!sources || sources.length === 0) {
+			console.log("MakeBlockedMentions: sources is empty");
+			return [];
+		}
 
+		// Pre-normalize sources to handle both hyphens and underscores
+		let normalizedSources = sources.map(s => String(s).replace(/-/g, '_').toLowerCase());
+
+		for (let m of this.mentions) {
 			// Include only if in the requested sources array
-			if (sources && sources.length > 0 && !sources.includes(m.source)) {
+			let normalizedMSource = m.source ? String(m.source).replace(/-/g, '_').toLowerCase() : '';
+			if (!normalizedMSource || !normalizedSources.includes(normalizedMSource)) {
 				continue;
 			}
 
-			// Must strictly match gender
-			let targetGen = byField['gender'] ? String(byField['gender']).charAt(0).toLowerCase() : null;
-			let mentionGen = m.gender ? String(m.gender).charAt(0).toLowerCase() : null;
-			if (!targetGen || !mentionGen || targetGen !== mentionGen) continue;
+			let matchesAll = true;
 
-			// Must strictly match race
-			let targetRace = byField['race'] ? String(byField['race']).toLowerCase().trim() : null;
-			let mentionRace = m.race ? String(m.race).toLowerCase().trim() : null;
-			if (!targetRace || !mentionRace || targetRace !== mentionRace) continue;
+			for (let field of Object.keys(activeFactors)) {
+				let val = activeFactors[field];
+				if (val === undefined || val === null) continue;
 
-			// Must strictly match birth year bounds
-			let bYearStr = byField['birth_year'] ? String(byField['birth_year']).split(':')[0].split('-')[0] : null;
-			let sYearStr = m.source_year ? String(m.source_year).split(':')[0].split('-')[0] : null;
-			let by = Number(bYearStr);
-			let sy = Number(sYearStr);
-			if (isNaN(by) || isNaN(sy) || Math.abs(sy - by) > 75) continue;
+				if (field === 'gender') {
+					let targetGen = String(val).charAt(0).toLowerCase();
+					let mentionGen = m.gender ? String(m.gender).charAt(0).toLowerCase() : '';
+					if (targetGen !== mentionGen) {
+						matchesAll = false;
+						break;
+					}
+				} else if (field === 'race') {
+					let targetRace = String(val).toLowerCase().trim();
+					let mentionRace = (m.norm_race || m.race || '').toLowerCase().trim();
+					if (targetRace !== mentionRace) {
+						matchesAll = false;
+						break;
+					}
+				} else if (field === 'birth_year') {
+					let bYearStr = String(val).split(':')[0].split('-')[0];
+					let sYearStr = m.source_year ? String(m.source_year).split(':')[0].split('-')[0] : '';
+					let by = Number(bYearStr);
+					let sy = Number(sYearStr);
+					if (isNaN(by) || isNaN(sy) || Math.abs(sy - by) > 75) {
+						matchesAll = false;
+						break;
+					}
+				}
+			}
 
-			mention_ids.push(m.mention_id);
+			if (matchesAll) {
+				matchedMentions.push(m);
+			}
 		}
-		trace(mention_ids)
-
-		return mention_ids;
+		console.log(matchedMentions.length, " Blocked mentions");
+		return matchedMentions;
 	}
+
 	async loadData()                                           // LOAD DATA
 	{
 		const isTest = window.location.search.toLowerCase().includes('test');

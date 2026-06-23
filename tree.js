@@ -129,7 +129,8 @@ class TreeApp {
 							<select id="add-node-select" style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;">
 								<option value="isChildOf">is Child of</option>
 								<option value="isCousinOf">is Cousin of</option>
-								<option value="isParentOf">is Parent of</option>
+								<option value="isMotherOf">is Mother of</option>
+								<option value="isFatherOf">is Father of</option>
 								<option value="isSiblingOf">is Sibling of</option>
 								<option value="isSpouseOf">is Spouse of</option>
 							</select>
@@ -553,14 +554,31 @@ class TreeApp {
 
 			document.getElementById("add-node-confirm").addEventListener("click", () => {
 				const sourcePid = document.getElementById("add-node-modal").dataset.sourcePid;
-				const relation = document.getElementById("add-node-select").value;
+				let relation = document.getElementById("add-node-select").value;
 				document.getElementById("add-node-modal").close();
+				let newGender = "", newBirth = "";
 
 				if (sourcePid && relation) {
 					const sourceNode = this.GetNode(sourcePid);
 					const newPid = this.GeneratePid();
 					let newX = sourceNode ? sourceNode.x : 0;
 					let newY = sourceNode ? sourceNode.y : 0;
+
+					if (relation == 'isMotherOf') {
+						relation = 'isParentOf';
+						newGender = "F";
+						if (sourceNode.birth_year) {
+							newBirth = ("" + sourceNode.birth_year).split(":")[0] - 0;
+							newBirth = (newBirth - 45) + "-" + (newBirth - 0 + 10);
+						}
+					} else if (relation == 'isFatherOf') {
+						relation = 'isParentOf';
+						newGender = "M"
+						if (sourceNode.birth_year) {
+							newBirth = ("" + sourceNode.birth_year).split(":")[0] - 0;
+							newBirth = (newBirth - 75) + "-" + (newBirth + 10);
+						}
+					}
 
 					if (relation === 'isChildOf') {
 						const spouses = this.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
@@ -586,12 +604,15 @@ class TreeApp {
 						person_id: newPid,
 						first_name: '',
 						last_name: sourceNode ? (sourceNode.last_name || '') : '',
+						gender: newGender,
+						birth_year: newBirth,
 						x: newX,
 						y: newY
 					};
+
 					if (sourceNode) {
 						newNodeInfo.linked_persons = sourceNode.linked_persons ? JSON.parse(JSON.stringify(sourceNode.linked_persons)) : [];
-						
+
 						// Add the source node's formal relatives as plain text
 						if (window.app && window.app.curTree && window.app.curTree.relationships) {
 							const parentRels = window.app.curTree.relationships.filter(r => r.subject_id === sourceNode.person_id);
@@ -607,9 +628,9 @@ class TreeApp {
 									const fname = (objPerson.first_name || '').split(':')[0];
 									const lname = (objPerson.last_name || '').split(':')[0];
 									const fullName = `${fname} ${lname}`.trim() || r.object_id;
-									
+
 									const sourceName = (sourceNode.first_name || '').split(':')[0] || sourceNode.person_id;
-									
+
 									// Avoid duplicates
 									const existing = newNodeInfo.linked_persons.find(lp => lp.value === fullName);
 									if (!existing) {
@@ -1015,7 +1036,7 @@ class TreeApp {
 		// Sync to backend via app.js to leverage smart inference logic (siblings, spouses, inverses, etc.)
 		if (window.app && typeof window.app.addRelationship === 'function') {
 			window.app.addRelationship(subject, predicate, object);
-			
+
 			// Rebuild local triplets from the canonical app.curTree to capture all inferred edges
 			this.state.triplets = [];
 			if (window.app.curTree && window.app.curTree.relationships) {
@@ -1182,8 +1203,8 @@ class TreeApp {
 			.attr("transform", `translate(${this.nodeWidth / 2}, 147)`)
 			.style("cursor", "pointer")
 			.style("opacity", "0.85")
-			.on("mouseover", function() { d3.select(this).style("opacity", "1").select("circle").attr("fill", "#e6f1fb"); })
-			.on("mouseout", function() { d3.select(this).style("opacity", "0.85").select("circle").attr("fill", "#ffffff"); })
+			.on("mouseover", function () { d3.select(this).style("opacity", "1").select("circle").attr("fill", "#e6f1fb"); })
+			.on("mouseout", function () { d3.select(this).style("opacity", "0.85").select("circle").attr("fill", "#ffffff"); })
 			.on("mousedown", e => e.stopPropagation())
 			.on("click", (e, d) => {
 				e.stopPropagation();

@@ -246,6 +246,25 @@ class PersonEditor {
 	   State initialization
 	   ---------------------------------------------------------- */
 	static buildState(person) {
+		if (!PersonEditor.userSettings) {
+			PersonEditor.userSettings = {
+				useSmartName: true,
+				compareActive: {
+					first_name: ['exact'],
+					middle_name: ['exact'],
+					norm_first_name: ['exact'],
+					last_name: ['exact'],
+					nysiis_last_name: ['exact'],
+					soundex_last_name: ['exact'],
+					suffix: ['ignore'],
+					race: ['exact'],
+					gender: ['exact'],
+					birth_year: ['±1'],
+					death_year: ['±2']
+				}
+			};
+		}
+
 		const fields = {};
 		PersonEditor.FIELD_CONFIG.forEach(cfg => {
 			if (cfg.editKind === 'linked') return;
@@ -272,13 +291,15 @@ class PersonEditor {
 			}
 			if (found >= 0) selectedIdx = found;
 
+			let defaultActive = PersonEditor.userSettings.compareActive[cfg.key] || ['exact'];
+
 			fields[cfg.key] = {
 				options: options,
 				selected: selectedIdx,
 				weight: 3,                       // default impact
 				compare: cfg.compare,
 				compareMode: cfg.compareMode,
-				active: ['ignore'],
+				active: defaultActive,
 				editing: false
 			};
 		});
@@ -339,14 +360,20 @@ class PersonEditor {
         <div>FIELD</div>
         <div>VALUE</div>
         <div>IMPACT</div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
           <span>COMPARE</span>
-          <label style="display: flex; align-items: center; gap: 4px; font-weight: normal; font-size: 11px; text-transform: none; cursor: pointer; color: #333;">
-            <input type="checkbox" id="vpe-smart-name-cb" checked> Smart name matching
+          <label id="vpe-smart-name-label"${PersonEditor.userSettings.useSmartName ? ' class="tab-active"' : ''}>
+            <input type="checkbox" id="vpe-smart-name-cb"${PersonEditor.userSettings.useSmartName ? ' checked' : ''}> Smart name matching
           </label>
         </div>
       </div>
     `);
+
+		$factors.find('#vpe-smart-name-cb').on('change', function () {
+			PersonEditor.userSettings.useSmartName = $(this).is(':checked');
+			$factors.trigger('vpe:rerender');
+			$('#person-editor-container').trigger('change');
+		});
 
 		PersonEditor.FIELD_CONFIG.forEach(cfg => {
 			if (cfg.editKind === 'linked') {
@@ -518,9 +545,21 @@ class PersonEditor {
 
 		// COMPARE
 		const $compare = $(`<div class="vpe-compare-row"></div>`);
+		const isSmartNameChecked = PersonEditor.userSettings ? PersonEditor.userSettings.useSmartName : false;
+		const nameFields = ['first_name', 'middle_name', 'norm_first_name', 'last_name', 'nysiis_last_name', 'soundex_last_name', 'suffix'];
+		const isNameField = nameFields.includes(cfg.key);
+		const shouldColorActive = !(isSmartNameChecked && isNameField);
+
+		if (isNameField && isSmartNameChecked) {
+			$compare.addClass('name-group');
+			if (cfg.key === 'first_name') $compare.addClass('top');
+			if (cfg.key === 'suffix') $compare.addClass('bottom');
+		}
+
 		fstate.compare.forEach(label => {
 			const isActive = fstate.active.includes(label);
-			const $pill = $(`<button type="button" class="vpe-pill ${isActive ? 'active' : ''}">${PersonEditor.escapeHtml(label)}</button>`);
+			const hasActiveColor = isActive && shouldColorActive;
+			const $pill = $(`<button type="button" class="vpe-pill ${hasActiveColor ? 'active' : ''}">${PersonEditor.escapeHtml(label)}</button>`);
 			$pill.on('click', function () {
 				if (fstate.compareMode === 'radio') {
 					fstate.active = [label];
@@ -541,6 +580,9 @@ class PersonEditor {
 							if (fstate.active.length === 0) fstate.active = ['ignore'];
 						}
 					}
+				}
+				if (PersonEditor.userSettings) {
+					PersonEditor.userSettings.compareActive[cfg.key] = fstate.active;
 				}
 				$row.trigger('vpe:changed');
 			});
@@ -841,6 +883,53 @@ class PersonEditor {
         border:none; }
       .vpe-star-row { display:flex; gap:3px; align-items:center; }
       .vpe-compare-row { display:flex; flex-wrap:wrap; gap:6px; }
+      .vpe-compare-row.name-group {
+        border-left: 1px solid #e3ddd5;
+        border-right: 1px solid #e3ddd5;
+        background: #fbfaf8;
+        padding: 5px 8px;
+        margin-top: -6px;
+        margin-bottom: -6px;
+        display: flex;
+        align-items: center;
+        border-radius: 0;
+        position: relative;
+        z-index: 1;
+      }
+      .vpe-compare-row.name-group.top {
+        border-top: 1px solid #e3ddd5;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 0;
+        margin-top: -2px;
+      }
+      .vpe-compare-row.name-group.bottom {
+        border-bottom: 1px solid #e3ddd5;
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+        margin-bottom: -2px;
+      }
+      #vpe-smart-name-label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: normal;
+        font-size: 11px;
+        text-transform: none;
+        cursor: pointer;
+        color: #333;
+        padding: 3px 8px;
+        position: relative;
+        z-index: 2;
+      }
+      #vpe-smart-name-label.tab-active {
+        border-top: 1px solid #e3ddd5;
+        border-left: 1px solid #e3ddd5;
+        border-right: 1px solid #e3ddd5;
+        border-top-left-radius: 6px;
+        border-top-right-radius: 6px;
+        background: #fbfaf8;
+        margin-bottom: -11px;
+      }
       .vpe-pill { display:inline-flex; align-items:center; font-size:12px; padding:3px 10px; border-radius:999px;
         white-space:nowrap; cursor:pointer; border:0.5px solid #f0f0f0; background:transparent; color:#757575; }
       .vpe-pill.active { background:#eaf2fb; color:#185fa5; border-color:#b5d4f4; }

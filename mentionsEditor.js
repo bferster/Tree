@@ -159,12 +159,43 @@ class MentionsEditor {
 		this.sources = sources;
 		this.currentMentionId = null;
 		let candidateMentions = mentions;
-		if (!candidateMentions) {
-			if (!this.fetchAssertions) {
-				throw new Error('MentionsEditor: no fetchAssertions function provided and no mentions array given');
+		if (!candidateMentions || candidateMentions.length === 0) {
+			const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+			let person = targetPerson;
+			let personId = null;
+			if (globalApp && globalApp.curPerson !== undefined && globalApp.curPerson !== -1 && window.treeApp && window.treeApp.state && window.treeApp.state.nodes) {
+				const node = window.treeApp.state.nodes[globalApp.curPerson];
+				if (node) personId = node.person_id;
 			}
-			candidateMentions = await this.fetchAssertions(sources, targetPerson);
+			if (!personId && window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid) {
+				personId = window.treeApp.state.selectedPid;
+			}
+			if (!personId && targetPerson) {
+				personId = targetPerson.person_id;
+			}
 
+			console.log("mentionsEditor load: resolved personId =", personId);
+
+			if (personId && globalApp && globalApp.curTree && globalApp.curTree.persons) {
+				const persons = globalApp.curTree.persons;
+				const found = Array.isArray(persons) ? persons.find(p => p.person_id === personId) : persons[personId];
+				if (found) person = found;
+			}
+
+			console.log("mentionsEditor load: canonical person =", person);
+
+			const associatedIds = person.mentions || [];
+			console.log("mentionsEditor load: associatedIds =", associatedIds);
+
+			candidateMentions = associatedIds
+				.map(id => {
+					if (typeof id === 'object') return id;
+					if (!globalApp || !globalApp.mentions) return null;
+					return globalApp.mentions.find(m => m.mention_id === id);
+				})
+				.filter(Boolean);
+
+			console.log("mentionsEditor load: candidateMentions =", candidateMentions);
 		}
 
 
@@ -262,21 +293,24 @@ class MentionsEditor {
 		} else {
 			this.targetSummaryEl.innerHTML = '';
 		}
-		this.countEl.textContent = `${this.matches.length} matches`;
+		this.countEl.textContent = this.matches.length > 80 ? `Showing 80 of ${this.matches.length} matches` : `${this.matches.length} matches`;
 
 		if (this.matches.length === 0) {
 			this.listEl.innerHTML = `<div class="me-empty">No matches found.</div>`;
 			return;
 		}
 
-		this.listEl.innerHTML = this.matches.map(match => {
+		const matchesToRender = this.matches.slice(0, 80);
+
+		this.listEl.innerHTML = matchesToRender.map(match => {
 			const m = match.mention;
 			const active = m.mention_id === this.currentMentionId;
 			const sourceLabel = `${m.source_type || ''}${m.source_year ? ' ' + m.source_year : ''}`;
+			const mid = m.middle_name ? ` ${m.middle_name}` : '';
 			return `
         <div class="me-match-item ${active ? 'me-active' : ''}" data-id="${m.mention_id}">
           <div class="me-match-row">
-            <span class="me-match-name">${MentionsEditor._esc(m.norm_first_name || m.first_name || '')} ${MentionsEditor._esc(m.last_name || '')}
+            <span class="me-match-name">${MentionsEditor._esc(m.norm_first_name || m.first_name || '')}${MentionsEditor._esc(mid)} ${MentionsEditor._esc(m.last_name || '')}
               <span class="me-match-score">${Math.round(match.score * 10) / 10}</span>
             </span>
             <span class="me-source-badge">${MentionsEditor._esc(sourceLabel)}</span>
