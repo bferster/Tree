@@ -53,7 +53,6 @@ class MentionsEditor {
 	static FIELD_LABELS = {
 		mention_id: "Mention ID",
 		source: "Source",
-		source_type: "Source type",
 		source_year: "Source year",
 		full_name: "Full name",
 		first_name: "First name",
@@ -77,13 +76,16 @@ class MentionsEditor {
 		smartName: "Smart name",
 		exactLastName: "Exact last",
 		fuzzyLastName: "Fuzzy last",
-		rarityLastName: "Rarity last",
+		rarityLastName: "Rare last",
 		exactFirstName: "Exact first",
 		fuzzyFirstName: "Fuzzy first",
-		rarityFirstName: "Rarity first",
-		exactNysiisLast: "NYSIIS last",
-		fuzzyNysiisLast: "Fuzzy NYSIIS",
-		rarityNysiisLast: "Rarity NYSIIS",
+		rarityFirstName: "Rare first",
+		exactNysiisLast: "NYSIIS",
+		fuzzyNysiisLast: "Fuzzy",
+		rarityNysiisLast: "Rare",
+		exactSoundexLast: "Soundex",
+		fuzzySoundexLast: "Fuzzy",
+		raritySoundexLast: "Rare",
 		birthYear: "Birth Year",
 		deathYear: "Death Year",
 		familyMember: "Relative match"
@@ -100,6 +102,9 @@ class MentionsEditor {
 		exactNysiisLast: 'c-coral',
 		fuzzyNysiisLast: 'c-coral',
 		rarityNysiisLast: 'c-coral',
+		exactSoundexLast: 'c-coral',
+		fuzzySoundexLast: 'c-coral',
+		raritySoundexLast: 'c-coral',
 		birthYear: 'c-blue',
 		deathYear: 'c-blue',
 		familyMember: 'c-purple'
@@ -128,9 +133,11 @@ class MentionsEditor {
 		this.container = container;
 		this.criteria = MentionsEditor._mergeCriteria(MentionsEditor.DEFAULT_WEIGHTS, options.criteria);
 		this.onAdd = options.onAdd || (() => { });
+		this.onRemove = options.onRemove || null;
 		this.fetchAssertions = options.fetchAssertions || null;
 		this.targetPerson = null;
 		this.sources = [];
+		this.isSearchResult = false;
 		this.matches = [];        // [{ id, score, mention, factors }]
 		this.currentMentionId = null;
 		this._renderShell();
@@ -157,9 +164,11 @@ class MentionsEditor {
 	async load(targetPerson, sources, mentions = null, factors = null) {
 		this.targetPerson = targetPerson;
 		this.sources = sources;
+		this.factors = factors;
 		this.currentMentionId = null;
+		this.isSearchResult = !!((factors && factors.length > 0) || (mentions && mentions.length > 0));
 		let candidateMentions = mentions;
-		if (!candidateMentions || candidateMentions.length === 0) {
+		if (!this.isSearchResult) {
 			const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
 			let person = targetPerson;
 			let personId = null;
@@ -174,18 +183,13 @@ class MentionsEditor {
 				personId = targetPerson.person_id;
 			}
 
-			console.log("mentionsEditor load: resolved personId =", personId);
-
 			if (personId && globalApp && globalApp.curTree && globalApp.curTree.persons) {
 				const persons = globalApp.curTree.persons;
 				const found = Array.isArray(persons) ? persons.find(p => p.person_id === personId) : persons[personId];
 				if (found) person = found;
 			}
 
-			console.log("mentionsEditor load: canonical person =", person);
-
 			const associatedIds = person.mentions || [];
-			console.log("mentionsEditor load: associatedIds =", associatedIds);
 
 			candidateMentions = associatedIds
 				.map(id => {
@@ -195,7 +199,6 @@ class MentionsEditor {
 				})
 				.filter(Boolean);
 
-			console.log("mentionsEditor load: candidateMentions =", candidateMentions);
 		}
 
 
@@ -293,7 +296,7 @@ class MentionsEditor {
 		} else {
 			this.targetSummaryEl.innerHTML = '';
 		}
-		this.countEl.textContent = this.matches.length > 80 ? `Showing 80 of ${this.matches.length} matches` : `${this.matches.length} matches`;
+		this.countEl.textContent = this.matches.length > 80 ? `Showing top 80 matches` : `${this.matches.length} matches`;
 
 		if (this.matches.length === 0) {
 			this.listEl.innerHTML = `<div class="me-empty">No matches found.</div>`;
@@ -311,7 +314,7 @@ class MentionsEditor {
         <div class="me-match-item ${active ? 'me-active' : ''}" data-id="${m.mention_id}">
           <div class="me-match-row">
             <span class="me-match-name">${MentionsEditor._esc(m.norm_first_name || m.first_name || '')}${MentionsEditor._esc(mid)} ${MentionsEditor._esc(m.last_name || '')}
-              <span class="me-match-score">${Math.round(match.score * 10) / 10}</span>
+              <span class="me-match-score">${Math.round(match.score * 10)}</span>
             </span>
             <span class="me-source-badge">${MentionsEditor._esc(sourceLabel)}</span>
           </div>
@@ -344,14 +347,72 @@ class MentionsEditor {
 		}
 
 		this.addBtn.disabled = false;
+		if (this.isSearchResult) {
+			this.addBtn.textContent = "Add to person";
+		} else {
+			this.addBtn.textContent = "Remove mention from person";
+		}
 
-		const score = Math.round(match.score * 10) / 10;
+		const score = Math.round(match.score * 10);
+
+		const isSmartNameOn = (window.PersonEditor && window.PersonEditor.userSettings)
+			? window.PersonEditor.userSettings.useSmartName
+			: $('#vpe-smart-name-cb').is(':checked');
+
+		const nameKeys = [
+			'exactLastName', 'fuzzyLastName', 'rarityLastName',
+			'exactFirstName', 'fuzzyFirstName', 'rarityFirstName',
+			'exactNysiisLast', 'fuzzyNysiisLast', 'rarityNysiisLast',
+			'exactSoundexLast', 'fuzzySoundexLast', 'raritySoundexLast'
+		];
+
+		const factorToFieldMap = {
+			exactLastName: 'last_name',
+			fuzzyLastName: 'last_name',
+			rarityLastName: 'last_name',
+			exactFirstName: 'first_name',
+			fuzzyFirstName: 'first_name',
+			rarityFirstName: 'first_name',
+			exactNysiisLast: 'nysiis_last_name',
+			fuzzyNysiisLast: 'nysiis_last_name',
+			rarityNysiisLast: 'nysiis_last_name',
+			exactSoundexLast: 'soundex_last_name',
+			fuzzySoundexLast: 'soundex_last_name',
+			raritySoundexLast: 'soundex_last_name',
+			suffix: 'suffix',
+			birthYear: 'birth_year',
+			deathYear: 'death_year'
+		};
 
 		const pillsHtml = Object.keys(MentionsEditor.FACTOR_LABELS).map(key => {
+			if (isSmartNameOn) {
+				if (nameKeys.includes(key) || key === 'suffix') return '';
+			} else {
+				const fieldKey = factorToFieldMap[key];
+				if (fieldKey && this.factors) {
+					const factorConfig = this.factors.find(f => f.field === fieldKey);
+					if (factorConfig && factorConfig.compare === 'ignore') return '';
+				}
+			}
+
 			const factor = match.factors[key];
-			if (!factor) return '';
-			const label = MentionsEditor.FACTOR_LABELS[key];
-			const value = Math.round(factor.value * 10) / 10;
+			if (!factor || !factor.value) return '';
+			const value = Math.round(factor.value * 10);
+			if (value === 0) return '';
+			let label = MentionsEditor.FACTOR_LABELS[key];
+			if (key === 'rarityFirstName') {
+				if (value < 0) label = "Common first";
+				else if (value === 1 || value === 2) label = "Uncommon first";
+				else label = "Rare first";
+			} else if (key === 'rarityLastName') {
+				if (value < 0) label = "Common last";
+				else if (value === 1 || value === 2) label = "Uncommon last";
+				else label = "Rare last";
+			} else if (key === 'rarityNysiisLast' || key === 'raritySoundexLast') {
+				if (value < 0) label = "Common";
+				else if (value === 1 || value === 2) label = "Uncommon";
+				else label = "Rare";
+			}
 			const sign = value > 0 ? '+' : '';
 			const colorKey = MentionsEditor.FACTOR_COLORS[key] || 'c-gray';
 			const ramp = MentionsEditor.RAMP[colorKey];
@@ -364,7 +425,7 @@ class MentionsEditor {
 			const label = MentionsEditor.FIELD_LABELS[key];
 			let val = match.mention[key];
 			if (key === 'gender' && val && val !== '') val = String(val)[0].toUpperCase();
-			if (val === undefined || val === null || val === '') val = '\u2014';
+			if (val === undefined || val === null || val === '') return '';
 			return `
         <tr>
           <td class="me-field-label">${label}</td>
@@ -410,19 +471,40 @@ class MentionsEditor {
 		const mention = this.getCurrentMention();
 		if (!mention || !this.targetPerson) return;
 
-		if (!Array.isArray(this.targetPerson.mentions)) {
-			this.targetPerson.mentions = [];
-		}
-		if (!this.targetPerson.mentions.includes(mention.mention_id)) {
-			this.targetPerson.mentions.push(mention.mention_id);
-		}
+		if (this.isSearchResult) {
+			if (!Array.isArray(this.targetPerson.mentions)) {
+				this.targetPerson.mentions = [];
+			}
+			if (!this.targetPerson.mentions.includes(mention.mention_id)) {
+				this.targetPerson.mentions.push(mention.mention_id);
+			}
 
-		this.onAdd(this.targetPerson.person_id, mention.mention_id);
+			this.onAdd(this.targetPerson.person_id, mention.mention_id);
 
-		this.container.dispatchEvent(new CustomEvent('mentionAdded', {
-			bubbles: true,
-			detail: { personId: this.targetPerson.person_id, mentionId: mention.mention_id }
-		}));
+			this.container.dispatchEvent(new CustomEvent('mentionAdded', {
+				bubbles: true,
+				detail: { personId: this.targetPerson.person_id, mentionId: mention.mention_id }
+			}));
+
+			this.load(this.targetPerson, this.sources);
+		} else {
+			if (confirm("Are you sure you want to remove this mention from this person?")) {
+				if (Array.isArray(this.targetPerson.mentions)) {
+					this.targetPerson.mentions = this.targetPerson.mentions.filter(id => id !== mention.mention_id);
+				}
+
+				this.container.dispatchEvent(new CustomEvent('mentionRemoved', {
+					bubbles: true,
+					detail: { personId: this.targetPerson.person_id, mentionId: mention.mention_id }
+				}));
+
+				if (this.onRemove) {
+					this.onRemove(this.targetPerson.person_id, mention.mention_id);
+				}
+
+				this.load(this.targetPerson, this.sources);
+			}
+		}
 	}
 
 	static _esc(str) {

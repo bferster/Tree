@@ -58,6 +58,14 @@ class TreeApp {
 					</div>
 				</div>
 		
+				<!-- Help Menu -->
+				<div class="menu-top-level">
+					Help
+					<div class="dropdown">
+						<div class="dropdown-item" id="menu-help-docs">Open User Manual</div>
+					</div>
+				</div>
+		
 			</div>
 		
 			<!-- Workspace Area -->
@@ -459,6 +467,12 @@ class TreeApp {
 				if (np) {
 					np.style.display = np.style.display === 'none' ? 'flex' : 'none';
 				}
+			});
+
+			$('#menu-help-docs').on('click', (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				window.open('verite_user_manual.pdf', '_blank');
 			});
 
 			$('#notepad-close-x').on('click', () => {
@@ -1206,8 +1220,9 @@ class TreeApp {
 			.on("mouseover", function () { d3.select(this).style("opacity", "1").select("circle").attr("fill", "#e6f1fb"); })
 			.on("mouseout", function () { d3.select(this).style("opacity", "0.85").select("circle").attr("fill", "#ffffff"); })
 			.on("mousedown", e => e.stopPropagation())
-			.on("click", (e, d) => {
+			.on("click touchend", (e, d) => {
 				e.stopPropagation();
+				if (e.type === 'touchend') e.preventDefault();
 				this.state.actionNodeId = d.person_id;
 				document.getElementById("add-node-target-name").innerText = this.FormatNodeName(d);
 				document.getElementById("add-node-modal").dataset.sourcePid = d.person_id;
@@ -1237,8 +1252,9 @@ class TreeApp {
 			.attr("fill", "#999")
 			.style("display", "none")
 			.on("mousedown", e => e.stopPropagation())
-			.on("click", (e, d) => {
+			.on("click touchend", (e, d) => {
 				e.stopPropagation();
+				if (e.type === 'touchend') e.preventDefault();
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.right = !d.hiddenDirs.right;
 				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
@@ -1251,8 +1267,9 @@ class TreeApp {
 			.attr("fill", "#999")
 			.style("display", "none")
 			.on("mousedown", e => e.stopPropagation())
-			.on("click", (e, d) => {
+			.on("click touchend", (e, d) => {
 				e.stopPropagation();
+				if (e.type === 'touchend') e.preventDefault();
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.left = !d.hiddenDirs.left;
 				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
@@ -1266,8 +1283,9 @@ class TreeApp {
 			.style("display", "none")
 			.style("cursor", "pointer")
 			.on("mousedown", e => e.stopPropagation())
-			.on("click", (e, d) => {
+			.on("click touchend", (e, d) => {
 				e.stopPropagation();
+				if (e.type === 'touchend') e.preventDefault();
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.bottom = !d.hiddenDirs.bottom;
 				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
@@ -1282,8 +1300,9 @@ class TreeApp {
 			.attr("fill", "#999")
 			.style("display", "none")
 			.on("mousedown", e => e.stopPropagation())
-			.on("click", (e, d) => {
+			.on("click touchend", (e, d) => {
 				e.stopPropagation();
+				if (e.type === 'touchend') e.preventDefault();
 				d.hiddenDirs = d.hiddenDirs || { top: false, bottom: false, left: false, right: false };
 				d.hiddenDirs.top = !d.hiddenDirs.top;
 				this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();

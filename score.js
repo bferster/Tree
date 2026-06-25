@@ -13,6 +13,26 @@ class Score {
 	ScoreMentions(blockedMentions, factors, sources, smartName)            // SCORE ALL MENTIONS
 	{
 		let i, mention;
+
+		if (sources && sources.length > 0) {
+			const normalizeSrc = (src) => {
+				if (!src) return '';
+				let s = String(src).replace(/-/g, '_').toLowerCase().trim();
+				const map = {
+					'alb_fg': 'alb_findagrave',
+					'alb_findagrave': 'alb_findagrave',
+					'alb_fbr_1800': 'alb_fbr',
+					'alb_fbr': 'alb_fbr'
+				};
+				return map[s] || s;
+			};
+			const normalizedSources = sources.map(s => normalizeSrc(s));
+			blockedMentions = blockedMentions.filter(m => {
+				const normSrc = normalizeSrc(m.source);
+				return normSrc && normalizedSources.includes(normSrc);
+			});
+		}
+
 		let useSmart = smartName !== undefined ? smartName : this.useSmartName;
 		for (i = 0; i < blockedMentions.length; i++) {
 			mention = blockedMentions[i];
@@ -21,31 +41,74 @@ class Score {
 			let totalScore = 0;
 			let mentionFactors = {};
 
-			// Map SmartNameScore
+			// Map SmartNameScore — apply IMPACT multiplier from first_name factor if set
 			if (useSmart) {
-				totalScore += this.SmartNameScore;
-				mentionFactors['smartName'] = { value: this.SmartNameScore };
+				let smartScore = this.SmartNameScore;
+				const firstNameFactor = factors.find(f => f.field === 'first_name');
+				console.log('[Score] SmartName debug:', {
+					rawSmartScore: this.SmartNameScore,
+					firstNameFactor: firstNameFactor ? { impact: firstNameFactor.impact, weight: firstNameFactor.weight, compare: firstNameFactor.compare } : null
+				});
+				if (firstNameFactor) {
+					const impact = firstNameFactor.impact || 0;
+					if (impact > 0) {
+						smartScore *= 2;               // Double SmartNameScore for IMPACT +
+					} else if (impact < 0) {
+						smartScore *= 0.5;             // Halve SmartNameScore for IMPACT -
+					}
+				}
+				totalScore += smartScore;
+				mentionFactors['smartName'] = { value: smartScore };
 			}
 
 			for (let f of factors) {			// Map to MentionsEditor FACTOR_LABELS format
-				if (f.compare === "ignore") continue;
-				totalScore += f.score;
+				// Normalize compare value (may be an array or a string)
+				const fcmp = Array.isArray(f.compare) ? f.compare.find(x => x !== 'rare') || 'ignore' : (f.compare || 'ignore');
+				if (fcmp === 'ignore') continue;
+				if (!useSmart || !this.nameFields.includes(f.field)) {
+					totalScore += f.score;
+				}
 				if (f.field === 'birth_year') {
 					mentionFactors['birthYear'] = { value: f.score };
 				} else if (f.field === 'death_year') {
 					mentionFactors['deathYear'] = { value: f.score };
 				} else if (f.field === 'first_name') {
-					if (f.compare.includes('exact')) mentionFactors['exactFirstName'] = { value: f.score };
-					else if (f.compare.includes('fuzzy')) mentionFactors['fuzzyFirstName'] = { value: f.score };
+					if (fcmp === 'exact') mentionFactors['exactFirstName'] = { value: f.score };
+					else if (fcmp === 'fuzzy') mentionFactors['fuzzyFirstName'] = { value: f.score };
 				} else if (f.field === 'last_name') {
-					if (f.compare.includes('exact')) mentionFactors['exactLastName'] = { value: f.score };
-					else if (f.compare.includes('fuzzy')) mentionFactors['fuzzyLastName'] = { value: f.score };
+					if (fcmp === 'exact') mentionFactors['exactLastName'] = { value: f.score };
+					else if (fcmp === 'fuzzy') mentionFactors['fuzzyLastName'] = { value: f.score };
 				} else if (f.field === 'norm_first_name') {
-					mentionFactors['rarityFirstName'] = { value: f.score };
+					if (fcmp === 'exact') mentionFactors['exactFirstName'] = { value: f.score };
+					else if (fcmp === 'fuzzy') mentionFactors['fuzzyFirstName'] = { value: f.score };
 				} else if (f.field === 'nysiis_last_name') {
 					mentionFactors['exactNysiisLast'] = { value: f.score };
 				} else if (f.field === 'soundex_last_name') {
-					mentionFactors['exactNysiisLast'] = { value: f.score };
+					mentionFactors['exactSoundexLast'] = { value: f.score };
+				}
+
+				// Check if this factor has rare comparison enabled
+				let isRare = false;
+				if (Array.isArray(f.compare)) {
+					isRare = f.compare.includes('rare');
+				} else if (typeof f.compare === 'string') {
+					isRare = f.compare.includes('rare');
+				}
+
+				if (isRare && f.score > 0 && !Score.IsAbsent(mention[f.field])) {
+					let freqMap = (f.field === 'first_name' || f.field === 'middle_name' || f.field === 'norm_first_name') ? app.firstNameFreq : app.lastNameFreq;
+					let rarityScore = app.GetNameWeightModifier(mention[f.field], freqMap);
+					totalScore += rarityScore;
+					
+					if (f.field === 'first_name' || f.field === 'middle_name' || f.field === 'norm_first_name') {
+						mentionFactors['rarityFirstName'] = { value: rarityScore };
+					} else if (f.field === 'last_name') {
+						mentionFactors['rarityLastName'] = { value: rarityScore };
+					} else if (f.field === 'nysiis_last_name') {
+						mentionFactors['rarityNysiisLast'] = { value: rarityScore };
+					} else if (f.field === 'soundex_last_name') {
+						mentionFactors['raritySoundexLast'] = { value: rarityScore };
+					}
 				}
 			}
 
@@ -55,7 +118,7 @@ class Score {
 
 		blockedMentions.sort((a, b) => (b.score || 0) - (a.score || 0)); 		// Sort the mention objects by score in descending order
 		let mention_ids = blockedMentions.map(m => m.mention_id);
-		return { mention_ids, factors, totalScore: 0 };
+		return { mentions: blockedMentions, mention_ids, factors, totalScore: 0 };
 	}
 
 	ScoreFactor(factors, mention, smartName)              // SCORE SINGLE FACTOR
@@ -105,10 +168,6 @@ class Score {
 			}
 
 			this.SmartNameScore = matchScore;                   // Store score
-			for (let field of this.nameFields) {               	// Loop name fields
-				if (byField[field]) byField[field].score = 0;	// Distribute score
-				consumed.add(field);                           	// Mark consumed
-			}
 		}
 
 		for (let factor of factors) {                         	 // Loop remaining factors
@@ -131,10 +190,15 @@ class Score {
 
 			if (compare == 'ignore') {                           // If ignore
 				factor.score = 0.0;                              // Score 0
+			} else if (compare == 'exact' || (!compare && isRare)) {                     // If exact or only rare
+				if (field == 'birth_year' || field == 'death_year') {
+					factor.score = this.ScoreYear(factor.value, candidate, compare);
+				} else {
+					factor.score = Score.StrEq(factor.value, candidate) ? 1.0 : 0.0; // Exact match
+				}
 			} else if (field == 'birth_year' || field == 'death_year') { 		// If years
 				factor.score = this.ScoreYear(factor.value, candidate, compare); 		// Band match
-			} else if (compare == 'exact') {                     // If exact
-				factor.score = Score.StrEq(factor.value, candidate) ? 1.0 : 0.0; // Exact match
+
 			} else if (compare == 'fuzzy') {                     // If fuzzy
 				if (Score.IsAbsent(factor.value) || Score.IsAbsent(candidate)) { // If absent
 					factor.score = 0.0;                          // Score 0
@@ -144,6 +208,16 @@ class Score {
 				}
 			} else {                                           	// Else
 				factor.score = 0.0;                            	// Unknown mode
+			}
+
+			// Apply IMPACT multiplier: +1 doubles score, -1 halves score
+			if (compare !== 'ignore') {
+				const impact = factor.impact || 0;
+				if (impact > 0) {
+					factor.score *= 2;                           // Double for positive IMPACT
+				} else if (impact < 0) {
+					factor.score *= 0.5;                         // Halve for negative IMPACT
+				}
 			}
 		}
 		return factors;                                        // Return factors
@@ -232,16 +306,27 @@ class Score {
 	ScoreYear(source, target, compare)                        // CALCULATE BAND SCORE
 	{
 		let match, slop = 0;
-		if (compare.includes('±')) slop = compare.split('±')[1] - 0;
+		if (compare && String(compare).includes('±')) slop = String(compare).split('±')[1] - 0;
 		let bandScores = { 0: 1.0, 1: 0.8, 2: 0.7, 3: 0.6, 5: 0.5, 10: 0.3, 20: 0.2 }; 		// Set band scores
-		if (String(source).includes("-")) {
-			let range = source.split('-');
+
+		let srcStr = String(source).split(':')[0].trim();
+		let tgtStr = String(target).split(':')[0].trim();
+
+		if (srcStr === '' || tgtStr === '') return 0.0;
+
+		if (srcStr.includes("-")) {
+			let range = srcStr.split('-');
 			let delta = Math.abs(range[0] - range[1]) - 0;
 			let start = Math.min(range[0], range[1]) - slop;
 			let end = Math.max(range[0], range[1]) + delta + slop;
-			match = (target >= start && target <= end) ? 1 : 0;
-		} else match = Math.abs(source - target) <= slop ? 1 : 0;
-		return match * bandScores[slop];
+			match = (Number(tgtStr) >= start && Number(tgtStr) <= end) ? 1 : 0;
+		} else {
+			let srcNum = Number(srcStr);
+			let tgtNum = Number(tgtStr);
+			if (isNaN(srcNum) || isNaN(tgtNum)) return 0.0;
+			match = Math.abs(srcNum - tgtNum) <= slop ? 1 : 0;
+		}
+		return match * (bandScores[slop] !== undefined ? bandScores[slop] : 1.0);
 	}
 }
 

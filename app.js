@@ -320,9 +320,20 @@ class App {
 					if (!mention) return;
 
 					// Add mention to curTree.persons
-					if (this.curTree.persons[pid]) {
-						if (!this.curTree.persons[pid].mentions.includes(mentionId)) {
-							this.curTree.persons[pid].mentions.push(mentionId);
+					const canonicalPerson = this.curTree.persons.find(p => p.person_id === pid);
+					if (canonicalPerson) {
+						if (!canonicalPerson.mentions) canonicalPerson.mentions = [];
+						if (!canonicalPerson.mentions.includes(mentionId)) {
+							canonicalPerson.mentions.push(mentionId);
+						}
+					}
+
+					// Add mention to the tree node (curPerson)
+					const treeNode = window.treeApp ? window.treeApp.GetNode(pid) : null;
+					if (treeNode) {
+						if (!treeNode.mentions) treeNode.mentions = [];
+						if (!treeNode.mentions.includes(mentionId)) {
+							treeNode.mentions.push(mentionId);
 						}
 					}
 
@@ -379,6 +390,21 @@ class App {
 											}
 										}
 						*/
+				},
+				onRemove: (pid, mentionId) => {
+					// Remove mention from curTree.persons
+					const canonicalPerson = this.curTree.persons.find(p => p.person_id === pid);
+					if (canonicalPerson && Array.isArray(canonicalPerson.mentions)) {
+						canonicalPerson.mentions = canonicalPerson.mentions.filter(id => id !== mentionId);
+					}
+
+					// Remove mention from the tree node (curPerson)
+					const treeNode = window.treeApp ? window.treeApp.GetNode(pid) : null;
+					if (treeNode && Array.isArray(treeNode.mentions)) {
+						treeNode.mentions = treeNode.mentions.filter(id => id !== mentionId);
+					}
+
+					this.rebuildRelatives(pid);
 				}
 
 			});
@@ -415,7 +441,7 @@ class App {
 						setTimeout(() => {
 							const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName);
 							const resultFactors = scoreResult.factors || null;
-							const foundMentions = blockedMentions;
+							const foundMentions = scoreResult.mentions || blockedMentions;
 							const n = window.treeApp.GetNode(criteria.person_id);
 							this.showProgress("Rendering matches...", 90);
 							setTimeout(() => {
@@ -449,12 +475,24 @@ class App {
 			return [];
 		}
 
-		// Pre-normalize sources to handle both hyphens and underscores
-		let normalizedSources = sources.map(s => String(s).replace(/-/g, '_').toLowerCase());
+		// Pre-normalize sources to handle both hyphens and underscores, and source mismatches
+		const normalizeSrc = (src) => {
+			if (!src) return '';
+			let s = String(src).replace(/-/g, '_').toLowerCase().trim();
+			const map = {
+				'alb_fg': 'alb_findagrave',
+				'alb_findagrave': 'alb_findagrave',
+				'alb_fbr_1800': 'alb_fbr',
+				'alb_fbr': 'alb_fbr'
+			};
+			return map[s] || s;
+		};
+
+		let normalizedSources = sources.map(s => normalizeSrc(s));
 
 		for (let m of this.mentions) {
 			// Include only if in the requested sources array
-			let normalizedMSource = m.source ? String(m.source).replace(/-/g, '_').toLowerCase() : '';
+			let normalizedMSource = normalizeSrc(m.source);
 			if (!normalizedMSource || !normalizedSources.includes(normalizedMSource)) {
 				continue;
 			}
@@ -468,14 +506,14 @@ class App {
 				if (field === 'gender') {
 					let targetGen = String(val).charAt(0).toLowerCase();
 					let mentionGen = m.gender ? String(m.gender).charAt(0).toLowerCase() : '';
-					if (targetGen !== mentionGen) {
+					if (mentionGen && targetGen !== mentionGen) {
 						matchesAll = false;
 						break;
 					}
 				} else if (field === 'race') {
 					let targetRace = String(val).toLowerCase().trim();
 					let mentionRace = (m.norm_race || m.race || '').toLowerCase().trim();
-					if (targetRace !== mentionRace) {
+					if (mentionRace && targetRace !== mentionRace) {
 						matchesAll = false;
 						break;
 					}
@@ -581,15 +619,16 @@ class App {
 
 	GetNameWeightModifier(name, freqMap)                            // GET RARITY MODIFIER
 	{
-		if (!name || !freqMap) return 0;                            	// Missing/Not in map
+		if (!name || !freqMap) return 0.0;                            	// Missing/Not in map
 		const n = name.toLowerCase().trim();                      		// Convert to lower case
+		if (!freqMap.has(n)) return 0.0;                            	// Missing/Not in map
 		const count = freqMap.get(n) || 0;                          	// Get count from map
-		if (count === 0) return 0.0;                                 // Missing/Not in map
-		if (count <= 5) return 1.0;                                 // Very Rare
-		if (count <= 20) return .5;                                  // Uncommon
-		if (count >= 21 && count <= 100) return 0.0;                	// Average (Wait, spec said 21-100 is 0, so explicit return 0)
-		if (count > 500) return -1.0;                              	// Extremely Common
-		if (count > 100) return -.5;                                	// Common
+		if (count === 0) return 0.0;
+		if (count <= 5) return 0.3;                                 	// Very Rare -> Add 0.3
+		if (count <= 20) return 0.2;                                 	// Rare -> Add 0.2
+		if (count <= 100) return 0.1;                                	// Uncommon -> Add 0.1
+		if (count > 500) return -0.3;                              	// Extremely Common -> Subtract 0.3
+		if (count > 100) return -0.1;                                	// Common -> Subtract 0.1
 		return 0.0;                                               		// Fallback
 	}
 

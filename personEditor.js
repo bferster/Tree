@@ -101,6 +101,22 @@ class PersonEditor {
 	/* ----------------------------------------------------------
 	   SVG star helpers
 	   ---------------------------------------------------------- */
+	static makeColoredStarSVG(filled, color) {
+		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('viewBox', '0 0 24 24');
+		svg.setAttribute('width', '20');
+		svg.setAttribute('height', '20');
+		svg.style.display = 'block';
+		const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+		path.setAttribute('d', PersonEditor.STAR_PATH);
+		path.setAttribute('fill', filled ? color : 'none');
+		path.setAttribute('stroke', color);
+		path.setAttribute('stroke-width', '1.5');
+		path.setAttribute('stroke-linejoin', 'round');
+		svg.appendChild(path);
+		return svg;
+	}
+
 	static makeStarSVG(filled) {
 		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 		svg.setAttribute('viewBox', '0 0 24 24');
@@ -254,8 +270,8 @@ class PersonEditor {
 					middle_name: ['exact'],
 					norm_first_name: ['exact'],
 					last_name: ['exact'],
-					nysiis_last_name: ['exact'],
-					soundex_last_name: ['exact'],
+					nysiis_last_name: ['ignore'],
+					soundex_last_name: ['ignore'],
 					suffix: ['ignore'],
 					race: ['exact'],
 					gender: ['exact'],
@@ -285,9 +301,9 @@ class PersonEditor {
 
 			let found = -1;
 			if (canonical != null && canonical !== '') {
-				let canStr = String(canonical);
-				if (!canStr.includes(':')) canStr = `${canStr}:Added`;
-				found = options.findIndex(o => o.value === canStr);
+				const getBase = (s) => String(s).split(':')[0].trim().toUpperCase();
+				const canBase = getBase(canonical);
+				found = options.findIndex(o => getBase(o.value) === canBase);
 			}
 			if (found >= 0) selectedIdx = found;
 
@@ -296,7 +312,7 @@ class PersonEditor {
 			fields[cfg.key] = {
 				options: options,
 				selected: selectedIdx,
-				weight: 3,                       // default impact
+				weight: 0,                       // default impact
 				compare: cfg.compare,
 				compareMode: cfg.compareMode,
 				active: defaultActive,
@@ -359,7 +375,7 @@ class PersonEditor {
       <div class="vpe-row vpe-row-header">
         <div>FIELD</div>
         <div>VALUE</div>
-        <div>IMPACT</div>
+        <div style="margin-left: 22px;">IMPACT</div>
         <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
           <span>COMPARE</span>
           <label id="vpe-smart-name-label"${PersonEditor.userSettings.useSmartName ? ' class="tab-active"' : ''}>
@@ -530,17 +546,92 @@ class PersonEditor {
 		$row.append($val);
 
 		// IMPACT
-		const $impact = $(`<div class="vpe-star-row"></div>`);
-		for (let s = 1; s <= 4; s++) {
-			const svg = PersonEditor.makeStarSVG(s <= fstate.weight);
-			svg.setAttribute('aria-label', `${s} star${s > 1 ? 's' : ''}`);
-			$(svg).css('cursor', 'pointer');
-			$impact.append(svg);
-			$(svg).on('click', function () {
-				fstate.weight = s;
-				PersonEditor.paintStars($impact, fstate.weight);
+		const $impact = $(`<div class="vpe-amount-row" style="display:flex; gap:4px; align-items:center; margin-left:22px;"></div>`);
+		const options = [
+			{ val: -1, label: '-' },
+			{ val: 0, label: '0' },
+			{ val: 1, label: '+' }
+		];
+		options.forEach(opt => {
+			const displayVal = opt.label;
+			const val = opt.val;
+			const isActive = fstate.weight === val;
+
+			let baseBg = 'transparent';
+			let baseBorder = '#e5e7eb';
+			let baseColor = '#6b7280';
+
+			if (isActive) {
+				if (val < 0) {
+					baseBg = '#fde8e8';
+					baseBorder = '#f8b4b4';
+					baseColor = '#9b1c1c';
+				} else if (val > 0) {
+					baseBg = '#def7ec';
+					baseBorder = '#bcf0da';
+					baseColor = '#03543f';
+				} else {
+					baseBg = '#f3f4f6';
+					baseBorder = '#d1d5db';
+					baseColor = '#374151';
+				}
+			}
+
+			const isSign = displayVal === '+' || displayVal === '-';
+			const $btn = $(`<button type="button" class="vpe-amount-btn" style="
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 24px;
+				height: 24px;
+				border-radius: 50%;
+				font-size: ${isSign ? '14px' : '11px'};
+				font-weight: ${isSign ? '800' : '600'};
+				cursor: pointer;
+				border: 1px solid ${baseBorder};
+				background: ${baseBg};
+				color: ${baseColor};
+				padding: 0;
+				line-height: 1;
+				transition: all 0.2s;
+			">${displayVal}</button>`);
+
+			$btn.on('click', function () {
+				fstate.weight = val;
+				$impact.children().each(function (idx) {
+					const optInner = options[idx];
+					const v = optInner.val;
+					const active = fstate.weight === v;
+					let bg = 'transparent';
+					let border = '#e5e7eb';
+					let c = '#6b7280';
+
+					if (active) {
+						if (v < 0) {
+							bg = '#fde8e8';
+							border = '#f8b4b4';
+							c = '#9b1c1c';
+						} else if (v > 0) {
+							bg = '#def7ec';
+							border = '#bcf0da';
+							c = '#03543f';
+						} else {
+							bg = '#f3f4f6';
+							border = '#d1d5db';
+							c = '#374151';
+						}
+					}
+
+					$(this).css({
+						'background-color': bg,
+						'border-color': border,
+						'color': c
+					});
+				});
+				$row.trigger('vpe:changed');
 			});
-		}
+			$impact.append($btn);
+		});
 		$row.append($impact);
 
 		// COMPARE
@@ -670,6 +761,12 @@ class PersonEditor {
 				if (soundex) PersonEditor.updateFieldState(state, 'soundex_last_name', soundex);
 			}
 
+			// Update the person object with current state selections
+			Object.keys(state.fields).forEach(k => {
+				const fs = state.fields[k];
+				person[k] = (fs && fs.selected >= 0 && fs.options[fs.selected]) ? fs.options[fs.selected].value : null;
+			});
+
 			$row.closest('.vpe-factors').trigger('vpe:rerender');
 		});
 	}
@@ -723,90 +820,42 @@ class PersonEditor {
 	static renderSourcesDropdown($wrap, state) {
 		$wrap.empty();
 		const ids = Object.keys(state.sources);
-		const checkedIds = ids.filter(id => state.sources[id].checked);
-		let btnLabel = `Sources${checkedIds.length ? ` (${checkedIds.length})` : ''}`;
-		if (checkedIds.length === 1) {
-			btnLabel = checkedIds[0];
-		}
+		let selectedId = ids.find(id => state.sources[id].checked) || '';
 
-		const $btn = $(`
-      <button type="button" class="vpe-sources-btn">
-        <span>${PersonEditor.escapeHtml(btnLabel)}</span>
-        <i class="ti ti-chevron-down"></i>
-      </button>
-    `);
-		$wrap.append($btn);
+		const $select = $(`
+			<select class="vpe-sources-btn" style="
+				display: inline-flex;
+				align-items: center;
+				background: transparent;
+				border: 0.5px solid #f0f0f0;
+				border-radius: 6px;
+				padding: 8px 24px 8px 12px;
+				font-size: 13px;
+				font-weight: 500;
+				cursor: pointer;
+				appearance: none;
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23757575%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+				background-repeat: no-repeat;
+				background-position: right 8px top 50%;
+				background-size: 8px auto;
+			"></select>
+		`);
 
-		let open = false;
-		$btn.on('click', function (e) {
-			e.stopPropagation();
-			open = !open;
-			if (open) showPanel(); else $wrap.find('.vpe-sources-panel').remove();
+		ids.forEach(id => {
+			const label = state.sources[id].label;
+			$select.append(`<option value="${id}" ${id === selectedId ? 'selected' : ''}>${PersonEditor.escapeHtml(label)}</option>`);
 		});
 
-		$(document).on('click.vpe-sources-' + Math.random(), function () {
-			if (open) { open = false; $wrap.find('.vpe-sources-panel').remove(); }
-		});
-
-		function showPanel() {
-			$wrap.find('.vpe-sources-panel').remove();
-			const $panel = $('<div class="vpe-sources-panel"></div>');
-			$panel.on('click', e => e.stopPropagation());
-
-			const $headerRow = $('<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"></div>');
-			$headerRow.append('<div style="font-size:13px; font-weight:bold; color:#333;">Choose source(s) to search:</div>');
-
-			const $closeBtn = $(`<button type="button" style="background:none; border:none; cursor:pointer; color:#757575; padding:4px; display:flex; align-items:center; justify-content:center;"><i class="ti ti-x"></i></button>`);
-			$closeBtn.on('click', function (e) {
-				e.stopPropagation();
-				open = false;
-				$wrap.find('.vpe-sources-panel').remove();
-			});
-			$headerRow.append($closeBtn);
-			$panel.append($headerRow);
-
-			const allChecked = ids.every(id => state.sources[id].checked);
-			const $toggleRow = $('<div class="vpe-toggle-all-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"></div>');
-
-			const $leftGroup = $('<div style="display:flex; align-items:center; gap:8px;"></div>');
-			$leftGroup.append(`<span class="vpe-toggle-label">${allChecked ? 'All selected' : 'Select all'}</span>`);
-			const $toggleBtn = $(`<button type="button" class="vpe-toggle-btn">${allChecked ? 'Clear all' : 'Select all'}</button>`);
-			$toggleBtn.on('click', function (e) {
-				e.stopPropagation();
-				const newVal = !allChecked;
-				ids.forEach(id => state.sources[id].checked = newVal);
-				PersonEditor.renderSourcesDropdown($wrap, state);
-				$wrap.find('.vpe-sources-btn').click(); // re-open after re-render
-			});
-			$leftGroup.append($toggleBtn);
-
-			$toggleRow.append($leftGroup);
-			$panel.append($toggleRow);
-
+		$select.on('change', function () {
+			const newSel = $(this).val();
 			ids.forEach(id => {
-				const src = state.sources[id];
-				const $row = $('<div class="vpe-source-row"></div>');
-				const $cb = $(`<input type="checkbox" ${src.checked ? 'checked' : ''}>`);
-				$cb.on('click', e => e.stopPropagation());
-				$cb.on('change', function () {
-					src.checked = $cb.is(':checked');
-					PersonEditor.renderSourcesDropdown($wrap, state);
-					$wrap.find('.vpe-sources-btn').click(); // re-open
-				});
-				$row.append($cb, `<span>${PersonEditor.escapeHtml(src.label)}</span>`);
-				$row.on('click', function (e) {
-					if (e.target !== $cb[0]) {
-						$cb.prop('checked', !$cb.is(':checked'));
-						src.checked = $cb.is(':checked');
-						PersonEditor.renderSourcesDropdown($wrap, state);
-						$wrap.find('.vpe-sources-btn').click(); // re-open
-					}
-				});
-				$panel.append($row);
+				state.sources[id].checked = (id === newSel);
 			});
+		});
 
-			$wrap.append($panel);
-		}
+		$wrap.append($select);
 	}
 
 
@@ -869,7 +918,7 @@ class PersonEditor {
       .vpe-target-summary { font-size:18px; font-weight:600; color:#333; margin:2px 0 0; }
       .vpe-close { font-size:20px; color:#757575; cursor:pointer; }
       .vpe-section-label { font-size:13px; font-weight:500; letter-spacing:.05em; color:#9e9e9e; margin:0 0 .75rem; }
-      .vpe-row { display:grid; grid-template-columns:130px 240px 80px 1fr; gap:8px 24px; align-items:center;
+      .vpe-row { display:grid; grid-template-columns:130px 240px 110px 1fr; gap:8px 16px; align-items:center;
         padding:4px 8px; border-top:0.5px solid #f0f0f0; }
       .vpe-row-header { font-size:12px; font-weight:500; color:#9e9e9e; border-top:none; padding:4px 8px; }
       .vpe-row-linked { grid-template-columns:130px 1fr; }
