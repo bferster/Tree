@@ -45,10 +45,6 @@ class Score {
 			if (useSmart) {
 				let smartScore = this.SmartNameScore;
 				const firstNameFactor = factors.find(f => f.field === 'first_name');
-				console.log('[Score] SmartName debug:', {
-					rawSmartScore: this.SmartNameScore,
-					firstNameFactor: firstNameFactor ? { impact: firstNameFactor.impact, weight: firstNameFactor.weight, compare: firstNameFactor.compare } : null
-				});
 				if (firstNameFactor) {
 					const impact = firstNameFactor.impact || 0;
 					if (impact > 0) {
@@ -88,18 +84,18 @@ class Score {
 				}
 
 				// Check if this factor has rare comparison enabled
-				let isRare = false;
+				let isRare = f.rare || false;
 				if (Array.isArray(f.compare)) {
-					isRare = f.compare.includes('rare');
+					isRare = isRare || f.compare.includes('rare');
 				} else if (typeof f.compare === 'string') {
-					isRare = f.compare.includes('rare');
+					isRare = isRare || f.compare.includes('rare');
 				}
 
 				if (isRare && f.score > 0 && !Score.IsAbsent(mention[f.field])) {
 					let freqMap = (f.field === 'first_name' || f.field === 'middle_name' || f.field === 'norm_first_name') ? app.firstNameFreq : app.lastNameFreq;
 					let rarityScore = app.GetNameWeightModifier(mention[f.field], freqMap);
 					totalScore += rarityScore;
-					
+
 					if (f.field === 'first_name' || f.field === 'middle_name' || f.field === 'norm_first_name') {
 						mentionFactors['rarityFirstName'] = { value: rarityScore };
 					} else if (f.field === 'last_name') {
@@ -174,9 +170,9 @@ class Score {
 			let field = factor.field;                            // Get field
 			let compare = factor.compare;                        // Get compare mode
 
-			let isRare = false;                                  // Init rare flag
+			let isRare = factor.rare || false;                   // Init rare flag
 			if (Array.isArray(compare)) {                        // If array
-				isRare = compare.includes('rare');               // Check rare
+				isRare = isRare || compare.includes('rare');     // Check rare
 				compare = compare.find(x => x !== 'rare');       // Extract true mode
 			} else if (typeof compare === 'string' && compare.includes('rare')) { // If string contains rare
 				isRare = true;                                   // Set rare
@@ -287,7 +283,10 @@ class Score {
 	static InitialEq(a, b)                                     // INITIAL EQUALITY
 	{
 		if (Score.IsAbsent(a) || Score.IsAbsent(b)) return false; // Fail if absent
-		return String(a).toLowerCase()[0] == String(b).toLowerCase()[0]; // Compare first char
+		const strA = String(a).trim().replace(/\./g, '');
+		const strB = String(b).trim().replace(/\./g, '');
+		if (strA.length > 1 && strB.length > 1) return false;      // Both are full names, not initials
+		return strA.toLowerCase()[0] == strB.toLowerCase()[0];     // Compare first char
 	}
 
 	JwThresholdFor(field)                                      // GET JW THRESHOLD

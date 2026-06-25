@@ -982,9 +982,6 @@ class TreeApp {
 				}
 			}
 
-			if (window.PersonEditor && window.PersonEditor.FAKE_PERSONS) {
-				window.PersonEditor.FAKE_PERSONS[newNode.person_id] = existingAppNode;
-			}
 		}
 
 		return newNode;
@@ -1850,8 +1847,7 @@ class TreeApp {
 			.attr("stroke-width", 1)
 			.attr("stroke-dasharray", "2,4")
 			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
-
-		if (typeof updateTriangleVisibility !== 'undefined') this.UpdateTriangleVisibility();
+		this.UpdateTriangleVisibility();
 	}
 
 	HandleLinkTargetClick(targetPid)																		// HANDLE LINK MODE CLICK TARGET

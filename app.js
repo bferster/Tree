@@ -12,7 +12,7 @@ class App {
 			owner: "Bill",
 			persons: [
 				{ person_id: "P001", mentions: ["ALB-CN-1880-257"], anchor: null, first_name: "William:ALB-CN-1880-257", middle_name: null, last_name: "Spears:ALB-CN-1880-257", suffix: null, birth_year: "1840:ALB-CN-1880-257", death_year: "1910:Added", gender: "M:ALB-CN-1880-257", race: "B:ALB-CN-1880-257", x: 200, y: 200, verity: 2 },
-				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeana:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2 },
+				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeanna:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2 },
 				{ person_id: "P003", mentions: ["ALB-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", suffix: null, birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, verity: 2 },
 				{ person_id: "P004", mentions: ["ALB-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", suffix: null, birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, verity: 2 },
 			],
@@ -309,9 +309,9 @@ class App {
 
 		const mentionsContainer = document.getElementById('mentions-editor-container');
 
-		let mScore = null;
-		mScore = new window.Score();
-
+		if (!this.score && window.Score) {
+			new window.Score();
+		}
 
 		if (window.MentionsEditor) {
 			mEditor = new window.MentionsEditor(mentionsContainer, {
@@ -336,60 +336,10 @@ class App {
 							treeNode.mentions.push(mentionId);
 						}
 					}
-
-					// Look for relationships in the mention (assuming mention.relationships or mention.relatives exists)
-					const rels = mention.relationships || mention.relatives || [];
-					rels.forEach(rel => {
-						// rel is assumed to have a relative object and a predicate
-						const relName = rel.first_name ? (rel.first_name + ' ' + rel.last_name) : 'Unknown Relative';
-						if (confirm(`Do you want to add relative "${relName}" from this mention?`)) {
-							// Pull data from relative's mention and add to curTree
-							const newPid = 'P' + Math.floor(Math.random() * 10000); // temp id generation
-							this.curTree.persons[newPid] = {
-								person_id: newPid,
-								first_name: rel.first_name || '',
-								last_name: rel.last_name || '',
-								birth_year: rel.birth_year || '',
-								death_year: rel.death_year || '',
-								race: rel.race || '',
-								gender: rel.gender || '',
-								mentions: rel.mention_id ? [rel.mention_id] : [],
-								relatives: []
-							};
-
-							// Add relationship
-							const predicate = rel.predicate || 'RelativeOf';
-							this.addRelationship(pid, predicate, newPid);
-							window.treeApp.AddNode(this.curTree.persons[newPid]);
-							window.treeApp.AddTriplet(pid, predicate, newPid);
-							window.treeApp.ApplyLayout(); window.treeApp.RenderNodes(); window.treeApp.RenderEdges();
-						}
-					});
 					this.rebuildRelatives(pid);
-
-					/*					const n = window.treeApp.GetNode(pid);
-										if (n) {
-											n.mentions = n.mentions || [];
-											const exists = n.mentions.some(m => m.mention_id === mentionId);
-											if (!exists) {
-												n.mentions.push({
-													mention_id: mention.mention_id,
-													source: mention.source,
-													label: mention.source + ' (' + mention.source_year + ')',
-													field_values: {
-														first_name: mention.first_name,
-														last_name: mention.last_name,
-														birth_year: mention.birth_year ? String(mention.birth_year) : undefined,
-														death_year: mention.death_year ? String(mention.death_year) : undefined,
-														gender: mention.gender === 'female' ? 'F' : (mention.gender === 'male' ? 'M' : ''),
-														race: mention.race
-													}
-												});
-												window.treeApp.isDirty = true;
-												window.treeApp.SelectNodeAndShowEditor(pid);
-											}
-										}
-						*/
+					if (pEditor) {
+						pEditor.load(pid);
+					}
 				},
 				onRemove: (pid, mentionId) => {
 					// Remove mention from curTree.persons
@@ -405,6 +355,9 @@ class App {
 					}
 
 					this.rebuildRelatives(pid);
+					if (pEditor) {
+						pEditor.load(pid);
+					}
 				}
 
 			});
@@ -604,16 +557,15 @@ class App {
 		}
 	}
 
-
 	BuildNameFrequencies(dataset)                                  // BUILD NAME FREQ MAPS
 	{
 		app.firstNameFreq = new Map();
 		app.lastNameFreq = new Map();
-		dataset.forEach(p => {
-			const f = (p.first_name || '').toLowerCase().trim();
-			const l = (p.last_name || p['last-_name'] || '').toLowerCase().trim();
-			if (f) app.firstNameFreq.set(f, (app.firstNameFreq.get(f) || 0) + 1);
-			if (l) app.lastNameFreq.set(l, (app.lastNameFreq.get(l) || 0) + 1);
+		dataset.forEach(p => {											// For each row (person) in the dataset
+			const f = (p.first_name || '').toLowerCase().trim();		// Get first name
+			const l = (p.last_name || '').toLowerCase().trim();			// Get last name
+			if (f) app.firstNameFreq.set(f, (app.firstNameFreq.get(f) || 0) + 1);	// Increment first name count if found
+			if (l) app.lastNameFreq.set(l, (app.lastNameFreq.get(l) || 0) + 1);		// Increment last name count if found
 		});
 	}
 
@@ -621,18 +573,17 @@ class App {
 	{
 		if (!name || !freqMap) return 0.0;                            	// Missing/Not in map
 		const n = name.toLowerCase().trim();                      		// Convert to lower case
-		if (!freqMap.has(n)) return 0.0;                            	// Missing/Not in map
-		const count = freqMap.get(n) || 0;                          	// Get count from map
-		if (count === 0) return 0.0;
-		if (count <= 5) return 0.3;                                 	// Very Rare -> Add 0.3
-		if (count <= 20) return 0.2;                                 	// Rare -> Add 0.2
-		if (count <= 100) return 0.1;                                	// Uncommon -> Add 0.1
-		if (count > 500) return -0.3;                              	// Extremely Common -> Subtract 0.3
-		if (count > 100) return -0.1;                                	// Common -> Subtract 0.1
+		const count = freqMap.get(n) || 0;                          	// Get count from map (0 if missing)
+		if (count < 50) return 0.3;                              		// Very Rare -> add 0.3
+		if (count < 200) return 0.2;                             		// Rare -> add 0.2
+		if (count < 1000) return 0.1;                             		// Kinda Rare -> add 0.1
+		if (count > 2000) return -0.3;                             		// Very Common -> Subtract 0.3
+		if (count > 1000) return -0.2;                             		// Kinda Common -> Subtract 0.2
+		if (count > 500) return -0.1;                             		// Common -> Subtract 0.1
 		return 0.0;                                               		// Fallback
 	}
 
 }
 
-const app = new App();												// Create a global variable 'app' points to an instance of the App class
-window.app = app;
+const app = new App();												// Create a new instance of the App class
+window.app = app;													// Create a global variable 'app' points to an instance of the App class

@@ -69,11 +69,11 @@ class PersonEditor {
 		},
 		{
 			key: 'nysiis_last_name', label: 'NYSIIS', editKind: 'locked',
-			compare: ['ignore', 'exact', 'rare'], compareMode: 'multi'
+			compare: ['ignore', 'exact'], compareMode: 'multi'
 		},
 		{
 			key: 'soundex_last_name', label: 'Soundex', editKind: 'locked',
-			compare: ['ignore', 'exact', 'rare'], compareMode: 'multi'
+			compare: ['ignore', 'exact'], compareMode: 'multi'
 		},
 		{
 			key: 'suffix', label: 'Suffix', editKind: 'choice', choices: ['Jr', 'Sr'],
@@ -159,9 +159,10 @@ class PersonEditor {
 				let optString = valString;
 				if (!valString.includes(':')) valString = `${valString}:Added`;
 				let baseVal = valString.split(':')[0].toLowerCase();
-				if (!seen.has(valString)) {
+				let valStringKey = valString.toLowerCase();
+				if (!seen.has(valStringKey)) {
 					options.push({ value: valString, option: optString });
-					seen.add(valString);
+					seen.add(valStringKey);
 					seenValues.add(baseVal);
 				}
 			});
@@ -185,31 +186,45 @@ class PersonEditor {
 				valString = `${valString}:Added`;
 			}
 			let baseVal = valString.split(':')[0].toLowerCase();
-			if (!seen.has(valString)) {
+			let valStringKey = valString.toLowerCase();
+			if (!seen.has(valStringKey)) {
 				options.push({ value: valString, option: optString });
-				seen.add(valString);
+				seen.add(valStringKey);
 				seenValues.add(baseVal);
 			}
 		}
 
-		(person.mentions || []).forEach(m_id => {
-			let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
-			if (!m) return;
+		const mentionKeys = {
+			first_name: 'first_name',
+			middle_name: 'middle_name',
+			last_name: 'last_name',
+			race: 'norm_race',
+			gender: 'gender',
+			birth_year: 'birth_year',
+			death_year: 'death_year'
+		};
 
-			let v = m.field_values ? m.field_values[key] : m[key];
+		const mentionField = mentionKeys[key];
+		if (mentionField) {
+			(person.mentions || []).forEach(m_id => {
+				let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
+				if (!m) return;
 
-			if (v != null && v !== '') {
-				let baseVal = String(v).trim();
-				let lowerBaseVal = baseVal.toLowerCase();
+				let v = m.field_values ? m.field_values[mentionField] : m[mentionField];
 
-				if (!seenValues.has(lowerBaseVal)) {
+				if (v != null && v !== '') {
+					let baseVal = String(v).trim();
 					let valString = `${baseVal}:${m.mention_id}`;
-					seen.add(valString);
-					seenValues.add(lowerBaseVal);
-					options.push({ value: valString, option: valString });
+					let valStringKey = valString.toLowerCase();
+
+					if (!seen.has(valStringKey)) {
+						seen.add(valStringKey);
+						seenValues.add(baseVal.toLowerCase());
+						options.push({ value: valString, option: valString });
+					}
 				}
-			}
-		});
+			});
+		}
 
 		if (options.length === 0) {
 			options.push({ value: '', option: '(none)' });
@@ -447,6 +462,7 @@ class PersonEditor {
 				let txt = $input.val().trim();
 				if (txt) {
 					if (!txt.includes(':')) txt = txt + ':Added';
+					fstate.options = fstate.options.filter(opt => !opt.value.endsWith(':Added'));
 					fstate.options.push({ value: txt, option: txt });
 					fstate.selected = fstate.options.length - 1;
 				} else {
@@ -1010,4 +1026,3 @@ class PersonEditor {
 }
 
 window.PersonEditor = PersonEditor;
-// window._VPE_FAKE_PERSONS = PersonEditor.FAKE_PERSONS; // for testing/dev

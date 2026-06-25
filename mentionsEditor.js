@@ -35,20 +35,6 @@ class MentionsEditor {
 		return svg;
 	}
 
-	static DEFAULT_WEIGHTS = {
-		exactLastName: { enabled: true, weight: 6 },
-		fuzzyLastName: { enabled: true, weight: 3 },
-		rarityLastName: { enabled: true, weight: 3 },
-		exactFirstName: { enabled: true, weight: 6 },
-		fuzzyFirstName: { enabled: true, weight: 3 },
-		rarityFirstName: { enabled: true, weight: 3 },
-		exactNysiisLast: { enabled: true, weight: 4 },
-		fuzzyNysiisLast: { enabled: true, weight: 2 },
-		rarityNysiisLast: { enabled: true, weight: 2 },
-		birthYear: { enabled: true, weight: 15, tolerance: 2 },
-		deathYear: { enabled: true, weight: 15, tolerance: 2 },
-		familyMember: { enabled: true, weight: 10 }
-	};
 
 	static FIELD_LABELS = {
 		mention_id: "Mention ID",
@@ -124,31 +110,20 @@ class MentionsEditor {
 	/**
 	 * @param {HTMLElement} container - element to render into
 	 * @param {Object} options
-	 * @param {Object} [options.criteria] - weight/enabled config, merged over defaults
 	 * @param {Function} [options.onAdd] - callback(personId, mentionId)
-	 * @param {Function} [options.fetchAssertions] - async (sources, targetPerson) => mention[]
+	 * @param {Function} [options.onRemove] - callback(personId, mentionId)
 	 */
 	constructor(container, options = {}) {
 		app.mentionsEditor = this;
 		this.container = container;
-		this.criteria = MentionsEditor._mergeCriteria(MentionsEditor.DEFAULT_WEIGHTS, options.criteria);
 		this.onAdd = options.onAdd || (() => { });
 		this.onRemove = options.onRemove || null;
-		this.fetchAssertions = options.fetchAssertions || null;
 		this.targetPerson = null;
 		this.sources = [];
 		this.isSearchResult = false;
 		this.matches = [];        // [{ id, score, mention, factors }]
 		this.currentMentionId = null;
 		this._renderShell();
-	}
-
-	static _mergeCriteria(defaults, override) {
-		const result = {};
-		for (const key of Object.keys(defaults)) {
-			result[key] = Object.assign({}, defaults[key], override && override[key] ? override[key] : {});
-		}
-		return result;
 	}
 
 	// ---------------------------------------------------------------------
@@ -202,7 +177,7 @@ class MentionsEditor {
 		}
 
 
-		this.matches = this._buildMatchList(candidateMentions, targetPerson);
+		this.matches = this._buildMatchList(candidateMentions);
 
 		if (this.matches.length > 0) {
 			this.currentMentionId = this.matches[0].mention.mention_id;
@@ -212,11 +187,7 @@ class MentionsEditor {
 		this._renderDetail();
 	}
 
-	/** Update scoring criteria (weights/enabled flags) and re-score current matches. */
-	setCriteria(criteria) {
-		this.criteria = MentionsEditor._mergeCriteria(this.criteria, criteria);
-		// Scoring is now handled externally, so this no longer recalculates scores.
-	}
+
 
 	/** Returns the currently selected mention object, or null. */
 	getCurrentMention() {
@@ -228,7 +199,7 @@ class MentionsEditor {
 	// Scoring
 	// ---------------------------------------------------------------------
 
-	_buildMatchList(mentions, target) {
+	_buildMatchList(mentions) {
 		const results = [];
 		for (const mention of mentions) {
 			results.push({
