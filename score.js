@@ -15,22 +15,7 @@ class Score {
 		let i, mention;
 
 		if (sources && sources.length > 0) {
-			const normalizeSrc = (src) => {
-				if (!src) return '';
-				let s = String(src).replace(/-/g, '_').toLowerCase().trim();
-				const map = {
-					'alb_fg': 'alb_findagrave',
-					'alb_findagrave': 'alb_findagrave',
-					'alb_fbr_1800': 'alb_fbr',
-					'alb_fbr': 'alb_fbr'
-				};
-				return map[s] || s;
-			};
-			const normalizedSources = sources.map(s => normalizeSrc(s));
-			blockedMentions = blockedMentions.filter(m => {
-				const normSrc = normalizeSrc(m.source);
-				return normSrc && normalizedSources.includes(normSrc);
-			});
+			blockedMentions = blockedMentions.filter(m => m.source && sources.includes(m.source));
 		}
 
 		let useSmart = smartName !== undefined ? smartName : this.useSmartName;
@@ -90,10 +75,14 @@ class Score {
 				} else if (typeof f.compare === 'string') {
 					isRare = isRare || f.compare.includes('rare');
 				}
+				if (useSmart && f.field === 'last_name') {
+					isRare = true;
+				}
 
 				if (isRare && f.score > 0 && !Score.IsAbsent(mention[f.field])) {
 					let freqMap = (f.field === 'first_name' || f.field === 'middle_name' || f.field === 'norm_first_name') ? app.firstNameFreq : app.lastNameFreq;
-					let rarityScore = app.GetNameWeightModifier(mention[f.field], freqMap);
+					let freqTotal = (f.field === 'first_name' || f.field === 'middle_name' || f.field === 'norm_first_name') ? app.firstNameTotal : app.lastNameTotal;
+					let rarityScore = app.GetNameWeightModifier(mention[f.field], freqMap, freqTotal);
 					totalScore += rarityScore;
 
 					if (f.field === 'first_name' || f.field === 'middle_name' || f.field === 'norm_first_name') {
@@ -283,10 +272,7 @@ class Score {
 	static InitialEq(a, b)                                     // INITIAL EQUALITY
 	{
 		if (Score.IsAbsent(a) || Score.IsAbsent(b)) return false; // Fail if absent
-		const strA = String(a).trim().replace(/\./g, '');
-		const strB = String(b).trim().replace(/\./g, '');
-		if (strA.length > 1 && strB.length > 1) return false;      // Both are full names, not initials
-		return strA.toLowerCase()[0] == strB.toLowerCase()[0];     // Compare first char
+		return String(a).toLowerCase()[0] == String(b).toLowerCase()[0]; // Compare first char
 	}
 
 	JwThresholdFor(field)                                      // GET JW THRESHOLD

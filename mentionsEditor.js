@@ -357,7 +357,7 @@ class MentionsEditor {
 
 		const pillsHtml = Object.keys(MentionsEditor.FACTOR_LABELS).map(key => {
 			if (isSmartNameOn) {
-				if (nameKeys.includes(key) || key === 'suffix') return '';
+				if ((nameKeys.includes(key) && key !== 'rarityLastName') || key === 'suffix') return '';
 			} else {
 				const fieldKey = factorToFieldMap[key];
 				if (fieldKey && this.factors) {

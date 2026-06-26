@@ -428,25 +428,9 @@ class App {
 			return [];
 		}
 
-		// Pre-normalize sources to handle both hyphens and underscores, and source mismatches
-		const normalizeSrc = (src) => {
-			if (!src) return '';
-			let s = String(src).replace(/-/g, '_').toLowerCase().trim();
-			const map = {
-				'alb_fg': 'alb_findagrave',
-				'alb_findagrave': 'alb_findagrave',
-				'alb_fbr_1800': 'alb_fbr',
-				'alb_fbr': 'alb_fbr'
-			};
-			return map[s] || s;
-		};
-
-		let normalizedSources = sources.map(s => normalizeSrc(s));
-
 		for (let m of this.mentions) {
 			// Include only if in the requested sources array
-			let normalizedMSource = normalizeSrc(m.source);
-			if (!normalizedMSource || !normalizedSources.includes(normalizedMSource)) {
+			if (!m.source || !sources.includes(m.source)) {
 				continue;
 			}
 
@@ -559,28 +543,32 @@ class App {
 
 	BuildNameFrequencies(dataset)                                  // BUILD NAME FREQ MAPS
 	{
-		app.firstNameFreq = new Map();
-		app.lastNameFreq = new Map();
+		this.firstNameTotal = 0; this.lastNameTotal = 0;                // Initialize total counts to zero
+		this.firstNameFreq = new Map();									// Create frequency map
+		this.lastNameFreq = new Map();									// Create frequency map
 		dataset.forEach(p => {											// For each row (person) in the dataset
 			const f = (p.first_name || '').toLowerCase().trim();		// Get first name
 			const l = (p.last_name || '').toLowerCase().trim();			// Get last name
-			if (f) app.firstNameFreq.set(f, (app.firstNameFreq.get(f) || 0) + 1);	// Increment first name count if found
-			if (l) app.lastNameFreq.set(l, (app.lastNameFreq.get(l) || 0) + 1);		// Increment last name count if found
+			if (f) { 													// If first_name there
+				this.firstNameFreq.set(f, (this.firstNameFreq.get(f) || 0) + 1); // Add to map
+				app.firstNameTotal++; 									// Inc count
+			}
+			if (l) { 													// If last_name there
+				this.lastNameFreq.set(l, (this.lastNameFreq.get(l) || 0) + 1); // Add to map
+				app.lastNameTotal++; 									// Inc count
+			}
 		});
 	}
 
-	GetNameWeightModifier(name, freqMap)                            // GET RARITY MODIFIER
+	GetNameWeightModifier(name, freqMap, total, m = .95)             // GET RARITY MODIFIER
 	{
 		if (!name || !freqMap) return 0.0;                            	// Missing/Not in map
 		const n = name.toLowerCase().trim();                      		// Convert to lower case
 		const count = freqMap.get(n) || 0;                          	// Get count from map (0 if missing)
-		if (count < 50) return 0.3;                              		// Very Rare -> add 0.3
-		if (count < 200) return 0.2;                             		// Rare -> add 0.2
-		if (count < 1000) return 0.1;                             		// Kinda Rare -> add 0.1
-		if (count > 2000) return -0.3;                             		// Very Common -> Subtract 0.3
-		if (count > 1000) return -0.2;                             		// Kinda Common -> Subtract 0.2
-		if (count > 500) return -0.1;                             		// Common -> Subtract 0.1
-		return 0.0;                                               		// Fallback
+		const u = (count + 0.5) / (total + 1);             				// +0.5 smoothing: unseen names don't blow up
+		const raw_log = Math.log2(m / u);                          		// Rare -> large +, common -> small -
+		const score = 0.0225 * raw_log - 0.1;							// Calc score
+		return Math.max(0.0, Math.min(0.3, score));                 	// Scale to [0.0, 0.3]
 	}
 
 }
