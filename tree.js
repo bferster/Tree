@@ -141,6 +141,7 @@ class TreeApp {
 								<option value="isFatherOf">is Father of</option>
 								<option value="isSiblingOf">is Sibling of</option>
 								<option value="isSpouseOf">is Spouse of</option>
+								<option value="isDifferentFamily">in Different family</option>
 							</select>
 						</span>
 					</div>
@@ -612,19 +613,21 @@ class TreeApp {
 						newX += 300; newY += 0;
 					} else if (relation === 'isSpouseOf') {
 						newX += 200; newY += 0;
+					} else if (relation === 'isDifferentFamily') {
+						newX += 400; newY += 200;
 					}
 
 					const newNodeInfo = {
 						person_id: newPid,
 						first_name: '',
-						last_name: sourceNode ? (sourceNode.last_name || '') : '',
+						last_name: (sourceNode && relation !== 'isDifferentFamily') ? (sourceNode.last_name || '') : '',
 						gender: newGender,
 						birth_year: newBirth,
 						x: newX,
 						y: newY
 					};
 
-					if (sourceNode) {
+					if (sourceNode && relation !== 'isDifferentFamily') {
 						newNodeInfo.linked_persons = sourceNode.linked_persons ? JSON.parse(JSON.stringify(sourceNode.linked_persons)) : [];
 
 						// Add the source node's formal relatives as plain text

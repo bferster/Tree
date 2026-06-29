@@ -74,7 +74,8 @@ class MentionsEditor {
 		raritySoundexLast: "Rare",
 		birthYear: "Birth Year",
 		deathYear: "Death Year",
-		familyMember: "Relative match"
+		familyMember: "Relative match",
+		householdContinuity: "Family"
 	};
 
 	static FACTOR_COLORS = {
@@ -93,7 +94,9 @@ class MentionsEditor {
 		raritySoundexLast: 'c-coral',
 		birthYear: 'c-blue',
 		deathYear: 'c-blue',
-		familyMember: 'c-purple'
+		familyMember: 'c-purple',
+		householdContinuity: 'c-purple',
+		knockout: 'c-pink'
 	};
 
 	static RAMP = {
@@ -263,7 +266,7 @@ class MentionsEditor {
 		if (target) {
 			const byear = target.birth_year ? String(target.birth_year).split(':')[0] : '?';
 			const dyear = target.death_year ? String(target.death_year).split(':')[0] : '?';
-			this.targetSummaryEl.innerHTML = `${MentionsEditor._esc(fname)} ${MentionsEditor._esc(lname)} &nbsp;&nbsp;(${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})`;
+			this.targetSummaryEl.innerHTML = `<div style="display: flex; align-items: center;">${MentionsEditor._getGenderSVG(target.gender, 24, 'green')} <span style="transform: translateY(2px); margin-left: 2px;">${MentionsEditor._esc(fname)} ${MentionsEditor._esc(lname)} &nbsp;&nbsp;(${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})</span></div>`;
 		} else {
 			this.targetSummaryEl.innerHTML = '';
 		}
@@ -389,12 +392,33 @@ class MentionsEditor {
 			const ramp = MentionsEditor.RAMP[colorKey];
 			const bg = ramp[0];
 			const text = ramp[1];
-			return `<span class="me-pill" style="background: ${bg}; color: ${text}; border: 1px solid ${text}22; font-weight: 500;">${label} ${sign}${value}</span>`;
+
+			let tooltip = '';
+			if (key === 'householdContinuity' && factor.matches && factor.matches.length > 0) {
+				const names = factor.matches.map(m => m.name).join(', ');
+				tooltip = ` title="Matched: ${names}"`;
+			} else if (key === 'knockout') {
+				tooltip = ` title="${MentionsEditor._esc(factor.reason)}"`;
+				label = `Knockout: ${factor.reason}`;
+				value = ''; // Don't show -999 on the pill
+			}
+
+			const displayVal = value !== '' ? ` ${sign}${value}` : '';
+			return `<span class="me-pill" style="background: ${bg}; color: ${text}; border: 1px solid ${text}22; font-weight: 500;"${tooltip}>${label}${displayVal}</span>`;
 		}).join('');
 
 		const fieldRows = Object.keys(MentionsEditor.FIELD_LABELS).map(key => {
+			if (key === 'source') return '';
+
 			const label = MentionsEditor.FIELD_LABELS[key];
 			let val = match.mention[key];
+
+			if (key.toLowerCase().includes('is_enslave') || key.toLowerCase().includes('isenslave')) {
+				if (!val) return '';
+				const strVal = String(val).toLowerCase();
+				if (strVal !== 't' && strVal !== 'true') return '';
+			}
+
 			if (key === 'gender' && val && val !== '') val = String(val)[0].toUpperCase();
 			if (val === undefined || val === null || val === '') return '';
 			return `
@@ -424,10 +448,25 @@ class MentionsEditor {
       </div>
     `;
 
+		const m = match.mention;
+		const sourceLabel = m.source ? String(m.source).replace(/_/g, '-') : '';
+
+		const toTitleCase = (str) => {
+			if (!str) return '';
+			return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+		};
+		const fname = toTitleCase(m.norm_first_name || m.first_name || '');
+		const lname = toTitleCase(m.last_name || '');
+
 		this.detailEl.innerHTML = `
-      <div class="me-score-row">
-        <span class="me-score-value">${score}</span>
-        <span class="me-score-label">match score</span>
+      <div class="me-score-row" style="display: flex; justify-content: space-between; align-items: baseline; width: 100%;">
+        <div>
+          <span class="me-score-value">${score}</span>
+          <span class="me-score-label">match score</span>
+        </div>
+        <div style="font-weight: bold; font-size: 18px;">
+          ${MentionsEditor._esc(sourceLabel)}
+        </div>
       </div>
       <div class="me-factor-pills">${pillsHtml}</div>
       <div class="me-narrative-block">
@@ -482,6 +521,17 @@ class MentionsEditor {
 		const div = document.createElement('div');
 		div.textContent = str;
 		return div.innerHTML;
+	}
+
+	static _getGenderSVG(gender, size = 16, color = '#666') {
+		let path = "M 50, 50 m -40, 0 a 40,40 0 1,0 80,0 a 40,40 0 1,0 -80,0";
+		let fill = color;
+		if (gender) {
+			const g = String(gender).charAt(0).toLowerCase();
+			if (g === 'm') path = "M 34,49 A 16,16 0 0,1 66,49 A 16,16 0 0,1 34,49 Z M 15,100 A 35,35 0 0,1 85,100 Z";
+			else if (g === 'f') path = "M 34,49 A 16,16 0 0,1 66,49 A 16,16 0 0,1 34,49 Z M 35,65 L 15,100 L 85,100 L 65,65 Z";
+		}
+		return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" style="vertical-align: middle; margin-right: 6px; margin-bottom: 3px; fill: ${fill};"><path d="${path}"/></svg>`;
 	}
 
 	static _css() {

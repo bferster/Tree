@@ -15,6 +15,8 @@ class App {
 				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeanna:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2 },
 				{ person_id: "P003", mentions: ["ALB-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", suffix: null, birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, verity: 2 },
 				{ person_id: "P004", mentions: ["ALB-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", suffix: null, birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, verity: 2 },
+				{ person_id: "P005", mentions: ["ALB-CN-1880-22721"], anchor: null, first_name: "Dabney:ALB-CN-1880-22721", middle_name: null, last_name: "Johnson:ALB-CN-1880-22721", suffix: null, birth_year: "1832:ALB-CN-1880-22721", death_year: "", gender: "M:ALB-CN-1880-22721", race: "B:ALB-CN-1880-22721", x: 200, y: 200, verity: 2 },
+
 			],
 			relationships: []
 		};
@@ -254,54 +256,60 @@ class App {
 
 		const rightPanel = $('#right-panel-content');          // Get right panel DOM
 		let currentActiveTab = forceTab || rightPanel.find('.tab-btn.active').attr('data-target') || 'person-editor-container';
-		rightPanel.empty().append(`
-			<div id="editor-layout" style="display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5;">
-				<div class="editor-tabs" style="display: flex; background: #d4d4d4; border-bottom: 1px solid #ccc; user-select: none;">
-					<div class="tab-btn tree-tab-btn" data-target="tree-view" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666; display: none;">FAMILY TREE</div>
-					<div class="tab-btn active" data-target="person-editor-container" style="padding: 10px 20px; cursor: pointer; background: #e5e5e5; border-top: 2px solid #0078d7; font-weight: bold; font-size: 14px; color: #333;">PERSON EDITOR</div>
-					<div class="tab-btn" data-target="mentions-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">MENTIONS</div>
-					<div class="tab-btn" data-target="sources-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">SOURCES</div>
-					<div class="tab-btn" data-target="familysearch-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">FAMILY-SEARCH</div>
-				</div>
-				<div id="editor-scroll-area" style="flex: 1; position: relative; overflow: hidden; background: #e5e5e5;">
-					<div id="person-editor-container" class="person-editor" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box;"></div>
-					<div id="mentions-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box; display: none;"></div>
-					<div id="sources-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
-						<iframe src="https://stagetools.com/verite/search/?rand=${Math.floor(Math.random() * 10000)}" style="width: 100%; height: 100%; border: none;"></iframe>
+		
+		if (rightPanel.find('#editor-layout').length === 0) {
+			rightPanel.empty().append(`
+				<div id="editor-layout" style="display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5;">
+					<div class="editor-tabs" style="display: flex; background: #d4d4d4; border-bottom: 1px solid #ccc; user-select: none;">
+						<div class="tab-btn tree-tab-btn" data-target="tree-view" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666; display: none;">FAMILY TREE</div>
+						<div class="tab-btn active" data-target="person-editor-container" style="padding: 10px 20px; cursor: pointer; background: #e5e5e5; border-top: 2px solid #0078d7; font-weight: bold; font-size: 14px; color: #333;">PERSON EDITOR</div>
+						<div class="tab-btn" data-target="mentions-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">MENTIONS</div>
+						<div class="tab-btn" data-target="sources-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">SOURCES</div>
+						<div class="tab-btn" data-target="familysearch-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">FAMILY-SEARCH</div>
+						<div class="tab-btn" data-target="chat-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">AI-CHAT</div>
 					</div>
-					<div id="familysearch-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
-					<br><br><p style="text-align:center">To be added soon!</p>
+					<div id="editor-scroll-area" style="flex: 1; position: relative; overflow: hidden; background: #e5e5e5;">
+						<div id="person-editor-container" class="person-editor" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box;"></div>
+						<div id="mentions-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box; display: none;"></div>
+						<div id="sources-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
+							<iframe src="https://stagetools.com/verite/search/?rand=${Math.floor(Math.random() * 10000)}" style="width: 100%; height: 100%; border: none;"></iframe>
+						</div>
+						<div id="familysearch-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
+						<br><br><p style="text-align:center">To be added soon!</p>
+						</div>
+						<div id="chat-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
+						<br><br><p style="text-align:center">To be added soon!</p>
+						</div>
 					</div>
 				</div>
-			</div>
-		`);
+			`);
 
-		rightPanel.find('.tab-btn').on('click', (e) => {       // ON TAB CLICK
-			const target = $(e.currentTarget).attr('data-target'); // Get target ID
-			rightPanel.find('.tab-btn').css({ background: '#d4d4d4', borderTopColor: 'transparent', fontWeight: 'normal', color: '#666' }).removeClass('active'); // Reset styling
-			$(e.currentTarget).css({ background: '#e5e5e5', borderTopColor: '#0078d7', fontWeight: 'bold', color: '#333' }).addClass('active'); // Set active styling
+			rightPanel.find('.tab-btn').on('click', (e) => {       // ON TAB CLICK
+				const target = $(e.currentTarget).attr('data-target'); // Get target ID
+				rightPanel.find('.tab-btn').css({ background: '#d4d4d4', borderTopColor: 'transparent', fontWeight: 'normal', color: '#666' }).removeClass('active'); // Reset styling
+				$(e.currentTarget).css({ background: '#e5e5e5', borderTopColor: '#0078d7', fontWeight: 'bold', color: '#333' }).addClass('active'); // Set active styling
 
-			if (target === 'tree-view') {                      // If tree view tab
-				document.body.classList.add('show-tree');      // Show tree
-			} else {                                           // If editor tab
-				document.body.classList.remove('show-tree');   // Hide tree
-				rightPanel.find('#person-editor-container, #mentions-editor-container, #sources-editor-container, #familysearch-editor-container').hide(); // Hide all panels
-				rightPanel.find('#' + target).show();          // Show target panel
-			}
-		});
+				if (target === 'tree-view') {                      // If tree view tab
+					document.body.classList.add('show-tree');      // Show tree
+				} else {                                           // If editor tab
+					document.body.classList.remove('show-tree');   // Hide tree
+					rightPanel.find('#person-editor-container, #mentions-editor-container, #sources-editor-container, #familysearch-editor-container, #chat-editor-container').hide(); // Hide all panels
+					rightPanel.find('#' + target).show();          // Show target panel
+				}
+			});
+		}
 
-		if (document.body.classList.contains('show-tree')) {   // If tree is shown
-			rightPanel.find('.tab-btn[data-target="' + currentActiveTab + '"]').click(); // Restore active tab
-		} else {
+		if (!document.body.classList.contains('show-tree')) {
 			document.body.classList.remove('show-tree');       // Hide tree
 		}
+		rightPanel.find('.tab-btn[data-target="' + currentActiveTab + '"]').click(); // Restore active tab
 
 		window.treeApp.state.nodes.forEach(n => {              // For each tree node
 			this.rebuildRelatives(n.person_id);                // Rebuild relative links
 		});
 
-		let mEditor = null;                                    // Mentions editor
-		let pEditor = null;
+		let mEditor = this.mentionsEditor || null;
+		let pEditor = this.personEditor || null;
 		const node = window.treeApp.GetNode(personId);         // Get active node
 		if (node) {                                            // If node exists
 			node.narrative_vector = node.narrative_vector || [0.5, 0.5, 0.5]; // Init narrative
@@ -313,7 +321,7 @@ class App {
 			new window.Score();
 		}
 
-		if (window.MentionsEditor) {
+		if (window.MentionsEditor && !mEditor) {
 			mEditor = new window.MentionsEditor(mentionsContainer, {
 				onAdd: (pid, mentionId) => {
 					const mention = mEditor.getCurrentMention();
@@ -337,8 +345,8 @@ class App {
 						}
 					}
 					this.rebuildRelatives(pid);
-					if (pEditor) {
-						pEditor.load(pid);
+					if (this.personEditor) {
+						this.personEditor.load(pid);
 					}
 				},
 				onRemove: (pid, mentionId) => {
@@ -355,32 +363,30 @@ class App {
 					}
 
 					this.rebuildRelatives(pid);
-					if (pEditor) {
-						pEditor.load(pid);
+					if (this.personEditor) {
+						this.personEditor.load(pid);
 					}
 				}
-
 			});
+			this.mentionsEditor = mEditor;
 
 			window.treeApp.onNodeSelected = (node) => {
-				pEditor.load(node.person_id);
-				mEditor.load(node, [], []);
+				if (this.personEditor) this.personEditor.load(node.person_id);
+				if (this.mentionsEditor) this.mentionsEditor.load(node, [], []);
 			};
-
-			if (mEditor && node) {
-				mEditor.load(node, [], []);
-			}
 		}
 
-		if (window.PersonEditor) {
+		if (window.PersonEditor && !pEditor) {
 			pEditor = new window.PersonEditor($('#person-editor-container'));
-			pEditor.load(personId);
+			this.personEditor = pEditor;
+
 			$('#person-editor-container').on('change vpe:changed vpe:rerender', () => {
-				const n = window.treeApp.GetNode(personId);
+				const currentPid = window.treeApp.state.selectedPid;
+				const n = window.treeApp.GetNode(currentPid);
 				if (n) {
 					window.treeApp.SyncEditorToNode(n);
-					if (mEditor && n) {
-						mEditor.load(n, [], []);
+					if (this.mentionsEditor && n) {
+						this.mentionsEditor.load(n, [], []);
 					}
 				}
 			});
@@ -392,14 +398,14 @@ class App {
 						let blockedMentions = this.MakeBlockedMentions(["race", "gender"], criteria.factors, criteria.sources);
 						this.showProgress("Scoring mentions...", 60);
 						setTimeout(() => {
-							const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName);
+							const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName, criteria.person_id);
 							const resultFactors = scoreResult.factors || null;
 							const foundMentions = scoreResult.mentions || blockedMentions;
 							const n = window.treeApp.GetNode(criteria.person_id);
 							this.showProgress("Rendering matches...", 90);
 							setTimeout(() => {
-								if (mEditor && n) {
-									mEditor.load(n, criteria.sources, foundMentions, resultFactors);
+								if (this.mentionsEditor && n) {
+									this.mentionsEditor.load(n, criteria.sources, foundMentions, resultFactors);
 									$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
 								}
 								this.hideProgress();
@@ -408,6 +414,13 @@ class App {
 					}, 50);
 				}
 			});
+		}
+
+		if (mEditor && node) {
+			mEditor.load(node, [], []);
+		}
+		if (pEditor) {
+			pEditor.load(personId);
 		}
 	}
 

@@ -202,8 +202,19 @@ html_content = """<!DOCTYPE html>
         <li><strong>Chronological Sanity Check (Birth Year)</strong>: If a target's <em>birth_year</em> is known, any mention with a <code>source_year</code> that is more than 75 years apart from it is blocked. This filters out records where the timeline is physically impossible.</li>
     </ul>
 
-    <h2>4. Smart Name Matching Logic Cascade</h2>
-    <p>If Smart Name is enabled, the system runs a fast-path cascade to score the overall name matching:</p>
+    <h2>4. Name Matching Logic Cascade</h2>
+    <p>The system runs a multi-rung cascade to score name matching, resolving the surname-match question first:</p>
+    
+    <h3>Surname Match Resolution</h3>
+    <p>A surname match holds if <strong>any</strong> of the following are true:</p>
+    <ul>
+        <li>Candidate's full name matches anchor's full name.</li>
+        <li>Candidate's last name matches anchor's last name (exact, via <code>hasNameVariant</code> alias in tree, or via NYSIIS/Soundex phonetics).</li>
+        <li>Either record's last name matches the other's maiden name.</li>
+        <li>An assertion (such as <code>isSpouseOf</code> in the tree) bridges the two surnames.</li>
+    </ul>
+
+    <h3>The Cascade Rungs</h3>
     <table>
         <thead>
             <tr>
@@ -216,52 +227,34 @@ html_content = """<!DOCTYPE html>
         <tbody>
             <tr>
                 <td style="text-align: center; font-weight: 500;">1</td>
-                <td>Exact match on first, middle, and last names</td>
-                <td style="text-align: center; font-weight: 600;">1.0</td>
-                <td>Perfect exact string equality across all three fields.</td>
+                <td>Exact first + surname-match</td>
+                <td style="text-align: center; font-weight: 600;">0.95 - 1.0</td>
+                <td>0.95 for exact first name; 1.0 if middle name matches exactly too.</td>
             </tr>
             <tr>
                 <td style="text-align: center; font-weight: 500;">2</td>
-                <td>Exact match on first and last names</td>
-                <td style="text-align: center; font-weight: 600;">0.95</td>
-                <td>Matches first and last names (ignores middle name).</td>
+                <td>first_initial + surname-match</td>
+                <td style="text-align: center; font-weight: 600;">0.90</td>
+                <td>First initials match, e.g. "W. Spears" and "William Spears".</td>
             </tr>
             <tr>
                 <td style="text-align: center; font-weight: 500;">3</td>
-                <td>Exact match on initials (first and last names)</td>
-                <td style="text-align: center; font-weight: 600;">0.9</td>
-                <td>E.g. "W. Spears" matches "William Spears".</td>
+                <td>nickname / normalized first + surname-match</td>
+                <td style="text-align: center; font-weight: 600;">0.70 - 0.90</td>
+                <td>0.90 for nickname match; 0.70 for Jaro-Winkler similarity &ge; 0.85.</td>
             </tr>
             <tr>
                 <td style="text-align: center; font-weight: 500;">4</td>
-                <td>Exact match on normalized nickname and last name</td>
-                <td style="text-align: center; font-weight: 600;">0.9</td>
-                <td>E.g. "Bill" matches "William".</td>
-            </tr>
-            <tr>
-                <td style="text-align: center; font-weight: 500;">5</td>
-                <td>Jaro-Winkler above threshold on first and last names</td>
-                <td style="text-align: center; font-weight: 600;">0.7</td>
-                <td>Matches names with slight typos or transpositions.</td>
-            </tr>
-            <tr>
-                <td style="text-align: center; font-weight: 500;">6</td>
-                <td>Exact match on NYSIIS sound-alike phonetics</td>
-                <td style="text-align: center; font-weight: 600;">0.6</td>
-                <td>Phonetic match of the last name.</td>
-            </tr>
-            <tr>
-                <td style="text-align: center; font-weight: 500;">7</td>
-                <td>Exact match on Soundex sound-alike phonetics</td>
-                <td style="text-align: center; font-weight: 600;">0.5</td>
-                <td>Secondary phonetic match of the last name.</td>
+                <td>given-name-only agreement (no surname match)</td>
+                <td style="text-align: center; font-weight: 600;">0.40</td>
+                <td>Only allowed for Female (gender=F). Requires first name match and at least one corroborating lever (Lever B: dates, or Lever C: household/family).</td>
             </tr>
         </tbody>
     </table>
 
     <div class="note-box">
-        <strong>Performance Optimization</strong>
-        <p>The Jaro-Winkler string similarity calculation is computationally expensive. The cascade is optimized to execute fast equality matches first and only perform Jaro-Winkler comparisons if those fast checks fail.</p>
+        <strong>Gender Conditioning</strong>
+        <p>When gender is Female (F), a surname mismatch drops to the given-name-only rung instead of vetoing name agreement. In addition, matching a woman's surname across different-surname-expected contexts yields a +0.1 bonus. For Male (M), a surname mismatch remains a veto (scoring 0.0).</p>
     </div>
 
     <h2>5. Evaluation of Individual/Non-Name Fields</h2>
@@ -283,11 +276,23 @@ html_content = """<!DOCTYPE html>
         <li><strong>Fuzzy String Matches (Non-Smart Name Mode)</strong>: Performs Jaro-Winkler distance calculation. If distance is above the threshold (default: <code>0.85</code>), the actual Jaro-Winkler score is assigned; otherwise <code>0.0</code>.</li>
     </ul>
 
+    <h2>6. Lever C: Household / Family Continuity</h2>
+    <p>For candidate mentions that belong to a household (such as census records), the system evaluates co-resident kin against the anchor person's relatives (spouses, children, parents, siblings).</p>
+    <ul>
+        <li><strong>Matching Process</strong>: Candidate household members are cross-referenced with the anchor's formal relationships. A match requires a compatible name (exact, initials, or Jaro-Winkler &ge; 0.85) and an overlapping birth-year window (within &plusmn;5 years).</li>
+        <li><strong>Scoring Bonuses</strong>:
+            <ul>
+                <li><strong>Spouse Match + &ge;2 Children</strong>: Adds a massive <strong>+2.0</strong> to the score, as a whole family's joint age-sex profile rarely coincides by chance.</li>
+                <li><strong>Partial Matches</strong>: Adds <strong>+1.0</strong> for a matching spouse and <strong>+0.5</strong> for each matching child or other relative.</li>
+            </ul>
+        </li>
+    </ul>
+
 </body>
 </html>
 """
 
-artifact_dir = r"C:\\Users\\bfers\\.gemini\\antigravity-ide\\brain\\ab77759a-bf28-4ce5-a4a0-e06d53d945b5"
+artifact_dir = r"C:\\Users\\bfers\\.gemini\\antigravity-ide\\brain\\38a31577-4359-4696-bc8a-d3eff0940c8c"
 html_path = os.path.join(artifact_dir, "score_mentions_explanation.html")
 pdf_path = os.path.join(artifact_dir, "score_mentions_explanation.pdf")
 
