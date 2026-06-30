@@ -431,19 +431,45 @@ class App {
 		let ms = String(mentionSource).toUpperCase().replace(/_/g, '-');
 		let currentCounty = (this.county || 'ALB').toUpperCase();
 
-		return targetSources.some(ts => {
-			let s = String(ts).toUpperCase().replace(/_/g, '-');
+		let activeFilter = (window.app && window.app.source) ? String(window.app.source).toUpperCase() : '';
 
-			// Strip prefix if it exists to normalize
+		// If filtering for a specific vital record subtype (VRB, VRM, VRD)
+		if (activeFilter === 'VRB' || activeFilter === 'VRM' || activeFilter === 'VRD') {
+			let msParts = ms.split('-');
+			let msCore = msParts.length > 1 && (msParts[0] === 'ALB' || msParts[0] === 'AUG' || msParts[0] === 'FAQ') ? msParts[1] : msParts[0];
+			if (msCore.startsWith('VR') && msCore !== activeFilter) {
+				return false;
+			}
+		}
+
+		const getBaseCore = (s) => {
 			let sParts = s.split('-');
 			let core = sParts.length > 1 && (sParts[0] === 'ALB' || sParts[0] === 'AUG' || sParts[0] === 'FAQ') ? sParts.slice(1).join('-') : s;
 
-			if (core === 'FG') core = 'FINDAGRAVE';
+			if (core.startsWith('VR')) return 'VR';
+			if (core.startsWith('CH')) return 'CH';
+			if (core.startsWith('FBR')) return 'FBR';
+			if (core.startsWith('FL')) return 'FL';
+			if (core === 'FG' || core === 'FINDAGRAVE') return 'FG';
+			return core;
+		};
 
+		let msBase = getBaseCore(ms);
+
+		return targetSources.some(ts => {
+			let tsBase = getBaseCore(String(ts).toUpperCase().replace(/_/g, '-'));
+
+			if (msBase === tsBase) return true;
+
+			// Fallback check
+			let tsNormalized = String(ts).toUpperCase().replace(/_/g, '-');
+			let tsParts = tsNormalized.split('-');
+			let tsCore = tsParts.length > 1 && (tsParts[0] === 'ALB' || tsParts[0] === 'AUG' || tsParts[0] === 'FAQ') ? tsParts.slice(1).join('-') : tsNormalized;
 			let expectedPrefix = currentCounty + '-';
-			let expectedFull = expectedPrefix + core;
+			let expectedFull = expectedPrefix + tsCore;
 
 			if (ms === expectedFull || ms.startsWith(expectedFull)) return true;
+
 			return false;
 		});
 	}

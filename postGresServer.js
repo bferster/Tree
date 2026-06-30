@@ -71,6 +71,9 @@ const server = http.createServer((req, res) => {
 		}
 		const ext = path.extname(filePath);
 		res.setHeader('Content-Type', MIME_TYPES[ext] || 'application/octet-stream');
+		res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+		res.setHeader('Pragma', 'no-cache');
+		res.setHeader('Expires', '0');
 		res.end(data);
 	});
 });

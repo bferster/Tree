@@ -342,7 +342,7 @@ class PersonEditor {
 		if (window.GlobalSources) {
 			Object.keys(window.GlobalSources).forEach(k => {
 				let isChecked = false;
-				if (!anyCheckedInit && window.app && window.app.sourceMatches && window.app.sourceMatches(k, [defaultSource])) {
+				if (window.app && window.app.sourceMatches && window.app.sourceMatches(k, [defaultSource])) {
 					isChecked = true;
 					anyCheckedInit = true;
 				}
@@ -353,7 +353,7 @@ class PersonEditor {
 			let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
 			if (m && m.source && !sources[m.source]) {
 				let isChecked = false;
-				if (!anyCheckedInit && window.app && window.app.sourceMatches && window.app.sourceMatches(m.source, [defaultSource])) {
+				if (window.app && window.app.sourceMatches && window.app.sourceMatches(m.source, [defaultSource])) {
 					isChecked = true;
 					anyCheckedInit = true;
 				}
@@ -893,9 +893,9 @@ class PersonEditor {
 			{ label: '1860 Slave Schedule', value: 'SS-1860' },
 			{ label: '1850 Slave Schedule', value: 'SS-1850' },
 			{ label: 'Find A Grave', value: 'FG' },
-			{ label: 'Birth Records', value: 'VR' },
-			{ label: 'Marriage Records', value: 'VR' },
-			{ label: 'Death Records', value: 'VR' },
+			{ label: 'Birth Records', value: 'VRB' },
+			{ label: 'Marriage Records', value: 'VRM' },
+			{ label: 'Death Records', value: 'VRD' },
 			{ label: 'Church Records', value: 'CH' },
 			{ label: 'Free Black Register', value: 'FBR' },
 			{ label: 'Freemans Records', value: 'FL' }
@@ -950,7 +950,7 @@ class PersonEditor {
 			// Use sourceMatches to set the right checked items
 			let anyChecked = false;
 			Object.keys(state.sources).forEach(id => {
-				if (!anyChecked && window.app && window.app.sourceMatches && window.app.sourceMatches(id, [newSel])) {
+				if (window.app && window.app.sourceMatches && window.app.sourceMatches(id, [newSel])) {
 					state.sources[id].checked = true;
 					anyChecked = true;
 				}
