@@ -6,6 +6,8 @@ class App {
 		this.mentions = [];
 		this.isLoaded = false;
 		this.curPerson = -1;
+		this.county = "ALB";
+		this.source = "CN-1870";
 
 		this.curTree = {
 			treeName: "Family",
@@ -256,7 +258,7 @@ class App {
 
 		const rightPanel = $('#right-panel-content');          // Get right panel DOM
 		let currentActiveTab = forceTab || rightPanel.find('.tab-btn.active').attr('data-target') || 'person-editor-container';
-		
+
 		if (rightPanel.find('#editor-layout').length === 0) {
 			rightPanel.empty().append(`
 				<div id="editor-layout" style="display: flex; flex-direction: column; width: 100%; height: 100%; box-sizing: border-box; background: #e5e5e5;">
@@ -424,6 +426,28 @@ class App {
 		}
 	}
 
+	sourceMatches(mentionSource, targetSources) {
+		if (!mentionSource || !targetSources || targetSources.length === 0) return false;
+		let ms = String(mentionSource).toUpperCase().replace(/_/g, '-');
+		let currentCounty = (this.county || 'ALB').toUpperCase();
+
+		return targetSources.some(ts => {
+			let s = String(ts).toUpperCase().replace(/_/g, '-');
+
+			// Strip prefix if it exists to normalize
+			let sParts = s.split('-');
+			let core = sParts.length > 1 && (sParts[0] === 'ALB' || sParts[0] === 'AUG' || sParts[0] === 'FAQ') ? sParts.slice(1).join('-') : s;
+
+			if (core === 'FG') core = 'FINDAGRAVE';
+
+			let expectedPrefix = currentCounty + '-';
+			let expectedFull = expectedPrefix + core;
+
+			if (ms === expectedFull || ms.startsWith(expectedFull)) return true;
+			return false;
+		});
+	}
+
 	MakeBlockedMentions(blockingFields, factors, sources) {
 		let i, m;
 		let matchedMentions = [];
@@ -443,7 +467,7 @@ class App {
 
 		for (let m of this.mentions) {
 			// Include only if in the requested sources array
-			if (!m.source || !sources.includes(m.source)) {
+			if (!this.sourceMatches(m.source, sources)) {
 				continue;
 			}
 
@@ -483,7 +507,6 @@ class App {
 				matchedMentions.push(m);
 			}
 		}
-		console.log(matchedMentions.length, " Blocked mentions");
 		return matchedMentions;
 	}
 

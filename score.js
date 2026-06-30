@@ -13,9 +13,8 @@ class Score {
 	ScoreMentions(blockedMentions, factors, sources, smartName, personId)            // SCORE ALL MENTIONS
 	{
 		let i, mention;
-
 		if (sources && sources.length > 0) {
-			blockedMentions = blockedMentions.filter(m => m.source && sources.includes(m.source));
+			blockedMentions = blockedMentions.filter(m => m.source && app.sourceMatches(m.source, sources));
 		}
 
 		// --- LEVER C: Pre-compute Anchor Kin ---
@@ -23,14 +22,14 @@ class Score {
 		if (personId && app.curTree && app.curTree.relationships && app.curTree.persons) {
 			const rels = app.curTree.relationships.filter(r => r.subject_id === personId || r.object_id === personId);
 			const personCollection = Array.isArray(app.curTree.persons) ? app.curTree.persons : Object.values(app.curTree.persons);
-			
+
 			for (let r of rels) {
 				const kinId = r.subject_id === personId ? r.object_id : r.subject_id;
 				let relation = r.predicate;
 				if (r.predicate === 'isChildOf') {
 					relation = r.subject_id === personId ? 'isParentOf' : 'isChildOf';
 				}
-				
+
 				const kinPerson = personCollection.find(p => p.person_id === kinId);
 				if (kinPerson && !anchorKin.some(k => k.person_id === kinId)) {
 					const cleanStr = (val) => val ? String(val).split(':')[0].trim().toLowerCase() : '';
@@ -54,20 +53,20 @@ class Score {
 						if (am && am.source && (am.household_id || am.family_id)) {
 							const hid = am.household_id;
 							const fid = am.family_id;
-							const derivedKinMentions = app.mentions.filter(m => m.source === am.source && m.mention_id !== am.mention_id && 
+							const derivedKinMentions = app.mentions.filter(m => m.source === am.source && m.mention_id !== am.mention_id &&
 								(fid ? m.family_id === fid : m.household_id === hid));
-							
+
 							for (let dk of derivedKinMentions) {
 								if (!anchorKin.some(k => k.person_id === dk.mention_id)) {
 									const cleanStr = (val) => val ? String(val).trim().toLowerCase() : '';
-									
+
 									// Best guess at relation based on relation string in mention or default to "derived"
 									let rel = 'derivedKin';
 									const relStr = (dk.relation || '').toLowerCase();
 									if (relStr.includes('wife') || relStr.includes('husband') || relStr.includes('spouse')) rel = 'isSpouseOf';
 									else if (relStr.includes('son') || relStr.includes('daughter') || relStr.includes('child')) rel = 'isChildOf';
 									else if (relStr.includes('father') || relStr.includes('mother') || relStr.includes('parent')) rel = 'isParentOf';
-									
+
 									anchorKin.push({
 										person_id: dk.mention_id,
 										relation: rel,
@@ -101,7 +100,7 @@ class Score {
 		}
 
 		let useSmart = smartName !== undefined ? smartName : this.useSmartName;
-		
+
 		const anchorPerson = personId ? (Array.isArray(app.curTree.persons)
 			? app.curTree.persons.find(x => x.person_id === personId)
 			: app.curTree.persons[personId]) : null;
@@ -185,7 +184,7 @@ class Score {
 			if (anchorKin.length > 0 && mention.source && (mention.household_id || mention.family_id)) {
 				const hid = mention.household_id;
 				const fid = mention.family_id;
-				
+
 				let candGroup = [];
 				if (fid) {
 					const group = candGroupIndex.get(mention.source + "|F|" + fid);
@@ -195,7 +194,7 @@ class Score {
 					if (group) candGroup = group;
 				}
 				candGroup = candGroup.filter(m => m.mention_id !== mention.mention_id);
-				
+
 				if (candGroup.length > 0) {
 					let matchedKin = [];
 					let spouseMatches = 0;
@@ -212,7 +211,7 @@ class Score {
 
 							const cFirst = (cKin.first_name || '').toLowerCase().trim();
 							const cNorm = (cKin.norm_first_name || '').toLowerCase().trim();
-							
+
 							let matchQuality = -1;
 							if (cFirst && aKin.first_name && cFirst === aKin.first_name) matchQuality = 2;
 							else if (cNorm && aKin.norm_first_name && cNorm === aKin.norm_first_name) matchQuality = 2;
@@ -239,7 +238,7 @@ class Score {
 								}
 							}
 						}
-						
+
 						if (bestMatch) {
 							usedCandidates.add(bestMatch.mention_id);
 							matchedKin.push({ anchor_id: aKin.person_id, mention_id: bestMatch.mention_id, relation: aKin.relation, name: bestMatch.first_name || 'Relative' });
@@ -254,7 +253,7 @@ class Score {
 						continuityScore += (spouseMatches * 0.5);
 						continuityScore += (childMatches * 0.25);
 						continuityScore += (otherMatches * 0.25);
-						
+
 						if (continuityScore > 2.0) {
 							continuityScore = 2.0;
 						}
@@ -298,13 +297,11 @@ class Score {
 		const anchorFirst = cleanVal(byField['first_name'] ? byField['first_name'].value : (anchorPerson ? anchorPerson.first_name : ''));
 		const anchorMiddle = cleanVal(byField['middle_name'] ? byField['middle_name'].value : (anchorPerson ? anchorPerson.middle_name : ''));
 		const anchorLast = cleanVal(byField['last_name'] ? byField['last_name'].value : (anchorPerson ? anchorPerson.last_name : ''));
-		const anchorMaiden = cleanVal(anchorPerson ? anchorPerson.maiden_name : '');
 		const anchorGender = cleanVal(byField['gender'] ? byField['gender'].value : (anchorPerson ? anchorPerson.gender : ''));
 
 		const candidateFirst = cleanVal(mention.first_name);
 		const candidateMiddle = cleanVal(mention.middle_name);
 		const candidateLast = cleanVal(mention.last_name);
-		const candidateMaiden = cleanVal(mention.maiden_name);
 		const candidateGender = cleanVal(mention.gender);
 
 		// Resolve surname match
@@ -348,16 +345,8 @@ class Score {
 			}
 		}
 
-		// 3. either record's last_name equals the other's maiden_name
-		if (!surnameMatch) {
-			if (candidateLast && anchorMaiden && candidateLast === anchorMaiden) {
-				surnameMatch = true;
-			} else if (anchorLast && candidateMaiden && anchorLast === candidateMaiden) {
-				surnameMatch = true;
-			}
-		}
 
-		// 4. an assertion (isSpouseOf, marriage record) bridges the two surnames
+		// 3. an assertion (isSpouseOf, marriage record) bridges the two surnames
 		if (!surnameMatch && personId && candidateLast) {
 			const spouseRels = app.curTree.relationships.filter(r => r.predicate === 'isSpouseOf' && (r.subject_id === personId || r.object_id === personId));
 			for (let r of spouseRels) {
@@ -365,11 +354,6 @@ class Score {
 				const spousePerson = Array.isArray(app.curTree.persons) ? app.curTree.persons.find(x => x.person_id === spousePid) : app.curTree.persons[spousePid];
 				if (spousePerson) {
 					const spouseLast = cleanVal(spousePerson.last_name);
-					const spouseMaiden = cleanVal(spousePerson.maiden_name);
-					if ((spouseLast && candidateLast === spouseLast) || (spouseMaiden && candidateLast === spouseMaiden)) {
-						surnameMatch = true;
-						break;
-					}
 				}
 			}
 		}
@@ -433,7 +417,7 @@ class Score {
 			if (isFemale && candidateFirst && anchorFirst) {
 				const candidateNick = window.Normalize.getNickname(candidateFirst);
 				const anchorNick = window.Normalize.getNickname(anchorFirst);
-				const isGivenNameMatch = (candidateFirst === anchorFirst) || 
+				const isGivenNameMatch = (candidateFirst === anchorFirst) ||
 					(candidateNick && anchorNick && candidateNick === anchorNick) ||
 					(jwScore >= 0.85);
 
@@ -501,10 +485,6 @@ class Score {
 		if (isFemale && surnameMatch && nameScore > 0.0) {
 			let diffSurnameExpected = false;
 			const anchorLastName = cleanVal(byField['last_name'] ? byField['last_name'].value : (anchorPerson ? anchorPerson.last_name : ''));
-			const anchorMaidenName = cleanVal(anchorPerson ? anchorPerson.maiden_name : '');
-			if (anchorLastName && anchorMaidenName && anchorLastName !== anchorMaidenName) {
-				diffSurnameExpected = true;
-			}
 			if (!diffSurnameExpected && personId) {
 				const spouseRels = app.curTree.relationships.filter(r => r.predicate === 'isSpouseOf' && (r.subject_id === personId || r.object_id === personId));
 				for (let r of spouseRels) {
@@ -565,7 +545,7 @@ class Score {
 
 		const byField = {};
 		for (let f of factors) byField[f.field] = f;
-		
+
 		const getVal = (field) => {
 			let v = byField[field] ? byField[field].value : null;
 			if (!v && anchorPerson) v = anchorPerson[field];

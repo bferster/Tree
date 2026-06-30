@@ -6,7 +6,6 @@ Lever A — Name agreement (cascade, gender-aware):
 
 		candidate full_name equals anchor full_name ; OR
 		candidate last_name equals anchor last_name (exact, or via hasNameVariant alias, or NYSIIS→Soundex phonetic — see independence note below); OR
-		either record's last_name equals the other's maiden_name (recorded maiden name is fact, treat as deterministic); OR
 		an assertion (isSpouseOf, marriage record) bridges the two surnames.
 
 		Score the strongest rung that fires:
@@ -19,7 +18,7 @@ Lever A — Name agreement (cascade, gender-aware):
 		Gender conditioning:
 
 			When gender = F, a surname mismatch does not veto name agreement — drop to the given-name-only rung rather than scoring zero, because women's surnames change across sources (maiden ↔ married) as a matter of course. Conversely, when a woman's surname does match across two different-surname-expected contexts, weight it slightly higher, since a surviving surname match is less expected and therefore more distinctive. 
-			When gender = M, a hard surname mismatch (no alias, no phonetic, no maiden/assertion bridge) remains a strong negative as before.
+			When gender = M, a hard surname mismatch (no alias, no phonetic) remains a strong negative as before.
 		
 		Conditional independence: 
 		

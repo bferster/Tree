@@ -336,15 +336,28 @@ class PersonEditor {
 		});
 
 		const sources = {};
+		const defaultSource = window.app ? window.app.source : 'CN-1870';
+
+		let anyCheckedInit = false;
 		if (window.GlobalSources) {
 			Object.keys(window.GlobalSources).forEach(k => {
-				sources[k] = { label: k, checked: (k === 'ALB-CN-1880' || k === 'ALB_CN_1880') };
+				let isChecked = false;
+				if (!anyCheckedInit && window.app && window.app.sourceMatches && window.app.sourceMatches(k, [defaultSource])) {
+					isChecked = true;
+					anyCheckedInit = true;
+				}
+				sources[k] = { label: k, checked: isChecked };
 			});
 		}
 		(person.mentions || []).forEach(m_id => {
 			let m = typeof m_id === 'object' ? m_id : (window.app && window.app.mentions ? window.app.mentions.find(x => x.mention_id === m_id) : null);
 			if (m && m.source && !sources[m.source]) {
-				sources[m.source] = { label: m.source, checked: (m.source === 'ALB-CN-1880' || m.source === 'ALB_CN_1880') };
+				let isChecked = false;
+				if (!anyCheckedInit && window.app && window.app.sourceMatches && window.app.sourceMatches(m.source, [defaultSource])) {
+					isChecked = true;
+					anyCheckedInit = true;
+				}
+				sources[m.source] = { label: m.source, checked: isChecked };
 			}
 		});
 
@@ -454,7 +467,7 @@ class PersonEditor {
 		}
 
 		if (cfg.editKind === 'free' && fstate.editing) {
-			let currentVal = val1; // Pre-fill with the first part only
+			let currentVal = ""; // Leave blank when starting to type
 			const $input = $(`<input type="text" placeholder="Type a value…" style="color:${ramp_[1]}" value="${PersonEditor.escapeHtml(currentVal)}">`);
 
 			const saveInput = function () {
@@ -828,15 +841,77 @@ class PersonEditor {
 		});
 
 		const $right = $('<div class="vpe-footer-right"></div>');
-		$right.append($sourcesWrap, $searchBtn);
+
+		// County dropdown
+		const $countyWrap = $('<div class="vpe-county-wrap"></div>');
+		const $countySelect = $(`
+			<select class="vpe-county-btn" style="
+				display: inline-flex;
+				align-items: center;
+				background: transparent;
+				border: 0.5px solid #f0f0f0;
+				border-radius: 6px;
+				padding: 8px 24px 8px 12px;
+				font-size: 13px;
+				font-weight: 500;
+				cursor: pointer;
+				appearance: none;
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23757575%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+				background-repeat: no-repeat;
+				background-position: right 8px top 50%;
+				background-size: 8px auto;
+				margin-right: 10px;
+			">
+				<option value="ALB">Albemarle</option>
+				<option value="AUG">Augusta</option>
+				<option value="FAQ">Fauquier</option>
+			</select>
+		`);
+		if (window.app && window.app.county) {
+			$countySelect.val(window.app.county);
+		} else {
+			$countySelect.val('ALB');
+		}
+		$countySelect.on('change', function () {
+			if (window.app) window.app.county = $(this).val();
+		});
+		$countyWrap.append($countySelect);
+
+		$right.append($countyWrap, $sourcesWrap, $searchBtn);
 
 		$footer.append($verity, $right);
 	}
 
 	static renderSourcesDropdown($wrap, state) {
 		$wrap.empty();
+
+		const sourceOptions = [
+			{ label: '1870 Census', value: 'CN-1870' },
+			{ label: '1880 Census', value: 'CN-1880' },
+			{ label: '1860 Slave Schedule', value: 'SS-1860' },
+			{ label: '1850 Slave Schedule', value: 'SS-1850' },
+			{ label: 'Find A Grave', value: 'FG' },
+			{ label: 'Birth Records', value: 'VR' },
+			{ label: 'Marriage Records', value: 'VR' },
+			{ label: 'Death Records', value: 'VR' },
+			{ label: 'Church Records', value: 'CH' },
+			{ label: 'Free Black Register', value: 'FBR' },
+			{ label: 'Freemans Records', value: 'FL' }
+		];
+
 		const ids = Object.keys(state.sources);
 		let selectedId = ids.find(id => state.sources[id].checked) || '';
+
+		// Attempt to match selectedId even if it has a county prefix like 'ALB-CN-1880'
+		let matchId = selectedId;
+		if (selectedId && selectedId.includes('-') && !sourceOptions.some(opt => opt.value === selectedId)) {
+			let suffix = selectedId.substring(selectedId.indexOf('-') + 1);
+			if (sourceOptions.some(opt => opt.value === suffix)) {
+				matchId = suffix;
+			}
+		}
 
 		const $select = $(`
 			<select class="vpe-sources-btn" style="
@@ -859,16 +934,34 @@ class PersonEditor {
 			"></select>
 		`);
 
-		ids.forEach(id => {
-			const label = state.sources[id].label;
-			$select.append(`<option value="${id}" ${id === selectedId ? 'selected' : ''}>${PersonEditor.escapeHtml(label)}</option>`);
+		sourceOptions.forEach(opt => {
+			$select.append(`<option value="${opt.value}" ${opt.value === matchId ? 'selected' : ''}>${PersonEditor.escapeHtml(opt.label)}</option>`);
 		});
 
 		$select.on('change', function () {
 			const newSel = $(this).val();
-			ids.forEach(id => {
-				state.sources[id].checked = (id === newSel);
+			if (window.app) window.app.source = newSel;
+
+			// Clear existing checked
+			Object.keys(state.sources).forEach(id => {
+				state.sources[id].checked = false;
 			});
+
+			// Use sourceMatches to set the right checked items
+			let anyChecked = false;
+			Object.keys(state.sources).forEach(id => {
+				if (!anyChecked && window.app && window.app.sourceMatches && window.app.sourceMatches(id, [newSel])) {
+					state.sources[id].checked = true;
+					anyChecked = true;
+				}
+			});
+
+			// If nothing was checked, force a fallback
+			if (!anyChecked) {
+				const prefix = window.app && window.app.county ? window.app.county + '_' : 'ALB_';
+				let fullSource = prefix + newSel.replace('-', '_');
+				state.sources[fullSource] = { label: fullSource, checked: true };
+			}
 		});
 
 		$wrap.append($select);

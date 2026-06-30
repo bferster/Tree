@@ -44,7 +44,6 @@ class MentionsEditor {
 		first_name: "First name",
 		middle_name: "Middle name",
 		last_name: "Last name",
-		maiden_name: "Maiden name",
 		birth_year: "Birth year",
 		death_year: "Death year",
 		gender: "Gender",
@@ -204,13 +203,17 @@ class MentionsEditor {
 
 	_buildMatchList(mentions) {
 		const results = [];
+		const seenIds = new Set();
 		for (const mention of mentions) {
-			results.push({
-				id: mention.mention_id,
-				score: mention.score || 0,
-				mention: mention,
-				factors: mention.factors || {}
-			});
+			if (!seenIds.has(mention.mention_id)) {
+				seenIds.add(mention.mention_id);
+				results.push({
+					id: mention.mention_id,
+					score: mention.score || 0,
+					mention: mention,
+					factors: mention.factors || {}
+				});
+			}
 		}
 		results.sort((a, b) => b.score - a.score);
 		return results;
@@ -434,19 +437,7 @@ class MentionsEditor {
 			? `<div class="me-raw-block"><p class="me-raw-label">Original data</p><pre class="me-raw-json">${typeof originalData === 'string' ? originalData : JSON.stringify(originalData, null, 2)}</pre></div>`
 			: '';
 
-		const verity = Math.max(0, Math.min(4, Math.round(match.mention.confidence || (match.score / 5))));
-		let starsHtml = '<div style="display:flex; gap:3px; align-items:center;">';
-		for (let s = 1; s <= 4; s++) {
-			starsHtml += MentionsEditor._makeStarSVG(s <= verity).outerHTML;
-		}
-		starsHtml += '</div>';
-
-		this.verityEl.innerHTML = `
-      <div style="display:flex; align-items:center; gap:6px;">
-        <span style="font-size:13px; color:var(--me-text-secondary); font-weight:500;">Verity:</span>
-        ${starsHtml}
-      </div>
-    `;
+		this.verityEl.innerHTML = '';
 
 		const m = match.mention;
 		const sourceLabel = m.source ? String(m.source).replace(/_/g, '-') : '';
