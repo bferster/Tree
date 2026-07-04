@@ -220,29 +220,39 @@ class App {
 		if (totalRecords === 0) {
 			// Fallback if count is unknown
 			this.showProgress(`Loading ${label}...`, false);
-			const res = await fetch(url + (maxRecords ? `?limit=${maxRecords}` : ''));
+			const separator = url.includes('?') ? '&' : '?';
+			const res = await fetch(url + (maxRecords ? `${separator}limit=${maxRecords}` : ''));
 			return await res.json();
 		}
 
 		// 2. Fetch in chunks
 		const chunkLimit = 10000;
-		let offset = 0;
+		const separator = url.includes('?') ? '&' : '?';
+		const fetchPromises = [];
+		let loadedRecords = 0;
 		let allData = [];
 
-		while (offset < totalRecords) {
-			const percent = Math.round((offset / totalRecords) * 100);
-			this.showProgress(`Loading ${label}... ${percent}%`, percent);
-
-			const separator = url.includes('?') ? '&' : '?';
+		for (let offset = 0; offset < totalRecords; offset += chunkLimit) {
 			const fetchLimit = Math.min(chunkLimit, totalRecords - offset);
-			const chunkResp = await fetch(`${url}${separator}limit=${fetchLimit}&offset=${offset}`);
-			if (!chunkResp.ok) throw new Error(`Failed to load chunk for ${label}`);
+			const promise = fetch(`${url}${separator}limit=${fetchLimit}&offset=${offset}`)
+				.then(res => {
+					if (!res.ok) throw new Error(`Failed to load chunk for ${label}`);
+					return res.json();
+				})
+				.then(chunkData => {
+					loadedRecords += chunkData.length;
+					const percent = Math.round((loadedRecords / totalRecords) * 100);
+					this.showProgress(`Loading ${label}... ${percent}%`, percent);
+					return { offset, data: chunkData };
+				});
+			fetchPromises.push(promise);
+		}
 
-			const chunkData = await chunkResp.json();
-			if (chunkData.length === 0) break;
-
-			allData = allData.concat(chunkData);
-			offset += chunkData.length;
+		const chunkResults = await Promise.all(fetchPromises);
+		// Sort results by offset to ensure original order is maintained
+		chunkResults.sort((a, b) => a.offset - b.offset);
+		for (const chunk of chunkResults) {
+			allData = allData.concat(chunk.data);
 		}
 
 		this.showProgress(`Loading ${label}... 100%`, 100);
@@ -538,17 +548,30 @@ class App {
 
 	async loadData()                                           // LOAD DATA
 	{
+		const urlParams = new URLSearchParams(window.location.search);
 		const isTest = window.location.search.toLowerCase().includes('test');
+		this.county = urlParams.get('c') || 'ALB';
+		const countyPrefix = this.county + '-';
 
 		if (isTest) {
 			this.showProgress('Loading data from CSV...', false);
-			this.assertions = await d3.csv('img/assertions.csv');
-			this.mentions = await d3.csv('img/mentions.csv');
+			const [allAssertions, allMentions] = await Promise.all([
+				d3.csv('img/assertions.csv'),
+				d3.csv('img/mentions.csv')
+			]);
+			
+			this.assertions = allAssertions.filter(r => r.subject_id && r.subject_id.startsWith(countyPrefix));
+			this.mentions = allMentions.filter(r => r.source && r.source.startsWith(countyPrefix)).map(r => { delete r.narrative_vector; return r; });
 		}
 		else {
 			this.showProgress('Connecting to database...', false);
-			this.assertions = await this.fetchWithProgress('/api/assertions', 'assertions');
-			this.mentions = await this.fetchWithProgress('/api/mentions', 'mentions');
+			const mentionsCols = 'mention_id,source,source_year,original_data,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,created,narrative,soundex_last_name';
+			const [assertions, mentions] = await Promise.all([
+				this.fetchWithProgress(`/api/assertions?subject_id=like.${countyPrefix}*&order=assertion_id`, 'assertions'),
+				this.fetchWithProgress(`/api/mentions?select=${mentionsCols}&source=like.${countyPrefix}*&order=mention_id`, 'mentions')
+			]);
+			this.assertions = assertions;
+			this.mentions = mentions;
 		}
 
 		this.BuildNameFrequencies(this.mentions);

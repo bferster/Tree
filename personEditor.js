@@ -875,7 +875,12 @@ class PersonEditor {
 			$countySelect.val('ALB');
 		}
 		$countySelect.on('change', function () {
-			if (window.app) window.app.county = $(this).val();
+			if (window.app) {
+				window.app.county = $(this).val();
+				const urlParams = new URLSearchParams(window.location.search);
+				urlParams.set('c', window.app.county);
+				window.location.search = urlParams.toString();
+			}
 		});
 		$countyWrap.append($countySelect);
 
