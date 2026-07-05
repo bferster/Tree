@@ -556,10 +556,10 @@ class App {
 		if (isTest) {
 			this.showProgress('Loading data from CSV...', false);
 			const [allAssertions, allMentions] = await Promise.all([
-				d3.csv('img/assertions.csv'),
-				d3.csv('img/mentions.csv')
+				d3.csv(`img/assertions.csv?v=${version}`),
+				d3.csv(`img/mentions.csv?v=${version}`)
 			]);
-			
+
 			this.assertions = allAssertions.filter(r => r.subject_id && r.subject_id.startsWith(countyPrefix));
 			this.mentions = allMentions.filter(r => r.source && r.source.startsWith(countyPrefix)).map(r => { delete r.narrative_vector; return r; });
 		}
@@ -572,6 +572,8 @@ class App {
 			]);
 			this.assertions = assertions;
 			this.mentions = mentions;
+
+
 		}
 
 		this.BuildNameFrequencies(this.mentions);
@@ -618,6 +620,11 @@ class App {
 			window.treeApp.RenderNodes();                      // Draw nodes
 			window.treeApp.RenderEdges();                      // Draw edges
 			window.treeApp.FitToScreen();                      // Fit viewport
+
+			this.expand = new ExpandAssertions(this.assertions);
+			const { results } = this.expand.viewFor('ALB-CN-1870-1688');
+			results.forEach(r => console.log(r.mention_id, r.predicate, r.confidence));
+
 		}
 
 		if (window.treeApp && window.treeApp.state.nodes.length > 0) { // If nodes present
