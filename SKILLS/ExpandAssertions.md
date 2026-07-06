@@ -19,6 +19,9 @@ You have access to the **assertions** table (columns: `assertion_id`, `subject_i
 | wasEnslavedBy | enslaves | inHouseOf | false | — |
 | isSameAs | isSameAs | — | true | — |
 | isNotSameAs | isNotSameAs | — | true | — |
+| inFamilyOf | inFamilyOf | — | true | — |
+| inHouseholdOf | inHouseholdOf | — | true | — |
+| isNeighborOf | isNeighborOf | — | true | — |
 
 The **inverse** column drives reciprocal readings: the same stored row read from the object's side.
 
@@ -42,7 +45,7 @@ Compositions differ from inverses and entailments: they combine **two** assertio
 
 ## Rules
 
-1. **Scope.** Output only parent, child, sibling, spouse, and enslavement relationships (including the entailed `inHouseOf`), plus the identity predicates `isSameAs` and `isNotSameAs`. Every other predicate (grand-, nibling-, in-law forms, `hasNameVariant`, `isLocatedAt`) is excluded entirely, in both directions. Do not mention, count, or summarize what was excluded.
+1. **Scope.** Output only parent, child, sibling, spouse, and enslavement relationships (including the entailed `inHouseOf`), plus the identity predicates `isSameAs` and `isNotSameAs`, and the census-derived predicates `inFamilyOf`, `inHouseholdOf`, and `isNeighborOf`. Every other predicate (grand-, nibling-, in-law forms, `hasNameVariant`, `isLocatedAt`) is excluded entirely, in both directions. Do not mention, count, or summarize what was excluded.
 
 2. **Ungender first.** Before applying any other rule, replace gendered predicates with their gender-neutral form per the registry's alias column, direction unchanged: `isFatherOf` becomes `isParentOf`; `isSonOf` becomes `isChildOf`; `isWifeOf` becomes `isSpouseOf`. Treat casing variants (`IsMotherOf`) the same way. The original assertion is still reported with its predicate exactly as stored.
 
@@ -113,7 +116,7 @@ Row 5 appears as a derived `isSameAs` reading (symmetric, swapped). Row 6 does *
 
 ## Validation before returning
 
-- Every result predicate is `isChildOf`, `isParentOf`, `isSiblingOf`, `isSpouseOf`, `wasEnslavedBy`, `enslaves`, `inHouseOf`, `isSameAs`, or `isNotSameAs`. No gendered predicate appears in results.
+- Every result predicate is `isChildOf`, `isParentOf`, `isSiblingOf`, `isSpouseOf`, `wasEnslavedBy`, `enslaves`, `inHouseOf`, `isSameAs`, `isNotSameAs`, `inFamilyOf`, `inHouseholdOf`, or `isNeighborOf`. No gendered predicate appears in results.
 - Every derived or entailed row lists one original; every composed row lists exactly two.
 - Derived/entailed confidence equals the source exactly; composed confidence equals the product of its two sources exactly.
 - No composed row was built from another composed or entailed row, and no composition bridged two mentions through an isSameAs link.

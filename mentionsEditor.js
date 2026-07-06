@@ -74,7 +74,12 @@ class MentionsEditor {
 		birthYear: "Birth Year",
 		deathYear: "Death Year",
 		familyMember: "Relative match",
-		householdContinuity: "Family"
+		householdContinuity: "Family",
+		race: "Race",
+		gender: "Gender",
+		suffix: "Suffix",
+		middle_name: "Middle name",
+		norm_first_name: "Nick name"
 	};
 
 	static FACTOR_COLORS = {
@@ -95,7 +100,12 @@ class MentionsEditor {
 		deathYear: 'c-blue',
 		familyMember: 'c-purple',
 		householdContinuity: 'c-purple',
-		knockout: 'c-pink'
+		knockout: 'c-pink',
+		race: 'c-pink',
+		gender: 'c-pink',
+		suffix: 'c-pink',
+		middle_name: 'c-purple',
+		norm_first_name: 'c-purple'
 	};
 
 	static RAMP = {
@@ -434,7 +444,15 @@ class MentionsEditor {
 
 		const originalData = match.mention.original_data;
 		const originalDataHtml = originalData
-			? `<div class="me-raw-block"><p class="me-raw-label">Original data</p><pre class="me-raw-json">${typeof originalData === 'string' ? originalData : JSON.stringify(originalData, null, 2)}</pre></div>`
+			? `
+			<div class="me-raw-block">
+				<div class="me-raw-header" style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px; user-select: none;">
+					<p class="me-raw-label" style="margin: 0; font-weight: 600; font-size: 11px; text-transform: uppercase; color: #666;">Original data</p>
+					<span class="me-raw-toggle-icon" style="font-size: 10px; color: #999; margin-left: 6px; transition: transform 0.2s; display: inline-block;">▶</span>
+				</div>
+				<pre class="me-raw-json" style="display: none; margin-top: 0;">${typeof originalData === 'string' ? originalData : JSON.stringify(originalData, null, 2)}</pre>
+			</div>
+			`
 			: '';
 
 		this.verityEl.innerHTML = '';
@@ -446,8 +464,52 @@ class MentionsEditor {
 			if (!str) return '';
 			return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 		};
-		const fname = toTitleCase(m.norm_first_name || m.first_name || '');
-		const lname = toTitleCase(m.last_name || '');
+
+		let familyHtml = '';
+		if (match.factors && match.factors.householdContinuity && match.factors.householdContinuity.matches) {
+			const familyMatches = match.factors.householdContinuity.matches;
+			if (familyMatches.length > 0) {
+				const famRows = familyMatches.map((f, i) => {
+					let fullName = f.name || 'Relative';
+					let byear = '?', dyear = '?';
+					const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+					if (globalApp && globalApp.mentions) {
+						const fMention = globalApp.mentions.find(m => m.mention_id === f.mention_id);
+						if (fMention) {
+							fullName = (fMention.norm_first_name || fMention.first_name || '') + ' ' + (fMention.last_name || '');
+							if (fMention.birth_year) byear = String(fMention.birth_year).split(':')[0];
+							if (fMention.death_year) dyear = String(fMention.death_year).split(':')[0];
+						}
+					}
+					fullName = toTitleCase(fullName.trim() || 'Relative');
+					const borderStyle = i < familyMatches.length - 1 ? 'border-bottom: 1px solid rgba(0,0,0,0.05);' : '';
+					return `
+						<div class="me-family-row" data-id="${MentionsEditor._esc(f.mention_id)}" style="display: flex; justify-content: space-between; padding: 4px 6px; ${borderStyle} font-size: 13px; cursor: pointer; border-radius: 4px; transition: background-color 0.15s;">
+							<span>${MentionsEditor._esc(fullName)} (${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})</span>
+							<span style="color: #666; font-family: monospace; text-align: right;">${MentionsEditor._esc(f.mention_id)}</span>
+						</div>
+					`;
+				}).join('');
+
+				familyHtml = `
+					<div style="margin-top: 16px;">
+						<p class="me-raw-label" style="font-weight: 600; font-size: 11px; color: #666; margin-top: 0; margin-bottom: 8px;">FAMILY MEMBERS</p>
+						<div class="me-family-block" style="border: 1px solid #e0e0e0; border-radius: 6px; background-color: #f4f7fa; padding: 8px 6px;">
+							<div>${famRows}</div>
+						</div>
+					</div>
+				`;
+			}
+		}
+
+		let combinedBottomHtml = '';
+		if (familyHtml) {
+			combinedBottomHtml += `<div style="height: 1px; background: #e0e0e0; margin: 24px 0 0 0;"></div>`;
+			combinedBottomHtml += familyHtml;
+		}
+		if (originalDataHtml) {
+			combinedBottomHtml += originalDataHtml;
+		}
 
 		this.detailEl.innerHTML = `
       <div class="me-score-row" style="display: flex; justify-content: space-between; align-items: baseline; width: 100%;">
@@ -464,8 +526,39 @@ class MentionsEditor {
         <p>${MentionsEditor._esc(match.mention.narrative || '')}</p>
       </div>
       <table class="me-field-table">${fieldRows}</table>
-      ${originalDataHtml}
+      ${combinedBottomHtml}
     `;
+
+		this.detailEl.querySelectorAll('.me-family-row').forEach(el => {
+			el.addEventListener('mouseenter', (e) => e.currentTarget.style.backgroundColor = '#e2e8f0');
+			el.addEventListener('mouseleave', (e) => e.currentTarget.style.backgroundColor = 'transparent');
+			el.addEventListener('click', (e) => {
+				const id = e.currentTarget.getAttribute('data-id');
+				const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+				if (globalApp && globalApp.mentions) {
+					const fMention = globalApp.mentions.find(m => m.mention_id === id);
+					if (fMention) {
+						// Load the clicked family member into the mentions editor as the only result
+						this.load(this.targetPerson, this.sources, [fMention], null);
+					}
+				}
+			});
+		});
+
+		const rawHeader = this.detailEl.querySelector('.me-raw-header');
+		if (rawHeader) {
+			rawHeader.addEventListener('click', () => {
+				const rawJson = this.detailEl.querySelector('.me-raw-json');
+				const icon = this.detailEl.querySelector('.me-raw-toggle-icon');
+				if (rawJson.style.display === 'none') {
+					rawJson.style.display = 'block';
+					icon.style.transform = 'rotate(90deg)';
+				} else {
+					rawJson.style.display = 'none';
+					icon.style.transform = 'rotate(0deg)';
+				}
+			});
+		}
 	}
 
 	_handleAdd() {

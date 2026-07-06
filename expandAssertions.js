@@ -22,6 +22,9 @@ class ExpandAssertions {
 		wasEnslavedBy: { inverse: 'enslaves', yields: 'inHouseOf', symmetric: false },
 		isSameAs: { inverse: 'isSameAs', yields: null, symmetric: true },
 		isNotSameAs: { inverse: 'isNotSameAs', yields: null, symmetric: true },
+		inFamilyOf: { inverse: 'inFamilyOf', yields: null, symmetric: true },
+		inHouseholdOf: { inverse: 'inHouseholdOf', yields: null, symmetric: true },
+		isNeighborOf: { inverse: 'isNeighborOf', yields: null, symmetric: true },
 	};
 
 	// Gendered aliases → canonical form (direction unchanged).
@@ -32,7 +35,38 @@ class ExpandAssertions {
 		ishusbandof: 'isSpouseOf', iswifeof: 'isSpouseOf',
 	};
 
-	constructor(assertions) {
+	constructor(assertions, mentions = []) {
+		this.mentionsMap = new Map();
+		this.mentionsBySource = new Map();
+		this.mentionsByFamily = new Map();
+		this.mentionsByHousehold = new Map();
+		this.sortedMentionsBySource = new Map();
+
+		for (const m of mentions) {
+			const id = String(m.mention_id || '').trim();
+			this.mentionsMap.set(id, m);
+
+			if (m.source) {
+				const src = String(m.source).trim();
+				if (!this.mentionsBySource.has(src)) this.mentionsBySource.set(src, []);
+				this.mentionsBySource.get(src).push(m);
+
+				const famId = String(m.family_id || '').trim();
+				if (famId) {
+					const famKey = `${src}|${famId}`;
+					if (!this.mentionsByFamily.has(famKey)) this.mentionsByFamily.set(famKey, []);
+					this.mentionsByFamily.get(famKey).push(m);
+				}
+
+				const houseId = String(m.household_id || '').trim();
+				if (houseId) {
+					const houseKey = `${src}|${houseId}`;
+					if (!this.mentionsByHousehold.has(houseKey)) this.mentionsByHousehold.set(houseKey, []);
+					this.mentionsByHousehold.get(houseKey).push(m);
+				}
+			}
+		}
+
 		// Lowercased lookup for casing drift ("IsMotherOf") + gendered aliases.
 		this._canon = new Map();
 		for (const p of Object.keys(ExpandAssertions.REGISTRY)) this._canon.set(p.toLowerCase(), p);
@@ -131,6 +165,106 @@ class ExpandAssertions {
 			for (const { assertion: a, predicate } of this.bySubject.get(id) || []) {
 				const yields = ExpandAssertions.REGISTRY[predicate].yields;
 				if (yields) addResult(this._row(a.object_id, yields, a.confidence, 'entailed', a, [a]));
+			}
+		}
+
+		// Gather dynamic assertions from metadata for all equivalents
+		for (const id of equivalents) {
+			const m = this.mentionsMap.get(id);
+			if (m && m.source) {
+				const source = String(m.source).trim();
+				const year = this._getCensusYear(source);
+				const isCensus = source.includes('CN-1870') || source.includes('CN-1880');
+				const isSlaveSchedule = source.includes('SS-1850') || source.includes('SS-1860');
+
+				if (isCensus || isSlaveSchedule) {
+					const famId = String(m.family_id || '').trim();
+					const houseId = String(m.household_id || '').trim();
+
+					// 1. inFamilyOf (CN-1870, CN-1880)
+					if (isCensus && famId) {
+						const famKey = `${source}|${famId}`;
+						const members = this.mentionsByFamily.get(famKey) || [];
+						for (const member of members) {
+							if (member.mention_id !== id) {
+								const virtualAssertion = { subject_id: id, predicate: 'inFamilyOf', object_id: member.mention_id, start_year: year, end_year: '' };
+								addResult(this._row(member.mention_id, 'inFamilyOf', 1.0, 'stored', virtualAssertion, null));
+							}
+						}
+					}
+
+					// 2. inHouseholdOf:
+					// - 1870: same household_id
+					// - 1880: same family_id
+					// - 1850/1860 slave schedule: same household_id
+					if (source.includes('CN-1870') && houseId) {
+						const houseKey = `${source}|${houseId}`;
+						const members = this.mentionsByHousehold.get(houseKey) || [];
+						for (const member of members) {
+							if (member.mention_id !== id) {
+								const virtualAssertion = { subject_id: id, predicate: 'inHouseholdOf', object_id: member.mention_id, start_year: year, end_year: '' };
+								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
+							}
+						}
+					} else if (source.includes('CN-1880') && famId) {
+						const famKey = `${source}|${famId}`;
+						const members = this.mentionsByFamily.get(famKey) || [];
+						for (const member of members) {
+							if (member.mention_id !== id) {
+								const virtualAssertion = { subject_id: id, predicate: 'inHouseholdOf', object_id: member.mention_id, start_year: year, end_year: '' };
+								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
+							}
+						}
+					} else if (isSlaveSchedule && houseId) {
+						const houseKey = `${source}|${houseId}`;
+						const members = this.mentionsByHousehold.get(houseKey) || [];
+						for (const member of members) {
+							if (member.mention_id !== id) {
+								const virtualAssertion = { subject_id: id, predicate: 'inHouseholdOf', object_id: member.mention_id, start_year: year, end_year: '' };
+								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
+							}
+						}
+					}
+
+					// 3. isNeighborOf (CN-1870, CN-1880)
+					if (isCensus) {
+						const sorted = this._getSortedMentions(source);
+						const famKey = famId ? `${source}|${famId}` : null;
+						const familyMembers = famKey ? (this.mentionsByFamily.get(famKey) || []) : [m];
+
+						// Find head
+						let head = familyMembers.find(member => String(member.head || '').trim().toLowerCase() === 't');
+						if (!head) head = familyMembers[0];
+
+						// Find last member by sorting the family members
+						const headIdx = sorted.findIndex(member => member.mention_id === head.mention_id);
+						const sortedFamily = [...familyMembers].sort((a, b) => this._parseMentionId(a.mention_id) - this._parseMentionId(b.mention_id));
+						const last = sortedFamily[sortedFamily.length - 1];
+						const lastIdx = sorted.findIndex(member => member.mention_id === last.mention_id);
+
+						if (headIdx !== -1 && lastIdx !== -1) {
+							// Preceding neighbors
+							const precedingNeighbors = sorted.slice(Math.max(0, headIdx - 5), headIdx)
+								.filter(neighbor => {
+									const nFamId = String(neighbor.family_id || '').trim();
+									return famId === '' ? neighbor.mention_id !== id : nFamId !== famId;
+								});
+
+							// Succeeding neighbors
+							const succeedingNeighbors = sorted.slice(lastIdx + 1, lastIdx + 6)
+								.filter(neighbor => {
+									const nFamId = String(neighbor.family_id || '').trim();
+									return famId === '' ? neighbor.mention_id !== id : nFamId !== famId;
+								});
+
+							const neighbors = [...precedingNeighbors, ...succeedingNeighbors];
+							for (const neighbor of neighbors) {
+								const virtualAssertion = { subject_id: id, predicate: 'isNeighborOf', object_id: neighbor.mention_id, start_year: year, end_year: '' };
+								addResult(this._row(neighbor.mention_id, 'isNeighborOf', 1.0, 'stored', virtualAssertion, null));
+							}
+						}
+					}
+				}
 			}
 		}
 
@@ -236,6 +370,31 @@ class ExpandAssertions {
 	_push(map, key, value) {
 		const list = map.get(key);
 		if (list) list.push(value); else map.set(key, [value]);
+	}
+
+	_getCensusYear(source) {
+		if (!source) return null;
+		const m = source.match(/-(18\d{2})/);
+		return m ? m[1] : null;
+	}
+
+	_parseMentionId(id) {
+		const parts = String(id).split('-');
+		const lineStr = parts[parts.length - 1]; // e.g. "1688" or "1688.1"
+		const num = parseFloat(lineStr);
+		return isNaN(num) ? 0 : num;
+	}
+
+	_getSortedMentions(source) {
+		if (this.sortedMentionsBySource.has(source)) {
+			return this.sortedMentionsBySource.get(source);
+		}
+		const list = this.mentionsBySource.get(source) || [];
+		const sorted = [...list].sort((a, b) => {
+			return this._parseMentionId(a.mention_id) - this._parseMentionId(b.mention_id);
+		});
+		this.sortedMentionsBySource.set(source, sorted);
+		return sorted;
 	}
 }
 

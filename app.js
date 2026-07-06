@@ -438,6 +438,7 @@ class App {
 
 	sourceMatches(mentionSource, targetSources) {
 		if (!mentionSource || !targetSources || targetSources.length === 0) return false;
+		if (targetSources.some(ts => String(ts).toUpperCase() === 'ALL')) return true;
 		let ms = String(mentionSource).toUpperCase().replace(/_/g, '-');
 		let currentCounty = (this.county || 'ALB').toUpperCase();
 
@@ -485,7 +486,6 @@ class App {
 	}
 
 	MakeBlockedMentions(blockingFields, factors, sources) {
-		let i, m;
 		let matchedMentions = [];
 		let activeFactors = {};
 		if (factors) {
@@ -501,41 +501,52 @@ class App {
 			return [];
 		}
 
+		// Optimization: Pre-evaluate source matches to prevent executing expensive string logic millions of times
+		let validSources = new Set();
+		let invalidSources = new Set();
+		const checkSource = (src) => {
+			if (!src) return false;
+			if (validSources.has(src)) return true;
+			if (invalidSources.has(src)) return false;
+			const isValid = this.sourceMatches(src, sources);
+			if (isValid) validSources.add(src);
+			else invalidSources.add(src);
+			return isValid;
+		};
+
+		// Optimization: Pre-process blocking filters outside the 112k iteration loop
+		let targetGen = activeFactors['gender'] !== undefined && activeFactors['gender'] !== null ? String(activeFactors['gender']).charAt(0).toLowerCase() : null;
+		let targetRace = activeFactors['race'] !== undefined && activeFactors['race'] !== null ? String(activeFactors['race']).toLowerCase().trim() : null;
+		let bYearStr = activeFactors['birth_year'] !== undefined && activeFactors['birth_year'] !== null ? String(activeFactors['birth_year']).split(':')[0].split('-')[0] : null;
+		let by = bYearStr ? Number(bYearStr) : NaN;
+
 		for (let m of this.mentions) {
 			// Include only if in the requested sources array
-			if (!this.sourceMatches(m.source, sources)) {
+			if (!checkSource(m.source)) {
 				continue;
 			}
 
 			let matchesAll = true;
 
-			for (let field of Object.keys(activeFactors)) {
-				let val = activeFactors[field];
-				if (val === undefined || val === null) continue;
-
-				if (field === 'gender') {
-					let targetGen = String(val).charAt(0).toLowerCase();
-					let mentionGen = m.gender ? String(m.gender).charAt(0).toLowerCase() : '';
-					if (mentionGen && targetGen !== mentionGen) {
-						matchesAll = false;
-						break;
-					}
-				} else if (field === 'race') {
-					let targetRace = String(val).toLowerCase().trim();
-					let mentionRace = (m.norm_race || m.race || '').toLowerCase().trim();
-					if (mentionRace && targetRace !== mentionRace) {
-						matchesAll = false;
-						break;
-					}
-				} else if (field === 'birth_year') {
-					let bYearStr = String(val).split(':')[0].split('-')[0];
-					let sYearStr = m.source_year ? String(m.source_year).split(':')[0].split('-')[0] : '';
-					let by = Number(bYearStr);
-					let sy = Number(sYearStr);
-					if (isNaN(by) || isNaN(sy) || Math.abs(sy - by) > 75) {
-						matchesAll = false;
-						break;
-					}
+			if (targetGen) {
+				let mentionGen = m.gender ? String(m.gender).charAt(0).toLowerCase() : '';
+				if (mentionGen && targetGen !== mentionGen) {
+					matchesAll = false;
+				}
+			}
+			
+			if (matchesAll && targetRace) {
+				let mentionRace = (m.norm_race || m.race || '').toLowerCase().trim();
+				if (mentionRace && targetRace !== mentionRace) {
+					matchesAll = false;
+				}
+			}
+			
+			if (matchesAll && !isNaN(by)) {
+				let sYearStr = m.source_year ? String(m.source_year).split(':')[0].split('-')[0] : '';
+				let sy = Number(sYearStr);
+				if (isNaN(sy) || Math.abs(sy - by) > 75) {
+					matchesAll = false;
 				}
 			}
 
@@ -621,7 +632,7 @@ class App {
 			window.treeApp.RenderEdges();                      // Draw edges
 			window.treeApp.FitToScreen();                      // Fit viewport
 
-			this.expand = new ExpandAssertions(this.assertions);
+			this.expand = new ExpandAssertions(this.assertions, this.mentions);
 			const { results } = this.expand.viewFor('ALB-CN-1870-1688');
 			results.forEach(r => console.log(r.mention_id, r.predicate, r.confidence));
 

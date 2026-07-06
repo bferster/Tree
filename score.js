@@ -139,6 +139,24 @@ class Score {
 			}
 		}
 
+		// Optimization: Pre-process factor comparison modes to avoid 1.1 million string replacements in the hot loop
+		if (factors) {
+			for (let f of factors) {
+				let compare = f.compare;
+				let isRare = f.rare || false;
+				if (Array.isArray(compare)) {
+					isRare = isRare || compare.includes('rare');
+					f.fcmp = compare.find(x => x !== 'rare') || 'ignore';
+				} else if (typeof compare === 'string' && compare.includes('rare')) {
+					isRare = true;
+					f.fcmp = compare.replace('rare', '').trim();
+				} else {
+					f.fcmp = compare || 'ignore';
+				}
+				f.isRare = isRare;
+			}
+		}
+
 		for (i = 0; i < blockedMentions.length; i++) {
 			mention = blockedMentions[i];
 			if (!mention) continue;
@@ -146,29 +164,35 @@ class Score {
 			let totalScore = 0;
 			let mentionFactors = {};
 
-			// Score the name using the new cascade process (always used for name fields)
-			let nameScore = this.computeCascadeNameScore(mention, factors, personId, mentionFactors);
+			// Score the name using the new cascade process (always used for name fields if smartName is true)
+			let nameScore = 0.0;
+			if (useSmart) {
+				nameScore = this.computeCascadeNameScore(mention, factors, personId, mentionFactors);
 
-			// Apply IMPACT multiplier from first_name factor if set
-			const firstNameFactor = factors.find(f => f.field === 'first_name');
-			if (firstNameFactor) {
-				const impact = firstNameFactor.impact || 0;
-				if (impact > 0) {
+				// Apply IMPACT multiplier from any active name field (max impact wins)
+				let maxImpact = 0;
+				for (let f of factors) {
+					if (this.nameFields.includes(f.field)) {
+						const impact = f.impact || 0;
+						if (Math.abs(impact) > Math.abs(maxImpact)) maxImpact = impact;
+					}
+				}
+				if (maxImpact > 0) {
 					nameScore *= 2;               // Double nameScore for IMPACT +
-				} else if (impact < 0) {
+				} else if (maxImpact < 0) {
 					nameScore *= 0.5;             // Halve nameScore for IMPACT -
 				}
+				totalScore += nameScore;
+				mentionFactors['smartName'] = { value: nameScore };
 			}
-			totalScore += nameScore;
-			mentionFactors['smartName'] = { value: nameScore };
 
 			// Add non-name factor scores
 			for (let f of factors) {			// Map to MentionsEditor FACTOR_LABELS format
-				// Skip name fields since we've already scored them as a unified name signal
-				if (this.nameFields.includes(f.field)) continue;
+				// Skip name fields since we've already scored them as a unified name signal (if smartName is true)
+				if (useSmart && this.nameFields.includes(f.field)) continue;
 
 				// Normalize compare value (may be an array or a string)
-				const fcmp = Array.isArray(f.compare) ? f.compare.find(x => x !== 'rare') || 'ignore' : (f.compare || 'ignore');
+				const fcmp = f.fcmp !== undefined ? f.fcmp : (Array.isArray(f.compare) ? f.compare.find(x => x !== 'rare') || 'ignore' : (f.compare || 'ignore'));
 				if (fcmp === 'ignore') continue;
 				totalScore += f.score;
 
@@ -176,6 +200,16 @@ class Score {
 					mentionFactors['birthYear'] = { value: f.score };
 				} else if (f.field === 'death_year') {
 					mentionFactors['deathYear'] = { value: f.score };
+				} else if (!useSmart && f.field === 'first_name') {
+					mentionFactors[fcmp === 'fuzzy' ? 'fuzzyFirstName' : 'exactFirstName'] = { value: f.score };
+				} else if (!useSmart && f.field === 'last_name') {
+					mentionFactors[fcmp === 'fuzzy' ? 'fuzzyLastName' : 'exactLastName'] = { value: f.score };
+				} else if (!useSmart && f.field === 'nysiis_last_name') {
+					mentionFactors[fcmp === 'fuzzy' ? 'fuzzyNysiisLast' : 'exactNysiisLast'] = { value: f.score };
+				} else if (!useSmart && f.field === 'soundex_last_name') {
+					mentionFactors[fcmp === 'fuzzy' ? 'fuzzySoundexLast' : 'exactSoundexLast'] = { value: f.score };
+				} else if (!this.nameFields.includes(f.field) || !useSmart) {
+					mentionFactors[f.field] = { value: f.score };
 				}
 			}
 
@@ -294,10 +328,12 @@ class Score {
 			? app.curTree.persons.find(x => x.person_id === personId)
 			: app.curTree.persons[personId]) : null;
 
-		const anchorFirst = cleanVal(byField['first_name'] ? byField['first_name'].value : (anchorPerson ? anchorPerson.first_name : ''));
-		const anchorMiddle = cleanVal(byField['middle_name'] ? byField['middle_name'].value : (anchorPerson ? anchorPerson.middle_name : ''));
-		const anchorLast = cleanVal(byField['last_name'] ? byField['last_name'].value : (anchorPerson ? anchorPerson.last_name : ''));
-		const anchorGender = cleanVal(byField['gender'] ? byField['gender'].value : (anchorPerson ? anchorPerson.gender : ''));
+		const fallback = (factors == null);
+
+		const anchorFirst = cleanVal(byField['first_name'] ? byField['first_name'].value : (fallback && anchorPerson ? anchorPerson.first_name : ''));
+		const anchorMiddle = cleanVal(byField['middle_name'] ? byField['middle_name'].value : (fallback && anchorPerson ? anchorPerson.middle_name : ''));
+		const anchorLast = cleanVal(byField['last_name'] ? byField['last_name'].value : (fallback && anchorPerson ? anchorPerson.last_name : ''));
+		const anchorGender = cleanVal(byField['gender'] ? byField['gender'].value : (fallback && anchorPerson ? anchorPerson.gender : ''));
 
 		const candidateFirst = cleanVal(mention.first_name);
 		const candidateMiddle = cleanVal(mention.middle_name);
@@ -307,11 +343,20 @@ class Score {
 		// Resolve surname match
 		let surnameMatch = false;
 
-		// 1. candidate full_name equals anchor full_name
-		const candidateFullName = cleanVal(mention.full_name);
-		const anchorFullName = cleanVal(anchorPerson ? anchorPerson.full_name : (byField['full_name'] ? byField['full_name'].value : ''));
-		if (candidateFullName && anchorFullName && candidateFullName === anchorFullName) {
+		const lastFactor = byField['last_name'];
+		const lastIgnored = !lastFactor || !lastFactor.value || lastFactor.compare === 'ignore';
+
+		if (lastIgnored) {
 			surnameMatch = true;
+		}
+
+		// 1. candidate full_name equals anchor full_name
+		if (!surnameMatch) {
+			const candidateFullName = cleanVal(mention.full_name);
+			const anchorFullName = cleanVal(fallback && anchorPerson ? anchorPerson.full_name : (byField['full_name'] ? byField['full_name'].value : ''));
+			if (candidateFullName && anchorFullName && candidateFullName === anchorFullName) {
+				surnameMatch = true;
+			}
 		}
 
 		// 2. candidate last_name equals anchor last_name (exact, alias via hasNameVariant, or phonetics)
@@ -369,8 +414,16 @@ class Score {
 		const jwScore = this.JaroWinkler(anchorFirst, candidateFirst);
 
 		if (surnameMatch) {
+			if (!anchorFirst) {
+				// Surname match, but no first name to compare
+				nameScore = anchorLast ? 1.0 : 0.0;
+				rungFired = anchorLast ? "surname_only" : "no_name_searched";
+				if (mentionFactors && anchorLast) {
+					mentionFactors['exactLastName'] = { value: 1.0 };
+				}
+			}
 			// exact first + surname-match
-			if (candidateFirst && anchorFirst && candidateFirst === anchorFirst) {
+			else if (candidateFirst && anchorFirst && candidateFirst === anchorFirst) {
 				if (candidateMiddle && anchorMiddle && candidateMiddle === anchorMiddle) {
 					nameScore = 1.0;
 				} else {
@@ -426,9 +479,9 @@ class Score {
 					let leverB = false; // Date match (differ by <= 5 years)
 					let leverC = false; // Household/family match
 
-					const anchorBirth = cleanVal(byField['birth_year'] ? byField['birth_year'].value : (anchorPerson ? anchorPerson.birth_year : ''));
+					const anchorBirth = cleanVal(byField['birth_year'] ? byField['birth_year'].value : (fallback && anchorPerson ? anchorPerson.birth_year : ''));
 					const candidateBirth = cleanVal(mention.birth_year);
-					const anchorDeath = cleanVal(byField['death_year'] ? byField['death_year'].value : (anchorPerson ? anchorPerson.death_year : ''));
+					const anchorDeath = cleanVal(byField['death_year'] ? byField['death_year'].value : (fallback && anchorPerson ? anchorPerson.death_year : ''));
 					const candidateDeath = cleanVal(mention.death_year);
 
 					if (anchorBirth && candidateBirth && Math.abs(parseFloat(anchorBirth) - parseFloat(candidateBirth)) <= 5) {
@@ -484,7 +537,7 @@ class Score {
 		// Gender conditioning: woman surname match distinctive bonus
 		if (isFemale && surnameMatch && nameScore > 0.0) {
 			let diffSurnameExpected = false;
-			const anchorLastName = cleanVal(byField['last_name'] ? byField['last_name'].value : (anchorPerson ? anchorPerson.last_name : ''));
+			const anchorLastName = cleanVal(byField['last_name'] ? byField['last_name'].value : (fallback && anchorPerson ? anchorPerson.last_name : ''));
 			if (!diffSurnameExpected && personId) {
 				const spouseRels = app.curTree.relationships.filter(r => r.predicate === 'isSpouseOf' && (r.subject_id === personId || r.object_id === personId));
 				for (let r of spouseRels) {
@@ -546,9 +599,11 @@ class Score {
 		const byField = {};
 		for (let f of factors) byField[f.field] = f;
 
+		const fallback = (factors == null);
+
 		const getVal = (field) => {
 			let v = byField[field] ? byField[field].value : null;
-			if (!v && anchorPerson) v = anchorPerson[field];
+			if (!v && fallback && anchorPerson) v = anchorPerson[field];
 			return cleanVal(v);
 		};
 
@@ -624,19 +679,22 @@ class Score {
 
 		for (let factor of factors) {                         	 // Loop remaining factors
 			let field = factor.field;                            // Get field
-			if (this.nameFields.includes(field)) {
+			if (smartName && this.nameFields.includes(field)) {
 				factor.score = 0.0;
 				continue;
 			}
-			let compare = factor.compare;                        // Get compare mode
-
-			let isRare = factor.rare || false;                   // Init rare flag
-			if (Array.isArray(compare)) {                        // If array
-				isRare = isRare || compare.includes('rare');     // Check rare
-				compare = compare.find(x => x !== 'rare');       // Extract true mode
-			} else if (typeof compare === 'string' && compare.includes('rare')) { // If string contains rare
-				isRare = true;                                   // Set rare
-				compare = compare.replace('rare', '').trim();    // Strip rare
+			let compare = factor.fcmp !== undefined ? factor.fcmp : factor.compare; // Get compare mode
+			let isRare = factor.isRare !== undefined ? factor.isRare : (factor.rare || false); // Init rare flag
+			
+			if (factor.fcmp === undefined) {
+				// Fallback if not pre-processed
+				if (Array.isArray(compare)) {                        // If array
+					isRare = isRare || compare.includes('rare');     // Check rare
+					compare = compare.find(x => x !== 'rare');       // Extract true mode
+				} else if (typeof compare === 'string' && compare.includes('rare')) { // If string contains rare
+					isRare = true;                                   // Set rare
+					compare = compare.replace('rare', '').trim();    // Strip rare
+				}
 			}
 
 			if (this.skipFields.has(field)) continue;            // Skip if blocked
@@ -686,8 +744,15 @@ class Score {
 		s2 = s2.toLowerCase();                                   // Lowercase s2
 		if (s1 == s2) return 1.0;                                // Exact match
 		let matchDistance = Math.floor(Math.max(s1.length, s2.length) / 2) - 1; // Match distance
-		let s1Matches = new Array(s1.length).fill(false);        // Init s1 matches
-		let s2Matches = new Array(s2.length).fill(false);        // Init s2 matches
+		
+		// Optimization: Reuse pre-allocated arrays to eliminate 672,000 GC allocations
+		if (!this._jwM1) this._jwM1 = new Array(256);
+		if (!this._jwM2) this._jwM2 = new Array(256);
+		for (let i = 0; i < s1.length; i++) this._jwM1[i] = false;
+		for (let j = 0; j < s2.length; j++) this._jwM2[j] = false;
+		let s1Matches = this._jwM1;
+		let s2Matches = this._jwM2;
+		
 		let matches = 0;                                         // Match count
 
 		for (let i = 0; i < s1.length; ++i) {                    // Loop s1

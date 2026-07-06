@@ -893,6 +893,7 @@ class PersonEditor {
 		$wrap.empty();
 
 		const sourceOptions = [
+			{ label: 'All sources', value: 'ALL' },
 			{ label: '1870 Census', value: 'CN-1870' },
 			{ label: '1880 Census', value: 'CN-1880' },
 			{ label: '1860 Slave Schedule', value: 'SS-1860' },
@@ -907,14 +908,21 @@ class PersonEditor {
 		];
 
 		const ids = Object.keys(state.sources);
-		let selectedId = ids.find(id => state.sources[id].checked) || '';
+		const allChecked = ids.length > 0 && ids.every(id => state.sources[id].checked);
+		let matchId = '';
 
-		// Attempt to match selectedId even if it has a county prefix like 'ALB-CN-1880'
-		let matchId = selectedId;
-		if (selectedId && selectedId.includes('-') && !sourceOptions.some(opt => opt.value === selectedId)) {
-			let suffix = selectedId.substring(selectedId.indexOf('-') + 1);
-			if (sourceOptions.some(opt => opt.value === suffix)) {
-				matchId = suffix;
+		if (window.app && window.app.source === 'ALL') {
+			matchId = 'ALL';
+		} else if (allChecked) {
+			matchId = 'ALL';
+		} else {
+			let selectedId = ids.find(id => state.sources[id].checked) || '';
+			matchId = selectedId;
+			if (selectedId && selectedId.includes('-') && !sourceOptions.some(opt => opt.value === selectedId)) {
+				let suffix = selectedId.substring(selectedId.indexOf('-') + 1);
+				if (sourceOptions.some(opt => opt.value === suffix)) {
+					matchId = suffix;
+				}
 			}
 		}
 
