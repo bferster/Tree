@@ -271,6 +271,9 @@ class MentionsEditor {
 		this.contextBtn.addEventListener('click', () => {
 			if (typeof ShowSource === 'function') {
 				ShowSource(this.currentMentionId);
+			} else {
+				// Fallback: switch to Context tab
+				$('#right-panel-content .tab-btn[data-target="sources-editor-container"]').click();
 			}
 		});
 	}
@@ -302,7 +305,7 @@ class MentionsEditor {
 		this.listEl.innerHTML = matchesToRender.map(match => {
 			const m = match.mention;
 			const active = m.mention_id === this.currentMentionId;
-			const sourceLabel = `${m.source_type || ''}${m.source_year ? ' ' + m.source_year : ''}`;
+			const sourceLabel = `${m.source_type || ''}`;
 			const mid = m.middle_name ? ` ${m.middle_name}` : '';
 			return `
         <div class="me-match-item ${active ? 'me-active' : ''}" data-id="${m.mention_id}">

@@ -726,6 +726,7 @@ class PersonEditor {
 				if (view && view.results) {
 					view.results.forEach(res => {
 						if (res.predicate === 'isNeighborOf' || res.predicate === 'inFamilyOf' || res.predicate === 'inHouseholdOf') return;
+						if (person.mentions.includes(res.mention_id)) return; // Don't list as a relative if already merged into this person
 						const key = `${res.predicate}|${res.mention_id}`;
 						uniqueRelsMap.set(key, {
 							predicate: res.predicate,
@@ -774,7 +775,8 @@ class PersonEditor {
 			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)} - ${pred}</option>`);
 		});
 
-		$sel.on('change', function () {
+		$sel.on('change', function (e) {
+			e.stopPropagation(); // Prevent bubbling to #person-editor-container's change handler
 			const val = $(this).val();
 			if (val && val.startsWith('rel_')) {
 				const idx = parseInt(val.split('_')[1], 10);

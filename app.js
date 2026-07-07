@@ -437,10 +437,8 @@ class App {
 	}
 
 	editMention(mentionId) {
-		if (!this.curTree || !this.curTree.persons) return;
-		
 		const startId = String(mentionId || '').trim();
-		if (!startId) return;
+		if (!startId || !this.mentionsEditor) return;
 
 		// Find all equivalents of startId via isSameAs transitive closure
 		const equivalents = new Set([startId]);
@@ -469,15 +467,13 @@ class App {
 			}
 		}
 
-		const person = this.curTree.persons.find(p => p.mentions && p.mentions.some(m => equivalents.has(String(m).trim())));
-		if (person) {
-			this.selectNodeAndShowEditor(person.person_id, 'mentions-editor-container');
-			if (this.mentionsEditor) {
-				this.mentionsEditor.currentMentionId = startId;
-				this.mentionsEditor._renderList();
-				this.mentionsEditor._renderDetail();
-			}
-		}
+		// Look up the mention from the global mentions dataset only
+		const mention = this.mentions.find(m => equivalents.has(String(m.mention_id).trim()));
+		if (!mention) return;
+
+		// Switch to Mentions tab and load this mention directly
+		$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
+		this.mentionsEditor.load(null, [], [mention]);
 	}
 
 	sourceMatches(mentionSource, targetSources) {
