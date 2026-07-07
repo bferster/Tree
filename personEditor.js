@@ -717,38 +717,61 @@ class PersonEditor {
 	/* ----- linked people row ----- */
 	static renderLinkedRow(person, cfg) {
 		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS.linked_persons];
-		const linked = person.linked_persons || [];
-
-		const rels = (window.app && window.app.curTree)
-			? window.app.curTree.relationships.filter(r => r.subject_id === person.person_id)
-			: [];
+		
+		let rels = [];
+		if (window.app && window.app.expand && person.mentions) {
+			const uniqueRelsMap = new Map();
+			person.mentions.forEach(mid => {
+				const view = window.app.expand.viewFor(mid);
+				if (view && view.results) {
+					view.results.forEach(res => {
+						if (res.predicate === 'isNeighborOf' || res.predicate === 'inFamilyOf' || res.predicate === 'inHouseholdOf') return;
+						const key = `${res.predicate}|${res.mention_id}`;
+						uniqueRelsMap.set(key, {
+							predicate: res.predicate,
+							target_mention: res.mention_id
+						});
+					});
+				}
+			});
+			rels = Array.from(uniqueRelsMap.values());
+		}
 
 		const $row = $(`<div class="vpe-row vpe-row-linked"></div>`);
 		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
 
 		const $val = $(`<div class="vpe-value-pill" style="position: relative; background:${ramp_[0]}"></div>`);
-		const totalLinked = linked.length + rels.length;
+		const totalLinked = rels.length;
 		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${ramp_[1]}">${totalLinked} linked ${totalLinked === 1 ? 'person' : 'people'}</span>`);
 		$val.append($chip);
 
 		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"><option value="" selected disabled>Select to jump...</option></select>`);
-		linked.forEach((p, i) => {
-			$sel.append(`<option value="${i}" disabled style="color:${ramp_[1]}">${PersonEditor.escapeHtml(p.value)} (${PersonEditor.escapeHtml(p.source)})</option>`);
-		});
 		rels.forEach((r, i) => {
-			const objPerson = Array.isArray(window.app.curTree.persons) ? window.app.curTree.persons.find(p => p.person_id === r.object_id) : window.app.curTree.persons[r.object_id];
-			const fname = objPerson ? (objPerson.first_name || '').split(':')[0] : '';
-			const lname = objPerson ? (objPerson.last_name || '').split(':')[0] : '';
-			const linkedName = `${fname} ${lname}`.trim() || r.object_id;
+			let linkedName = `Mention ${r.target_mention}`;
+			if (window.app && window.app.expand && window.app.expand.mentionsMap) {
+				const m = window.app.expand.mentionsMap.get(r.target_mention);
+				if (m) {
+					linkedName = `${(m.first_name || '').split(':')[0]} ${(m.last_name || '').split(':')[0]}`.trim();
+				}
+			}
+			if (!linkedName) linkedName = r.target_mention;
 
-			const pFname = (person.first_name || '').split(':')[0];
-			const pLname = (person.last_name || '').split(':')[0];
-			const pFullName = `${pFname} ${pLname}`.trim();
+			const predLabelMap = {
+				'isChildOf': 'PARENT',
+				'isParentOf': 'CHILD',
+				'isSiblingOf': 'SIBLING',
+				'isSpouseOf': 'SPOUSE',
+				'inHouseholdOf': 'HOUSEMATE',
+				'isCousinOf': 'COUSIN'
+			};
+			let predRaw = predLabelMap[r.predicate];
+			if (!predRaw) {
+				predRaw = r.predicate.replace(/^is/, '').replace(/Of$/, '').replace(/^in/, '').toUpperCase();
+			}
 
-			const predRaw = r.predicate.replace(/^is/, '').replace(/Of$/, '').toUpperCase();
 			const toBoldMap = { 'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭' };
 			const pred = predRaw.split('').map(c => toBoldMap[c] || c).join('');
-			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(pFullName)} is ${pred} of ${PersonEditor.escapeHtml(linkedName)}</option>`);
+			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)} - ${pred}</option>`);
 		});
 
 		$sel.on('change', function () {
@@ -756,8 +779,8 @@ class PersonEditor {
 			if (val && val.startsWith('rel_')) {
 				const idx = parseInt(val.split('_')[1], 10);
 				const rel = rels[idx];
-				if (rel && window.app && typeof window.app.selectNodeAndShowEditor === 'function') {
-					window.app.selectNodeAndShowEditor(rel.object_id);
+				if (rel && rel.target_mention && window.app && typeof window.app.editMention === 'function') {
+					window.app.editMention(rel.target_mention);
 				}
 				$(this).val(''); // Reset
 			}

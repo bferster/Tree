@@ -544,12 +544,8 @@ class MentionsEditor {
 			el.addEventListener('click', (e) => {
 				const id = e.currentTarget.getAttribute('data-id');
 				const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
-				if (globalApp && globalApp.mentions) {
-					const fMention = globalApp.mentions.find(m => m.mention_id === id);
-					if (fMention) {
-						// Load the clicked family member into the mentions editor as the only result
-						this.load(this.targetPerson, this.sources, [fMention], null);
-					}
+				if (globalApp && typeof globalApp.editMention === 'function') {
+					globalApp.editMention(id);
 				}
 			});
 		});

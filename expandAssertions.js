@@ -35,6 +35,15 @@ class ExpandAssertions {
 		ishusbandof: 'isSpouseOf', iswifeof: 'isSpouseOf',
 	};
 
+	static CENSUS_RELATION_MAP = {
+		'son': 'isChildOf', 'daughter': 'isChildOf', 'child': 'isChildOf',
+		'father': 'isParentOf', 'mother': 'isParentOf', 'parent': 'isParentOf',
+		'brother': 'isSiblingOf', 'sister': 'isSiblingOf', 'sibling': 'isSiblingOf',
+		'wife': 'isSpouseOf', 'husband': 'isSpouseOf', 'spouse': 'isSpouseOf',
+		'stepson': 'isChildOf', 'stepdaughter': 'isChildOf',
+		'halfson': 'isChildOf', 'halfdaughter': 'isChildOf'
+	};
+
 	constructor(assertions, mentions = []) {
 		this.mentionsMap = new Map();
 		this.mentionsBySource = new Map();
@@ -52,14 +61,14 @@ class ExpandAssertions {
 				this.mentionsBySource.get(src).push(m);
 
 				const famId = String(m.family_id || '').trim();
-				if (famId) {
+				if (famId && famId.toLowerCase() !== 'null' && famId.toLowerCase() !== 'undefined') {
 					const famKey = `${src}|${famId}`;
 					if (!this.mentionsByFamily.has(famKey)) this.mentionsByFamily.set(famKey, []);
 					this.mentionsByFamily.get(famKey).push(m);
 				}
 
 				const houseId = String(m.household_id || '').trim();
-				if (houseId) {
+				if (houseId && houseId.toLowerCase() !== 'null' && houseId.toLowerCase() !== 'undefined') {
 					const houseKey = `${src}|${houseId}`;
 					if (!this.mentionsByHousehold.has(houseKey)) this.mentionsByHousehold.set(houseKey, []);
 					this.mentionsByHousehold.get(houseKey).push(m);
@@ -79,8 +88,39 @@ class ExpandAssertions {
 		this.spouses = new Map(); // person_id -> [{other, edge}]
 		this._directPairs = new Set();     // "lo|predicate|hi" for composed-duplicate suppression
 
-		for (const a of assertions) {
-			const predicate = this._canon.get(String(a.predicate || '').trim().toLowerCase());
+		const allAssertions = [...assertions];
+		for (const [famKey, members] of this.mentionsByFamily.entries()) {
+			if (famKey.includes('CN-1880')) {
+				let head = members.find(m => m.head === true || String(m.head || '').trim().toLowerCase() === 't' || String(m.head || '').trim().toLowerCase() === 'y' || (m.original_data && String(m.original_data.head || '').trim().toLowerCase() === 'y'));
+				if (!head) head = members.find(m => {
+					const rel = m.original_data ? m.original_data.relation : m.relation;
+					const rStr = String(rel || '').trim().toLowerCase();
+					return rStr === 'head' || rStr === 'self';
+				});
+				
+				if (head) {
+					for (const m of members) {
+						if (m.mention_id !== head.mention_id) {
+							const rel = m.original_data ? m.original_data.relation : m.relation;
+							const rawRel = String(rel || '').trim().toLowerCase().replace(/[-\s]+/g, '');
+							const pred = ExpandAssertions.CENSUS_RELATION_MAP[rawRel];
+							if (pred) {
+								allAssertions.push({
+									subject_id: m.mention_id,
+									predicate: pred,
+									object_id: head.mention_id,
+									confidence: 1.0
+								});
+							}
+						}
+					}
+				}
+			}
+		}
+
+		for (const a of allAssertions) {
+			const rawPred = String(a.predicate || '').toLowerCase().replace(/\s+/g, '');
+			const predicate = this._canon.get(rawPred);
 			if (!predicate) continue; // out of scope: excluded entirely
 
 			const subject_id = String(a.subject_id || '').trim();
@@ -151,20 +191,23 @@ class ExpandAssertions {
 			// 1. Stored readings: mention is the subject.
 			for (const { assertion: a, predicate } of this.bySubject.get(id) || []) {
 				if (predicate === 'isSameAs' || predicate === 'isNotSameAs') continue;
-				addResult(this._row(a.object_id, predicate, a.confidence, 'stored', a, null));
+				const obj = String(a.object_id).trim();
+				addResult(this._row(obj, predicate, a.confidence, 'stored', a, null));
 			}
 
 			// 2. Reciprocal readings: mention is the object; invert via registry.
 			for (const { assertion: a, predicate } of this.byObject.get(id) || []) {
 				const inverse = ExpandAssertions.REGISTRY[predicate].inverse;
 				if (inverse === 'isSameAs' || inverse === 'isNotSameAs') continue;
-				addResult(this._row(a.subject_id, inverse, a.confidence, 'derived', a, [a]));
+				const sub = String(a.subject_id).trim();
+				addResult(this._row(sub, inverse, a.confidence, 'derived', a, [a]));
 			}
 
 			// 3. Entailed readings: yields column, subject side only.
 			for (const { assertion: a, predicate } of this.bySubject.get(id) || []) {
 				const yields = ExpandAssertions.REGISTRY[predicate].yields;
-				if (yields) addResult(this._row(a.object_id, yields, a.confidence, 'entailed', a, [a]));
+				const obj = String(a.object_id).trim();
+				if (yields) addResult(this._row(obj, yields, a.confidence, 'entailed', a, [a]));
 			}
 		}
 
@@ -180,9 +223,11 @@ class ExpandAssertions {
 				if (isCensus || isSlaveSchedule) {
 					const famId = String(m.family_id || '').trim();
 					const houseId = String(m.household_id || '').trim();
+					const hasFam = famId && famId.toLowerCase() !== 'null' && famId.toLowerCase() !== 'undefined';
+					const hasHouse = houseId && houseId.toLowerCase() !== 'null' && houseId.toLowerCase() !== 'undefined';
 
 					// 1. inFamilyOf (CN-1870, CN-1880)
-					if (isCensus && famId) {
+					if (isCensus && hasFam) {
 						const famKey = `${source}|${famId}`;
 						const members = this.mentionsByFamily.get(famKey) || [];
 						for (const member of members) {
@@ -197,7 +242,7 @@ class ExpandAssertions {
 					// - 1870: same household_id
 					// - 1880: same family_id
 					// - 1850/1860 slave schedule: same household_id
-					if (source.includes('CN-1870') && houseId) {
+					if (source.includes('CN-1870') && hasHouse) {
 						const houseKey = `${source}|${houseId}`;
 						const members = this.mentionsByHousehold.get(houseKey) || [];
 						for (const member of members) {
@@ -206,7 +251,7 @@ class ExpandAssertions {
 								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
 							}
 						}
-					} else if (source.includes('CN-1880') && famId) {
+					} else if (source.includes('CN-1880') && hasFam) {
 						const famKey = `${source}|${famId}`;
 						const members = this.mentionsByFamily.get(famKey) || [];
 						for (const member of members) {
@@ -215,7 +260,7 @@ class ExpandAssertions {
 								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
 							}
 						}
-					} else if (isSlaveSchedule && houseId) {
+					} else if (isSlaveSchedule && hasHouse) {
 						const houseKey = `${source}|${houseId}`;
 						const members = this.mentionsByHousehold.get(houseKey) || [];
 						for (const member of members) {
@@ -291,6 +336,28 @@ class ExpandAssertions {
 			}
 		}
 
+		// C1b: child via spouse (current is spouse of parent, so current is parent of child)
+		const spouseEdges = [];
+		for (const id of equivalents) {
+			spouseEdges.push(...(this.spouses.get(id) || []));
+		}
+
+		for (const { other: spouse, edge: se } of spouseEdges) {
+			for (const { child, edge: ce } of this.childrenByParent.get(spouse) || []) {
+				if (equivalents.has(child)) continue; // A != C
+				
+				let hasDirect = false;
+				for (const eqId of equivalents) {
+					if (this._directPairs.has(this._pairKey(eqId, 'isParentOf', child, false))) {
+						hasDirect = true;
+						break;
+					}
+				}
+				if (hasDirect) continue;
+				addResult(this._composedRow(child, 'isParentOf', se, ce, 'C1b'));
+			}
+		}
+
 		// C2: siblings via a shared parent (half-siblings included).
 		const seenSiblings = new Set();
 		for (const { parent, edge: pe } of parentEdges) {
@@ -306,10 +373,42 @@ class ExpandAssertions {
 					}
 				}
 				if (hasDirect) continue;
-				if (String(trimmedId) >= String(sib)) continue; // C2 emits each sibling pair once, with the lower mention_id as subject
 				addResult(this._composedRow(sib, 'isSiblingOf', pe, ce, 'C2'));
 			}
 		}
+
+		// Group results by target mention_id to resolve child/parent direction conflicts
+		const byMention = new Map();
+		for (const r of results) {
+			if (!byMention.has(r.mention_id)) byMention.set(r.mention_id, []);
+			byMention.get(r.mention_id).push(r);
+		}
+
+		const filteredResults = [];
+		for (const [targetId, rows] of byMention.entries()) {
+			const hasChild = rows.some(r => r.predicate === 'isChildOf');
+			const hasParent = rows.some(r => r.predicate === 'isParentOf');
+			if (hasChild && hasParent) {
+				const me = this.mentionsMap.get(trimmedId);
+				const target = this.mentionsMap.get(targetId);
+				const myBY = this._getBirthYear(me);
+				const targetBY = this._getBirthYear(target);
+
+				if (myBY !== null && targetBY !== null && myBY !== targetBY) {
+					if (myBY < targetBY) {
+						// I am older (the parent). Target is the child.
+						filteredResults.push(...rows.filter(r => r.predicate !== 'isChildOf'));
+					} else {
+						// I am younger (the child). Target is the parent.
+						filteredResults.push(...rows.filter(r => r.predicate !== 'isParentOf'));
+					}
+					continue;
+				}
+			}
+			filteredResults.push(...rows);
+		}
+		results.length = 0;
+		results.push(...filteredResults);
 
 		// Ordering: stored, derived, entailed, composed; then predicate, then mention_id.
 		const rank = { stored: 0, derived: 1, entailed: 2, composed: 3 };
@@ -395,6 +494,18 @@ class ExpandAssertions {
 		});
 		this.sortedMentionsBySource.set(source, sorted);
 		return sorted;
+	}
+
+	_getBirthYear(m) {
+		if (!m) return null;
+		let by = m.birth_year;
+		if (!by && m.original_data) by = m.original_data.birth_year;
+		if (!by && m.original_data) {
+			const age = parseInt(m.original_data.age, 10);
+			if (!isNaN(age)) by = 1880 - age;
+		}
+		const parsed = parseInt(by, 10);
+		return isNaN(parsed) ? null : parsed;
 	}
 }
 

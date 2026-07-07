@@ -436,6 +436,50 @@ class App {
 		}
 	}
 
+	editMention(mentionId) {
+		if (!this.curTree || !this.curTree.persons) return;
+		
+		const startId = String(mentionId || '').trim();
+		if (!startId) return;
+
+		// Find all equivalents of startId via isSameAs transitive closure
+		const equivalents = new Set([startId]);
+		if (this.expand) {
+			const queue = [startId];
+			while (queue.length > 0) {
+				const current = queue.shift();
+				for (const { assertion: a, predicate } of this.expand.bySubject.get(current) || []) {
+					if (predicate === 'isSameAs') {
+						const obj = String(a.object_id).trim();
+						if (!equivalents.has(obj)) {
+							equivalents.add(obj);
+							queue.push(obj);
+						}
+					}
+				}
+				for (const { assertion: a, predicate } of this.expand.byObject.get(current) || []) {
+					if (predicate === 'isSameAs') {
+						const sub = String(a.subject_id).trim();
+						if (!equivalents.has(sub)) {
+							equivalents.add(sub);
+							queue.push(sub);
+						}
+					}
+				}
+			}
+		}
+
+		const person = this.curTree.persons.find(p => p.mentions && p.mentions.some(m => equivalents.has(String(m).trim())));
+		if (person) {
+			this.selectNodeAndShowEditor(person.person_id, 'mentions-editor-container');
+			if (this.mentionsEditor) {
+				this.mentionsEditor.currentMentionId = startId;
+				this.mentionsEditor._renderList();
+				this.mentionsEditor._renderDetail();
+			}
+		}
+	}
+
 	sourceMatches(mentionSource, targetSources) {
 		if (!mentionSource || !targetSources || targetSources.length === 0) return false;
 		if (targetSources.some(ts => String(ts).toUpperCase() === 'ALL')) return true;
@@ -534,14 +578,14 @@ class App {
 					matchesAll = false;
 				}
 			}
-			
+
 			if (matchesAll && targetRace) {
 				let mentionRace = (m.norm_race || m.race || '').toLowerCase().trim();
 				if (mentionRace && targetRace !== mentionRace) {
 					matchesAll = false;
 				}
 			}
-			
+
 			if (matchesAll && !isNaN(by)) {
 				let sYearStr = m.source_year ? String(m.source_year).split(':')[0].split('-')[0] : '';
 				let sy = Number(sYearStr);
@@ -633,8 +677,8 @@ class App {
 			window.treeApp.FitToScreen();                      // Fit viewport
 
 			this.expand = new ExpandAssertions(this.assertions, this.mentions);
-			const { results } = this.expand.viewFor('ALB-CN-1870-1688');
-			results.forEach(r => console.log(r.mention_id, r.predicate, r.confidence));
+			//const { results } = this.expand.viewFor('ALB-CN-1870-1688');
+			//results.forEach(r => console.log(r.mention_id, r.predicate, r.confidence));
 
 		}
 
