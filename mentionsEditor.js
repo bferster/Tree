@@ -251,6 +251,7 @@ class MentionsEditor {
           <div class="me-detail-panel"></div>
         </div>
         <div class="me-footer">
+          <button type="button" class="me-context-btn" disabled>See context</button>
           <div class="me-verity-container"></div>
           <button type="button" class="me-add-btn" disabled>Add to person</button>
         </div>
@@ -264,8 +265,14 @@ class MentionsEditor {
 		this.targetSummaryEl = this.container.querySelector('.me-target-summary');
 		this.verityEl = this.container.querySelector('.me-verity-container');
 		this.addBtn = this.container.querySelector('.me-add-btn');
+		this.contextBtn = this.container.querySelector('.me-context-btn');
 
 		this.addBtn.addEventListener('click', () => this._handleAdd());
+		this.contextBtn.addEventListener('click', () => {
+			if (typeof ShowSource === 'function') {
+				ShowSource(this.currentMentionId);
+			}
+		});
 	}
 
 	_renderList() {
@@ -330,10 +337,12 @@ class MentionsEditor {
 			this.detailEl.innerHTML = `<div class="me-empty">Select a mention to view details.</div>`;
 			this.verityEl.innerHTML = '';
 			this.addBtn.disabled = true;
+			if (this.contextBtn) this.contextBtn.disabled = true;
 			return;
 		}
 
 		this.addBtn.disabled = false;
+		if (this.contextBtn) this.contextBtn.disabled = false;
 		if (this.isSearchResult) {
 			this.addBtn.textContent = "Add to person";
 		} else {
