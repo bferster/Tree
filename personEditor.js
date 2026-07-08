@@ -316,9 +316,14 @@ class PersonEditor {
 
 			let found = -1;
 			if (canonical != null && canonical !== '') {
-				const getBase = (s) => String(s).split(':')[0].trim().toUpperCase();
-				const canBase = getBase(canonical);
-				found = options.findIndex(o => getBase(o.value) === canBase);
+				const exactIdx = options.findIndex(o => o.value === canonical);
+				if (exactIdx >= 0) {
+					found = exactIdx;
+				} else {
+					const getBase = (s) => String(s).split(':')[0].trim().toUpperCase();
+					const canBase = getBase(canonical);
+					found = options.findIndex(o => getBase(o.value) === canBase);
+				}
 			}
 			if (found >= 0) selectedIdx = found;
 
@@ -376,10 +381,11 @@ class PersonEditor {
 		const lname = (person.last_name || '').split(':')[0];
 		const byear = person.birth_year ? String(person.birth_year).split(':')[0] : '?';
 		const dyear = person.death_year ? String(person.death_year).split(':')[0] : '?';
+		const yearStr = person.death_year ? `(${PersonEditor.escapeHtml(byear)} - ${PersonEditor.escapeHtml(dyear)})` : `(${PersonEditor.escapeHtml(byear)})`;
 		$dialog.append(`
       <div class="vpe-header">
         <div>
-          <p class="vpe-target-summary">${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} &nbsp;&nbsp;(${PersonEditor.escapeHtml(byear)} - ${PersonEditor.escapeHtml(dyear)})</p>
+          <p class="vpe-target-summary">${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} &nbsp;&nbsp;${yearStr}</p>
         </div>
         <i class="ti ti-x vpe-close" aria-label="Close"></i>
       </div>
@@ -537,6 +543,11 @@ class PersonEditor {
 			$sel.append(`<option value="-1" ${isNull ? 'selected' : ''} style="color:${ramp_[1]}">Make blank</option>`);
 			if (cfg.editKind === 'free') {
 				$sel.append(`<option value="addtext" style="color:${ramp_[1]}">Add text</option>`);
+				$sel.on('dblclick', function(e) {
+					e.stopPropagation();
+					fstate.editing = true;
+					$row.trigger('vpe:changed');
+				});
 			}
 			$sel.on('change', function () {
 				const v = $(this).val();
@@ -782,6 +793,7 @@ class PersonEditor {
 				const idx = parseInt(val.split('_')[1], 10);
 				const rel = rels[idx];
 				if (rel && rel.target_mention && window.app && typeof window.app.editMention === 'function') {
+					window.app.curRelation = rel.predicate;
 					window.app.editMention(rel.target_mention);
 				}
 				$(this).val(''); // Reset
@@ -820,6 +832,23 @@ class PersonEditor {
 				const fs = state.fields[k];
 				person[k] = (fs && fs.selected >= 0 && fs.options[fs.selected]) ? fs.options[fs.selected].value : null;
 			});
+
+			// Update the tree node
+			if (window.treeApp) {
+				const node = window.treeApp.GetNode(person.person_id);
+				if (node) {
+					Object.assign(node, person);
+					window.treeApp.RenderNodes();
+				}
+			}
+
+			// Update the person editor header
+			const fname = (person.first_name || '').split(':')[0];
+			const lname = (person.last_name || '').split(':')[0];
+			const byear = person.birth_year ? String(person.birth_year).split(':')[0] : '?';
+			const dyear = person.death_year ? String(person.death_year).split(':')[0] : '?';
+			const yearStr = person.death_year ? `(${PersonEditor.escapeHtml(byear)} - ${PersonEditor.escapeHtml(dyear)})` : `(${PersonEditor.escapeHtml(byear)})`;
+			$row.closest('.vpe-dialog').find('.vpe-target-summary').html(`${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} &nbsp;&nbsp;${yearStr}`);
 
 			$row.closest('.vpe-factors').trigger('vpe:rerender');
 		});

@@ -22,14 +22,6 @@ class App {
 			],
 			relationships: []
 		};
-
-		for (i = 0; i < this.curTree.persons.length; i++) {
-			o = this.curTree.persons[i];
-			if (o.anchor) {
-				this.addRelationship(o.person_id, o.anchor.split(":")[0], o.anchor.split(":")[1]);
-			}
-		}
-
 		this.init();
 	}
 
@@ -40,118 +32,58 @@ class App {
 	}
 
 
-	addRelationship(subject_id, predicate, object_id)          // ADD RELATIONSHIP
+	rebuildAllRelationships()                                  // REBUILD FROM ExpandAssertions
 	{
-		const inverseMap = {
-			'isParentOf': 'isChildOf',
-			'isChildOf': 'isParentOf',
-			'isSpouseOf': 'isSpouseOf',
-			'isSiblingOf': 'isSiblingOf',
-			'isCousinOf': 'isCousinOf',
-			'isNiblingOf': 'isNiblingOf',
-		};
+		const mentionToPerson = new Map();
+		const persons = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons);
 
-		// Add direct
-		let added = false;
-		if (!this.curTree.relationships.some(r => r.subject_id === subject_id && r.predicate === predicate && r.object_id === object_id)) {
-			this.curTree.relationships.push({ subject_id, predicate, object_id });
-			added = true;
-		}
-
-		// Add inverse
-		if (inverseMap[predicate]) {
-			const invPred = inverseMap[predicate];
-			if (!this.curTree.relationships.some(r => r.subject_id === object_id && r.predicate === invPred && r.object_id === subject_id)) {
-				this.curTree.relationships.push({ subject_id: object_id, predicate: invPred, object_id: subject_id });
-				added = true;
+		persons.forEach(p => {
+			if (p.mentions) {
+				p.mentions.forEach(mid => mentionToPerson.set(mid, p.person_id));
 			}
+		});
+
+		const newRelationships = [];
+		const added = new Set();
+
+		// Pull in ExpandAssertions relationships
+		if (this.expand) {
+			persons.forEach(p => {
+				if (!p.mentions) return;
+				p.mentions.forEach(mid => {
+					const view = this.expand.viewFor(mid);
+					if (view && view.results) {
+						view.results.forEach(res => {
+							const targetPid = mentionToPerson.get(res.mention_id);
+							if (targetPid && targetPid !== p.person_id) {
+								const pred = res.predicate;
+								if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf'].includes(pred)) {
+									const key = `${p.person_id}|${pred}|${targetPid}`;
+									if (!added.has(key)) {
+										added.add(key);
+										newRelationships.push({
+											subject_id: p.person_id,
+											predicate: pred,
+											object_id: targetPid
+										});
+									}
+								}
+							}
+						});
+					}
+				});
+			});
 		}
 
-		if (!added) return; // Prevent infinite recursion!
-		// Automatically infer siblings
-		if (predicate === 'isChildOf') {
-			// 1. If adding a child to a parent, the child becomes a sibling to all other children of that parent
-			const siblings = this.curTree.relationships
-				.filter(r => r.predicate === 'isChildOf' && r.object_id === object_id && r.subject_id !== subject_id)
-				.map(r => r.subject_id);
-			siblings.forEach(siblingPid => {
-				this.addRelationship(subject_id, 'isSiblingOf', siblingPid);
-			});
+		this.curTree.relationships = newRelationships;
 
-			// 2. If adding a child to a parent who has a spouse, automatically link the child to the spouse as well.
-			const spouses = this.curTree.relationships
-				.filter(r => r.predicate === 'isSpouseOf' && r.subject_id === object_id)
-				.map(r => r.object_id);
-			spouses.forEach(spousePid => {
-				this.addRelationship(subject_id, 'isChildOf', spousePid);
-			});
-
-			// 3. If adding a parent to a child who already has siblings, automatically link the siblings to the new parent
-			const childSiblings = this.curTree.relationships
-				.filter(r => r.predicate === 'isSiblingOf' && r.subject_id === subject_id)
-				.map(r => r.object_id);
-			childSiblings.forEach(siblingPid => {
-				this.addRelationship(siblingPid, 'isChildOf', object_id);
-			});
-
-			// 4. If adding a parent to a child who already has another parent, automatically link the new parent to the other parent as a spouse
-			const otherParents = this.curTree.relationships
-				.filter(r => r.predicate === 'isChildOf' && r.subject_id === subject_id && r.object_id !== object_id)
-				.map(r => r.object_id);
-			otherParents.forEach(otherParentPid => {
-				this.addRelationship(object_id, 'isSpouseOf', otherParentPid);
-			});
-		} else if (predicate === 'isSiblingOf') {
-			// Infer parents for the new sibling
-			const parents = this.curTree.relationships
-				.filter(r => r.predicate === 'isChildOf' && r.subject_id === subject_id)
-				.map(r => r.object_id);
-			parents.forEach(parentPid => {
-				this.addRelationship(object_id, 'isChildOf', parentPid);
-			});
-
-			const siblings = this.curTree.relationships
-				.filter(r => r.predicate === 'isSiblingOf' && r.subject_id === subject_id && r.object_id !== object_id)
-				.map(r => r.object_id);
-			siblings.forEach(siblingPid => {
-				this.addRelationship(object_id, 'isSiblingOf', siblingPid);
-			});
-		} else if (predicate === 'isSpouseOf') {
-			// Infer children for the new spouse
-			const children = this.curTree.relationships
-				.filter(r => r.predicate === 'isParentOf' && r.subject_id === subject_id)
-				.map(r => r.object_id);
-			children.forEach(childPid => {
-				this.addRelationship(object_id, 'isParentOf', childPid);
-			});
-		} else if (predicate === 'isParentOf') {
-			const siblings = this.curTree.relationships
-				.filter(r => r.predicate === 'isParentOf' && r.subject_id === subject_id && r.object_id !== object_id)
-				.map(r => r.object_id);
-			siblings.forEach(siblingPid => {
-				this.addRelationship(object_id, 'isSiblingOf', siblingPid);
-			});
-
-			// Infer spouse as another parent
-			const spouses = this.curTree.relationships
-				.filter(r => r.predicate === 'isSpouseOf' && r.subject_id === subject_id)
-				.map(r => r.object_id);
-			spouses.forEach(spousePid => {
-				this.addRelationship(spousePid, 'isParentOf', object_id);
-			});
-		} else if (predicate === 'isSpouseOf') {
-			// Cross-link existing children if a spouse is added later
-			const children1 = this.curTree.relationships
-				.filter(r => r.predicate === 'isParentOf' && r.subject_id === subject_id)
-				.map(r => r.object_id);
-			children1.forEach(childPid => {
-				this.addRelationship(object_id, 'isParentOf', childPid);
-			});
-			const children2 = this.curTree.relationships
-				.filter(r => r.predicate === 'isParentOf' && r.subject_id === object_id)
-				.map(r => r.object_id);
-			children2.forEach(childPid => {
-				this.addRelationship(subject_id, 'isParentOf', childPid);
+		// Sync to treeApp
+		if (window.treeApp && window.treeApp.state) {
+			window.treeApp.state.triplets = [];
+			this.curTree.relationships.forEach(r => {
+				if (r.predicate !== 'isChildOf' && r.predicate !== 'isUncleOf') {
+					window.treeApp.state.triplets.push({ subject: r.subject_id, predicate: r.predicate, object: r.object_id });
+				}
 			});
 		}
 	}
@@ -339,6 +271,18 @@ class App {
 					const mention = mEditor.getCurrentMention();
 					if (!mention) return;
 
+					const fillFields = (personObj) => {
+						const fields = ['first_name', 'middle_name', 'last_name', 'suffix', 'birth_year', 'death_year', 'gender', 'race'];
+						fields.forEach(field => {
+							const curVal = personObj[field];
+							const isNullOrAdded = (!curVal || (typeof curVal === 'string' && (!curVal.includes(':') || /:.*added/i.test(curVal))));
+							let mVal = mention[field];
+							if (isNullOrAdded && mVal) {
+								personObj[field] = `${mVal}:${mention.mention_id}`;
+							}
+						});
+					};
+
 					// Add mention to curTree.persons
 					const canonicalPerson = this.curTree.persons.find(p => p.person_id === pid);
 					if (canonicalPerson) {
@@ -346,6 +290,7 @@ class App {
 						if (!canonicalPerson.mentions.includes(mentionId)) {
 							canonicalPerson.mentions.push(mentionId);
 						}
+						fillFields(canonicalPerson);
 					}
 
 					// Add mention to the tree node (curPerson)
@@ -355,7 +300,11 @@ class App {
 						if (!treeNode.mentions.includes(mentionId)) {
 							treeNode.mentions.push(mentionId);
 						}
+						fillFields(treeNode);
 					}
+					
+					if (window.treeApp) window.treeApp.RenderNodes();
+
 					this.rebuildRelatives(pid);
 					if (this.personEditor) {
 						this.personEditor.load(pid);
@@ -662,20 +611,14 @@ class App {
 					window.treeApp.AddNode(p);                 // Add to tree
 				}
 			});
-			this.curTree.relationships.forEach(r => {          // For each relationship
-				if (r.predicate !== 'isChildOf' && r.predicate !== 'isUncleOf') { // Filter inverse
-					window.treeApp.AddTriplet(r.subject_id, r.predicate, r.object_id); // Add triplet
-				}
-			});
+
+			this.expand = new ExpandAssertions(this.assertions, this.mentions);
+			this.rebuildAllRelationships();
+
 			window.treeApp.ApplyLayout();                      // Lay out nodes
 			window.treeApp.RenderNodes();                      // Draw nodes
 			window.treeApp.RenderEdges();                      // Draw edges
 			window.treeApp.FitToScreen();                      // Fit viewport
-
-			this.expand = new ExpandAssertions(this.assertions, this.mentions);
-			//const { results } = this.expand.viewFor('ALB-CN-1870-1688');
-			//results.forEach(r => console.log(r.mention_id, r.predicate, r.confidence));
-
 		}
 
 		if (window.treeApp && window.treeApp.state.nodes.length > 0) { // If nodes present

@@ -321,6 +321,48 @@ class TreeApp {
 		$(document).ready(() => {
 			this.RestoreNotepadSizeAndPosition();
 
+			$('#menu-new').on('click', (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				if (window.app && window.app.curTree) {
+					if (confirm("Are you sure you want to create a new tree? This will clear all current persons and relationships.")) {
+						window.app.curTree.persons = [];
+						window.app.curTree.relationships = [];
+						
+						const newPid = this.GeneratePid();
+						const newPerson = {
+							person_id: newPid,
+							mentions: [],
+							anchor: null,
+							first_name: null,
+							middle_name: null,
+							last_name: null,
+							suffix: null,
+							birth_year: null,
+							death_year: null,
+							gender: null,
+							race: null,
+							x: 200,
+							y: 200,
+							verity: 2
+						};
+						window.app.curTree.persons.push(newPerson);
+						
+						this.ClearAll();
+						this.AddNode(newPerson);
+						
+						if (typeof window.app.rebuildAllRelationships === 'function') {
+							window.app.rebuildAllRelationships();
+						}
+						
+						this.ApplyLayout();
+						this.RenderNodes();
+						this.RenderEdges();
+						this.SelectNodeAndShowEditor(newPid);
+					}
+				}
+			});
+
 			$('#menu-search-sources').on('click', (e) => {
 				window.open('/verite/search', '_blank');
 				$('.menu-top-level').removeClass('active');
@@ -1045,33 +1087,7 @@ class TreeApp {
 
 	AddTriplet(subject, predicate, object)																		// ADD RELATIONSHIP TRIPLET
 	{
-
-		this.SaveState();
-		// Sync to backend via app.js to leverage smart inference logic (siblings, spouses, inverses, etc.)
-		if (window.app && typeof window.app.addRelationship === 'function') {
-			window.app.addRelationship(subject, predicate, object);
-
-			// Rebuild local triplets from the canonical app.curTree to capture all inferred edges
-			this.state.triplets = [];
-			if (window.app.curTree && window.app.curTree.relationships) {
-				window.app.curTree.relationships.forEach(r => {
-					this.state.triplets.push({ subject: r.subject_id, predicate: r.predicate, object: r.object_id });
-				});
-			}
-		} else {
-			const existsState = this.state.triplets.some(t => t.subject === subject && t.predicate === predicate && t.object === object);
-			if (!existsState) {
-				this.state.triplets.push({ subject, predicate, object });
-			}
-			if (predicate === "isSpouseOf") {
-				// Automatically add reciprocal
-				const existsSpouse = this.state.triplets.some(t => t.subject === object && t.predicate === "isSpouseOf" && t.object === subject);
-				if (!existsSpouse) {
-					this.state.triplets.push({ subject: object, predicate: "isSpouseOf", object: subject });
-				}
-			}
-		}
-		this.isDirty = true;
+		console.warn("Manual relationships are disabled; relationships are derived from ExpandAssertions.");
 	}
 
 	RemoveTriplet(subject, predicate, object)																		// REMOVE RELATIONSHIP TRIPLET
@@ -1206,41 +1222,12 @@ class TreeApp {
 			.attr("font-size", "10px")
 			.attr("fill", "#000")
 			.text(d => {
-				const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
-				const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
-				return `${by} – ${dy}`;
-			});
+			const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
+			const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
+			return d.death_year ? `${by} – ${dy}` : by;
+		});
 
-		// 5. Add Person Button (Under Name)
-		const addBtnGroup = nodeEnter.append("g")
-			.attr("class", "add-btn")
-			.attr("transform", `translate(${this.nodeWidth / 2}, 147)`)
-			.style("cursor", "pointer")
-			.style("opacity", "0.85")
-			.on("mouseover", function () { d3.select(this).style("opacity", "1").select("circle").attr("fill", "#e6f1fb"); })
-			.on("mouseout", function () { d3.select(this).style("opacity", "0.85").select("circle").attr("fill", "#ffffff"); })
-			.on("mousedown", e => e.stopPropagation())
-			.on("click touchend", (e, d) => {
-				e.stopPropagation();
-				if (e.type === 'touchend') e.preventDefault();
-				this.state.actionNodeId = d.person_id;
-				document.getElementById("add-node-target-name").innerText = this.FormatNodeName(d);
-				document.getElementById("add-node-modal").dataset.sourcePid = d.person_id;
-				document.getElementById("add-node-modal").showModal();
-			});
 
-		addBtnGroup.append("circle")
-			.attr("r", 6)
-			.attr("fill", "#ffffff")
-			.attr("stroke", "#185fa5")
-			.attr("stroke-width", 1)
-			.style("transition", "fill 0.15s");
-
-		addBtnGroup.append("path")
-			.attr("d", "M-3,0 L3,0 M0,-3 L0,3")
-			.attr("stroke", "#185fa5")
-			.attr("stroke-width", 1.5)
-			.attr("stroke-linecap", "round");
 
 		// 6. Expand/Collapse triangles
 		const trianglesGroup = nodeEnter.append("g").attr("class", "triangles");
@@ -1316,7 +1303,7 @@ class TreeApp {
 		nodeUpdate.select(".node-years").text(d => {
 			const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
 			const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
-			return `${by} – ${dy}`;
+			return d.death_year ? `${by} – ${dy}` : by;
 		});
 		nodeUpdate.select(".node-bg")
 			.attr("d", d => this.GetGenderPath(d.gender))

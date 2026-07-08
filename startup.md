@@ -15,4 +15,4 @@ When starting up the project, follow these steps:
    ```
 
 > [!NOTE]
-> Both of these commands have been added to your VS Code tasks. You can run them via the command palette by selecting **Tasks: Run Task** and choosing **Start Web Server** or **Start SSH Tunnel**.
+> Both of these commands have been added to your VS Code tasks. You can run them via the command palette by selecting **Tasks: Run Task** and choosing **Start Web Server** or **Start SSH Tunnel**

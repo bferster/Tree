@@ -39,7 +39,6 @@ class MentionsEditor {
 	static FIELD_LABELS = {
 		mention_id: "Mention ID",
 		source: "Source",
-		source_year: "Source year",
 		full_name: "Full name",
 		first_name: "First name",
 		middle_name: "Middle name",
@@ -197,6 +196,11 @@ class MentionsEditor {
 
 		this._renderList();
 		this._renderDetail();
+
+		if (this.listEl) this.listEl.scrollTop = 0;
+		if (this.detailEl) this.detailEl.scrollTop = 0;
+		const containerParent = document.getElementById('right-panel-content');
+		if (containerParent) containerParent.scrollTop = 0;
 	}
 
 
@@ -251,9 +255,10 @@ class MentionsEditor {
           <div class="me-detail-panel"></div>
         </div>
         <div class="me-footer">
+          <button type="button" class="me-add-person-btn" disabled>Add person to tree</button>
           <button type="button" class="me-context-btn" disabled>See context</button>
           <div class="me-verity-container"></div>
-          <button type="button" class="me-add-btn" disabled>Add to person</button>
+          <button type="button" class="me-add-btn" disabled>Add mention to person</button>
         </div>
       </div>
       <style>${MentionsEditor._css()}</style>
@@ -266,8 +271,10 @@ class MentionsEditor {
 		this.verityEl = this.container.querySelector('.me-verity-container');
 		this.addBtn = this.container.querySelector('.me-add-btn');
 		this.contextBtn = this.container.querySelector('.me-context-btn');
+		this.addPersonBtn = this.container.querySelector('.me-add-person-btn');
 
 		this.addBtn.addEventListener('click', () => this._handleAdd());
+		this.addPersonBtn.addEventListener('click', () => this._handleAddPerson());
 		this.contextBtn.addEventListener('click', () => {
 			if (typeof ShowSource === 'function') {
 				ShowSource(this.currentMentionId);
@@ -276,6 +283,50 @@ class MentionsEditor {
 				$('#right-panel-content .tab-btn[data-target="sources-editor-container"]').click();
 			}
 		});
+	}
+
+	_handleAddPerson() {
+		if (!this.currentMentionId || !window.app || !window.treeApp) return;
+
+		const mention = window.app.mentions.find(m => m.mention_id === this.currentMentionId);
+		if (!mention) return;
+
+		const pid = 'P' + Date.now();
+		const mid = this.currentMentionId;
+		const anchorPid = (this.targetPerson && this.targetPerson.person_id) || window.treeApp.state.selectedPid;
+		const relation = (window.app && window.app.curRelation) ? window.app.curRelation : 'isRelativeOf';
+		
+		const fmt = (val) => val ? `${val}:${mid}` : null;
+		const getVal = (key) => {
+			return mention[key];
+		};
+		
+		const newPerson = {
+			person_id: pid,
+			mentions: [mid],
+			first_name: fmt(getVal('first_name')),
+			last_name: fmt(getVal('last_name')),
+			birth_year: fmt(getVal('birth_year')),
+			death_year: fmt(getVal('death_year')),
+			gender: fmt(getVal('gender')),
+			race: fmt(getVal('race')),
+			anchor: anchorPid ? `${relation}:${anchorPid}` : null,
+			x: 200,
+			y: 200,
+			verity: 2
+		};
+
+		if (!window.app.curTree.persons) window.app.curTree.persons = [];
+		window.app.curTree.persons.push(newPerson);
+
+		window.treeApp.AddNode(newPerson);
+		
+		window.app.rebuildAllRelationships();
+		
+		window.treeApp.RenderNodes();
+		window.treeApp.RenderEdges();
+
+		window.app.selectNodeAndShowEditor(pid, 'person-editor-container');
 	}
 
 	_renderList() {
@@ -289,7 +340,8 @@ class MentionsEditor {
 		if (target) {
 			const byear = target.birth_year ? String(target.birth_year).split(':')[0] : '?';
 			const dyear = target.death_year ? String(target.death_year).split(':')[0] : '?';
-			this.targetSummaryEl.innerHTML = `<div style="display: flex; align-items: center;">${MentionsEditor._getGenderSVG(target.gender, 24, 'green')} <span style="transform: translateY(2px); margin-left: 2px;">${MentionsEditor._esc(fname)} ${MentionsEditor._esc(lname)} &nbsp;&nbsp;(${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})</span></div>`;
+			const yearStr = target.death_year ? `(${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})` : `(${MentionsEditor._esc(byear)})`;
+			this.targetSummaryEl.innerHTML = `<div style="display: flex; align-items: center;">${MentionsEditor._getGenderSVG(target.gender, 24, 'green')} <span style="transform: translateY(2px); margin-left: 2px;">${MentionsEditor._esc(fname)} ${MentionsEditor._esc(lname)} &nbsp;&nbsp;${yearStr}</span></div>`;
 		} else {
 			this.targetSummaryEl.innerHTML = '';
 		}
@@ -315,7 +367,7 @@ class MentionsEditor {
             </span>
             <span class="me-source-badge">${MentionsEditor._esc(sourceLabel)}</span>
           </div>
-          <p class="me-match-years">${m.birth_year ?? '?'} &ndash; ${m.death_year ?? '?'}</p>
+          <p class="me-match-years">${m.death_year ? `${m.birth_year ?? '?'} &ndash; ${m.death_year}` : (m.birth_year ?? '?')}</p>
           <p class="me-match-narrative">${MentionsEditor._esc(m.narrative || '')}</p>
         </div>
       `;
@@ -341,13 +393,15 @@ class MentionsEditor {
 			this.verityEl.innerHTML = '';
 			this.addBtn.disabled = true;
 			if (this.contextBtn) this.contextBtn.disabled = true;
+			if (this.addPersonBtn) this.addPersonBtn.disabled = true;
 			return;
 		}
 
 		this.addBtn.disabled = false;
 		if (this.contextBtn) this.contextBtn.disabled = false;
+		if (this.addPersonBtn) this.addPersonBtn.disabled = false;
 		if (this.isSearchResult) {
-			this.addBtn.textContent = "Add to person";
+			this.addBtn.textContent = "Add mention to person";
 		} else {
 			this.addBtn.textContent = "Remove mention from person";
 		}
