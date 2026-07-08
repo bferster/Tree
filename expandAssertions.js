@@ -509,7 +509,3 @@ class ExpandAssertions {
 	}
 }
 
-// Example:
-// const view = new ExpandAssertions(app.assertions);
-// const { results } = view.viewFor('ALB-CN-1870-123');
-// results.forEach(r => console.log(r.mention_id, r.predicate, r.confidence));

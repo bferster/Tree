@@ -151,15 +151,6 @@ window.Normalize = {
 			}
 		}
 		return (res + "000").substring(0, 4);
-	},
-
-	NormalizeRace: function (race) {
-		if (!race) return "";
-		let r = race.trim().toLowerCase();
-		if (r === "w" || r === "cauc" || r === "caucasian" || r === "white") {
-			return "W";
-		}
-		return "B";
 	}
 };
 

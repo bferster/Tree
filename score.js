@@ -391,18 +391,6 @@ class Score {
 		}
 
 
-		// 3. an assertion (isSpouseOf, marriage record) bridges the two surnames
-		if (!surnameMatch && personId && candidateLast) {
-			const spouseRels = app.curTree.relationships.filter(r => r.predicate === 'isSpouseOf' && (r.subject_id === personId || r.object_id === personId));
-			for (let r of spouseRels) {
-				const spousePid = r.subject_id === personId ? r.object_id : r.subject_id;
-				const spousePerson = Array.isArray(app.curTree.persons) ? app.curTree.persons.find(x => x.person_id === spousePid) : app.curTree.persons[spousePid];
-				if (spousePerson) {
-					const spouseLast = cleanVal(spousePerson.last_name);
-				}
-			}
-		}
-
 		// Gender conditioning helper
 		const isFemale = anchorGender === 'f' || candidateGender === 'f';
 		const isMale = anchorGender === 'm' || candidateGender === 'm';
@@ -805,23 +793,10 @@ class Score {
 		return String(a).toLowerCase() == String(b).toLowerCase(); // Compare strings
 	}
 
-	static InitialEq(a, b)                                     // INITIAL EQUALITY
-	{
-		if (Score.IsAbsent(a) || Score.IsAbsent(b)) return false; // Fail if absent
-		return String(a).toLowerCase()[0] == String(b).toLowerCase()[0]; // Compare first char
-	}
-
 	JwThresholdFor(field)                                      // GET JW THRESHOLD
 	{
 		let t = this.jwThresholds[field];                        // Get field threshold
 		return t === undefined ? this.jwThresholds.default : t;  // Return default if none
-	}
-
-	JwAbove(a, b, field)                                       // CHECK JW THRESHOLD
-	{
-		if (Score.IsAbsent(a) || Score.IsAbsent(b)) return false; // Fail if absent
-		let jw = this.JaroWinkler(String(a), String(b));         // Calculate JW score
-		return jw > this.JwThresholdFor(field);                // Return if above threshold
 	}
 
 	ScoreYear(source, target, compare)                        // CALCULATE BAND SCORE

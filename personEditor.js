@@ -101,22 +101,6 @@ class PersonEditor {
 	/* ----------------------------------------------------------
 	   SVG star helpers
 	   ---------------------------------------------------------- */
-	static makeColoredStarSVG(filled, color) {
-		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-		svg.setAttribute('viewBox', '0 0 24 24');
-		svg.setAttribute('width', '20');
-		svg.setAttribute('height', '20');
-		svg.style.display = 'block';
-		const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-		path.setAttribute('d', PersonEditor.STAR_PATH);
-		path.setAttribute('fill', filled ? color : 'none');
-		path.setAttribute('stroke', color);
-		path.setAttribute('stroke-width', '1.5');
-		path.setAttribute('stroke-linejoin', 'round');
-		svg.appendChild(path);
-		return svg;
-	}
-
 	static makeStarSVG(filled) {
 		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 		svg.setAttribute('viewBox', '0 0 24 24');
@@ -131,15 +115,6 @@ class PersonEditor {
 		path.setAttribute('stroke-linejoin', 'round');
 		svg.appendChild(path);
 		return svg;
-	}
-
-	static paintStars(container, n) {
-		container.children().each(function (idx) {
-			const path = this.querySelector('path');
-			const filled = idx < n;
-			path.setAttribute('fill', filled ? PersonEditor.STAR_FILL : 'none');
-			path.setAttribute('stroke', filled ? PersonEditor.STAR_FILL : PersonEditor.STAR_EMPTY);
-		});
 	}
 
 	/* ----------------------------------------------------------
@@ -1166,16 +1141,6 @@ class PersonEditor {
       .vpe-sources-wrap { position:relative; }
       .vpe-sources-btn { display:flex; align-items:center; gap:6px; background:transparent; border:0.5px solid #f0f0f0;
         border-radius:6px; padding:8px 12px; font-size:13px; font-weight:500; cursor:pointer; }
-      .vpe-sources-panel { position:absolute; bottom:calc(100% + 6px); right:0; background:#fff; border:0.5px solid #f0f0f0;
-        border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.12); padding:8px; min-width:220px; z-index:20; }
-      .vpe-toggle-all-row { display:flex; align-items:center; justify-content:space-between; padding:6px 8px;
-        border-bottom:0.5px solid #f0f0f0; margin-bottom:4px; }
-      .vpe-toggle-label { font-size:12px; font-weight:500; color:#9e9e9e; }
-      .vpe-toggle-btn { font-size:12px; padding:2px 10px; background:transparent; border:0.5px solid #f0f0f0;
-        border-radius:4px; cursor:pointer; }
-      .vpe-source-row { display:flex; align-items:center; gap:8px; padding:6px 8px; font-size:13px; cursor:pointer; border-radius:6px; }
-      .vpe-source-row:hover { background:#f5f5f5; }
-      .vpe-source-row input { width:14px; height:14px; cursor:pointer; flex-shrink:0; }
       .vpe-search-btn { display:flex; align-items:center; gap:6px; background:#eaf2fb; border:1px solid #b5d4f4;
         border-radius:6px; padding:8px 16px; color:#185fa5; text-transform:uppercase; letter-spacing:.04em;
         font-size:12px; font-weight:600; cursor:pointer; }

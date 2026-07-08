@@ -88,17 +88,6 @@ class App {
 		}
 	}
 
-	rebuildRelatives(personId)                                 // REBUILD RELATIVES ARRAY
-	{
-		const p = Array.isArray(this.curTree.persons) ? this.curTree.persons.find(x => x.person_id === personId) : this.curTree.persons[personId];
-		if (!p) return;
-		const relSet = new Set();
-		this.curTree.relationships.forEach(r => {
-			if (r.subject_id === personId) relSet.add(r.object_id);
-			if (r.object_id === personId) relSet.add(r.subject_id);
-		});
-		p.relatives = Array.from(relSet);
-	}
 
 	async init()                                               // INITIALIZATION
 	{
@@ -248,9 +237,7 @@ class App {
 		}
 		rightPanel.find('.tab-btn[data-target="' + currentActiveTab + '"]').click(); // Restore active tab
 
-		window.treeApp.state.nodes.forEach(n => {              // For each tree node
-			this.rebuildRelatives(n.person_id);                // Rebuild relative links
-		});
+
 
 		let mEditor = this.mentionsEditor || null;
 		let pEditor = this.personEditor || null;
@@ -305,7 +292,6 @@ class App {
 					
 					if (window.treeApp) window.treeApp.RenderNodes();
 
-					this.rebuildRelatives(pid);
 					if (this.personEditor) {
 						this.personEditor.load(pid);
 					}
@@ -323,7 +309,6 @@ class App {
 						treeNode.mentions = treeNode.mentions.filter(id => id !== mentionId);
 					}
 
-					this.rebuildRelatives(pid);
 					if (this.personEditor) {
 						this.personEditor.load(pid);
 					}

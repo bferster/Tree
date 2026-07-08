@@ -224,7 +224,7 @@ class TreeApp {
 				this.gMain.attr("transform", e.transform);
 			});
 
-		this.svg.call(this.zoom);
+		this.svg.call(this.zoom).on("dblclick.zoom", null);
 
 		// Click background to deselect
 		this.svg.on("click", (e) => {
@@ -328,7 +328,7 @@ class TreeApp {
 					if (confirm("Are you sure you want to create a new tree? This will clear all current persons and relationships.")) {
 						window.app.curTree.persons = [];
 						window.app.curTree.relationships = [];
-						
+
 						const newPid = this.GeneratePid();
 						const newPerson = {
 							person_id: newPid,
@@ -347,14 +347,14 @@ class TreeApp {
 							verity: 2
 						};
 						window.app.curTree.persons.push(newPerson);
-						
+
 						this.ClearAll();
 						this.AddNode(newPerson);
-						
+
 						if (typeof window.app.rebuildAllRelationships === 'function') {
 							window.app.rebuildAllRelationships();
 						}
-						
+
 						this.ApplyLayout();
 						this.RenderNodes();
 						this.RenderEdges();
@@ -515,7 +515,7 @@ class TreeApp {
 			$('#menu-help-docs').on('click', (e) => {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
-				window.open('verite_user_manual.pdf', '_blank');
+				window.open('https://docs.google.com/document/d/1a7I7EOdWLTSjWXkSE67qL05oBj1nuTyhBj8EX1fg-QU', '_blank');
 			});
 
 			$('#notepad-close-x').on('click', () => {
@@ -580,24 +580,6 @@ class TreeApp {
 				});
 			}
 
-			// Predicate-modal listeners (for link mode: click a node to link to it)
-			document.getElementById("pred-cancel").addEventListener("click", () => {
-				document.getElementById("predicate-modal").close();
-				this.linkMode = false;
-				document.getElementById("link-banner").style.display = "none";
-			});
-
-			document.getElementById("pred-confirm").addEventListener("click", () => {
-				const pred = document.getElementById("pred-select").value;
-				const targetPid = document.getElementById("predicate-modal").dataset.target;
-				document.getElementById("predicate-modal").close();
-				if (pred && targetPid && this.linkSourcePid) {
-					this.AddTriplet(this.linkSourcePid, pred, targetPid);
-					this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
-				}
-				this.linkMode = false;
-				document.getElementById("link-banner").style.display = "none";
-			});
 
 			// Add-node-modal listeners
 			document.getElementById("add-node-cancel").addEventListener("click", () => {
@@ -749,6 +731,7 @@ class TreeApp {
 
 				}
 			});
+
 
 			// Splitter Resizing Interaction logic
 			const splitDivider = document.getElementById('divider');
@@ -1032,6 +1015,24 @@ class TreeApp {
 		return newNode;
 	}
 
+	SetNodeVerity(pid, val)																		// SET NODE VERITY LEVEL
+	{
+		const n = this.GetNode(pid);
+		if (n) {
+			this.SaveState();
+			n.verity = val;
+			this.isDirty = true;
+		}
+	}
+
+	AddTriplet(subject, predicate, object)																		// ADD RELATIONSHIP TRIPLET
+	{
+		this.SaveState();
+		if (!this.state.triplets.some(t => t.subject === subject && t.predicate === predicate && t.object === object)) {
+			this.state.triplets.push({ subject, predicate, object });
+		}
+	}
+
 	EditNode(pid, fields)																		// EDIT PERSON NODE FIELDS
 	{
 
@@ -1081,25 +1082,6 @@ class TreeApp {
 
 		if (toDelete.has(this.state.selectedPid)) {
 			this.state.selectedPid = null;
-		}
-		this.isDirty = true;
-	}
-
-	AddTriplet(subject, predicate, object)																		// ADD RELATIONSHIP TRIPLET
-	{
-		console.warn("Manual relationships are disabled; relationships are derived from ExpandAssertions.");
-	}
-
-	RemoveTriplet(subject, predicate, object)																		// REMOVE RELATIONSHIP TRIPLET
-	{
-
-		this.SaveState();
-		const initialLen = this.state.triplets.length;
-		this.state.triplets = this.state.triplets.filter(t => !(t.subject === subject && t.predicate === predicate && t.object === object));
-
-		// If it was isSpouseOf and we actually removed one, try removing reciprocal
-		if (predicate === "isSpouseOf" && this.state.triplets.length < initialLen) {
-			this.state.triplets = this.state.triplets.filter(t => !(t.subject === object && t.predicate === "isSpouseOf" && t.object === subject));
 		}
 		this.isDirty = true;
 	}
@@ -1222,10 +1204,10 @@ class TreeApp {
 			.attr("font-size", "10px")
 			.attr("fill", "#000")
 			.text(d => {
-			const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
-			const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
-			return d.death_year ? `${by} – ${dy}` : by;
-		});
+				const by = d.birth_year ? String(d.birth_year).split(':')[0] : "?";
+				const dy = d.death_year ? String(d.death_year).split(':')[0] : "?";
+				return d.death_year ? `${by} – ${dy}` : by;
+			});
 
 
 

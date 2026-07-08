@@ -14,27 +14,6 @@
 
 class MentionsEditor {
 
-	static STAR_FILL = '#EF9F27';
-	static STAR_EMPTY = '#9e9e9e';
-	static STAR_PATH = "M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.7-6.2 3.7 1.6-7L2 9.2l7.1-.6z";
-
-
-	static _makeStarSVG(filled) {
-		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-		svg.setAttribute('viewBox', '0 0 24 24');
-		svg.setAttribute('width', '16');
-		svg.setAttribute('height', '16');
-		svg.style.display = 'block';
-		const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-		path.setAttribute('d', MentionsEditor.STAR_PATH);
-		path.setAttribute('fill', filled ? MentionsEditor.STAR_FILL : 'none');
-		path.setAttribute('stroke', filled ? MentionsEditor.STAR_FILL : MentionsEditor.STAR_EMPTY);
-		path.setAttribute('stroke-width', '1.5');
-		path.setAttribute('stroke-linejoin', 'round');
-		svg.appendChild(path);
-		return svg;
-	}
-
 
 	static FIELD_LABELS = {
 		mention_id: "Mention ID",
@@ -257,7 +236,7 @@ class MentionsEditor {
         <div class="me-footer">
           <button type="button" class="me-add-person-btn" disabled>Add person to tree</button>
           <button type="button" class="me-context-btn" disabled>See context</button>
-          <div class="me-verity-container"></div>
+
           <button type="button" class="me-add-btn" disabled>Add mention to person</button>
         </div>
       </div>
@@ -268,7 +247,7 @@ class MentionsEditor {
 		this.detailEl = this.container.querySelector('.me-detail-panel');
 		this.countEl = this.container.querySelector('.me-count');
 		this.targetSummaryEl = this.container.querySelector('.me-target-summary');
-		this.verityEl = this.container.querySelector('.me-verity-container');
+
 		this.addBtn = this.container.querySelector('.me-add-btn');
 		this.contextBtn = this.container.querySelector('.me-context-btn');
 		this.addPersonBtn = this.container.querySelector('.me-add-person-btn');
@@ -390,7 +369,6 @@ class MentionsEditor {
 
 		if (!match) {
 			this.detailEl.innerHTML = `<div class="me-empty">Select a mention to view details.</div>`;
-			this.verityEl.innerHTML = '';
 			this.addBtn.disabled = true;
 			if (this.contextBtn) this.contextBtn.disabled = true;
 			if (this.addPersonBtn) this.addPersonBtn.disabled = true;
@@ -399,7 +377,21 @@ class MentionsEditor {
 
 		this.addBtn.disabled = false;
 		if (this.contextBtn) this.contextBtn.disabled = false;
-		if (this.addPersonBtn) this.addPersonBtn.disabled = false;
+		if (this.addPersonBtn) {
+			this.addPersonBtn.disabled = false;
+			let isAlreadyInTree = false;
+			const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+			if (globalApp && globalApp.curTree && globalApp.curTree.persons) {
+				const persons = Array.isArray(globalApp.curTree.persons) ? globalApp.curTree.persons : Object.values(globalApp.curTree.persons);
+				isAlreadyInTree = persons.some(p => Array.isArray(p.mentions) && p.mentions.includes(this.currentMentionId));
+			}
+
+			if (isAlreadyInTree) {
+				this.addPersonBtn.style.visibility = 'hidden';
+			} else {
+				this.addPersonBtn.style.visibility = 'visible';
+			}
+		}
 		if (this.isSearchResult) {
 			this.addBtn.textContent = "Add mention to person";
 		} else {
@@ -521,7 +513,6 @@ class MentionsEditor {
 			`
 			: '';
 
-		this.verityEl.innerHTML = '';
 
 		const m = match.mention;
 		const sourceLabel = m.source ? String(m.source).replace(/_/g, '-') : '';
@@ -548,10 +539,14 @@ class MentionsEditor {
 						}
 					}
 					fullName = toTitleCase(fullName.trim() || 'Relative');
+					let dateStr = '';
+					if (byear !== '?') {
+						dateStr = ` (b. ${MentionsEditor._esc(byear)})`;
+					}
 					const borderStyle = i < familyMatches.length - 1 ? 'border-bottom: 1px solid rgba(0,0,0,0.05);' : '';
 					return `
 						<div class="me-family-row" data-id="${MentionsEditor._esc(f.mention_id)}" style="display: flex; justify-content: space-between; padding: 4px 6px; ${borderStyle} font-size: 13px; cursor: pointer; border-radius: 4px; transition: background-color 0.15s;">
-							<span>${MentionsEditor._esc(fullName)} (${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})</span>
+							<span>${MentionsEditor._esc(fullName)}${dateStr}</span>
 							<span style="color: #666; font-family: monospace; text-align: right;">${MentionsEditor._esc(f.mention_id)}</span>
 						</div>
 					`;
@@ -815,11 +810,14 @@ class MentionsEditor {
       .me-footer {
         padding: 12px 16px;
         border-top: 1px solid var(--me-border);
-        display: flex;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
         align-items: center;
       }
-      .me-add-btn {
+      .me-add-person-btn { justify-self: start; }
+      .me-context-btn { justify-self: center; }
+      .me-add-btn { justify-self: end; }
+      .me-add-btn, .me-add-person-btn {
         background: #eaf2fb;
         color: #185fa5;
         border: 1px solid #b5d4f4;
@@ -830,8 +828,8 @@ class MentionsEditor {
         cursor: pointer;
         transition: transform 0.1s ease;
       }
-      .me-add-btn:hover:not(:disabled) { transform: translateY(-1px); }
-      .me-add-btn:disabled { opacity: 0.5; cursor: default; }
+      .me-add-btn:hover:not(:disabled), .me-add-person-btn:hover:not(:disabled) { transform: translateY(-1px); }
+      .me-add-btn:disabled, .me-add-person-btn:disabled { opacity: 0.5; cursor: default; }
 
       @media (max-width: 768px) {
         .me-body { flex-direction: column; }
