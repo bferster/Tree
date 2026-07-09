@@ -129,3 +129,16 @@ when a last_name is set in PERSON EDITOR, convert that value into a Soundex valu
 Normalize.md
  and place as value in the Soundec factor VALUE control
 
+
+
+
+**VERITY Scoring**
+
+To set the number of stars in the person editor's verity score, use the following algorithm:
+
+1. If the person has no mentions, the verity score is 0.
+2. Else if the person has one mention, the verity score is 2 if the first_name and last_name have mentions associated with their criteria.
+3. Else if the person has two mentions, the verity score is 3,
+4. Else if the person has more than two mentions , the verity score is 4.
+
+store in curTree person obect as verity

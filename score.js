@@ -4,7 +4,7 @@ class Score {
 	{
 		app.score = this;
 		this.jwThresholds = Object.assign({ default: 0.85 }, options.jwThresholds); // Set thresholds
-		this.nameFields = ['first_name', 'middle_name', 'last_name', 'norm_first_name', 'nysiis_last_name', 'soundex_last_name'];
+		this.nameFields = ['full_name', 'first_name', 'middle_name', 'last_name', 'norm_first_name', 'nysiis_last_name', 'soundex_last_name'];
 		this.skipFields = new Set(options.skipFields || ['race', 'gender', 'suffix']); // Set skip fields
 		this.useSmartName = true;
 		this.SmartNameScore = 0.0;
@@ -300,6 +300,18 @@ class Score {
 			mention.score = totalScore;
 			mention.factors = mentionFactors;
 
+			// In non-smart mode: if there were active (non-ignore) name factors and none matched,
+			// push this mention below all real matches by making its score negative.
+			if (!useSmart && totalScore === 0) {
+				const hasActiveFactors = factors.some(f => {
+					const fcmp = f.fcmp !== undefined ? f.fcmp : (Array.isArray(f.compare) ? f.compare.find(x => x !== 'rare') || 'ignore' : (f.compare || 'ignore'));
+					return fcmp !== 'ignore';
+				});
+				if (hasActiveFactors) {
+					mention.score = -1;
+				}
+			}
+
 			// Step 3 - Knockout Gates
 			const knockout = this._applyKnockoutGates(anchorPerson, mention, factors);
 			if (knockout) {
@@ -402,7 +414,19 @@ class Score {
 		const jwScore = this.JaroWinkler(anchorFirst, candidateFirst);
 
 		if (surnameMatch) {
-			if (!anchorFirst) {
+			const candidateFullName = cleanVal(mention.full_name);
+			let anchorFullName = cleanVal(fallback && anchorPerson ? anchorPerson.full_name : (byField['full_name'] ? byField['full_name'].value : ''));
+			if (!anchorFullName) anchorFullName = `${anchorFirst} ${anchorMiddle} ${anchorLast}`.replace(/\s+/g, ' ').trim();
+
+			if (candidateFullName && anchorFullName && candidateFullName === anchorFullName) {
+				nameScore = 1.0;
+				rungFired = "exact_full_name";
+				if (mentionFactors) {
+					mentionFactors['exactFirstName'] = { value: 1.0 };
+					mentionFactors['exactLastName'] = { value: 1.0 };
+				}
+			}
+			else if (!anchorFirst || !candidateFirst) {
 				// Surname match, but no first name to compare
 				nameScore = anchorLast ? 1.0 : 0.0;
 				rungFired = anchorLast ? "surname_only" : "no_name_searched";
@@ -690,6 +714,14 @@ class Score {
 
 			let candidate = mention[field];                      // Get candidate value
 
+			// Fallback: If candidate is blank but full_name exists, try to extract it from full_name
+			if (Score.IsAbsent(candidate) && !Score.IsAbsent(mention.full_name)) {
+				const parts = String(mention.full_name).trim().split(/\s+/);
+				if (field === 'first_name') candidate = parts[0];
+				else if (field === 'last_name') candidate = parts.length > 1 ? parts[parts.length - 1] : '';
+				else if (field === 'middle_name') candidate = parts.length > 2 ? parts.slice(1, -1).join(' ') : '';
+			}
+
 			if (compare == 'ignore') {                           // If ignore
 				factor.score = 0.0;                              // Score 0
 			} else if (compare == 'exact' || (!compare && isRare)) {                     // If exact or only rare
@@ -790,7 +822,7 @@ class Score {
 	static StrEq(a, b)                                         // STRING EQUALITY
 	{
 		if (Score.IsAbsent(a) || Score.IsAbsent(b)) return false; // Fail if absent
-		return String(a).toLowerCase() == String(b).toLowerCase(); // Compare strings
+		return String(a).trim().toLowerCase() == String(b).trim().toLowerCase(); // Compare strings
 	}
 
 	JwThresholdFor(field)                                      // GET JW THRESHOLD

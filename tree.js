@@ -226,6 +226,15 @@ class TreeApp {
 
 		this.svg.call(this.zoom).on("dblclick.zoom", null);
 
+		// Double-click background to clear current person
+		this.svg.on("dblclick", (e) => {
+			if (e.target.tagName === 'svg') {
+				if (window.app && typeof window.app.selectNodeAndShowEditor === 'function') {
+					window.app.selectNodeAndShowEditor(-1, 'person-editor-container');
+				}
+			}
+		});
+
 		// Click background to deselect
 		this.svg.on("click", (e) => {
 			if (e.target.tagName === 'svg') {
@@ -495,11 +504,8 @@ class TreeApp {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (this.state && this.state.nodes) {
-					this.state.nodes.forEach(n => n.moved = false);
-					this.ApplyLayout();
-					this.RenderNodes(); this.RenderEdges();
+					this.ResetLayout();
 				}
-				this.FitToScreen();
 
 			});
 
@@ -667,8 +673,9 @@ class TreeApp {
 
 								if (objPerson) {
 									const fname = (objPerson.first_name || '').split(':')[0];
+									const mname = (objPerson.middle_name || '').split(':')[0];
 									const lname = (objPerson.last_name || '').split(':')[0];
-									const fullName = `${fname} ${lname}`.trim() || r.object_id;
+									const fullName = [fname, mname, lname].filter(Boolean).join(' ').trim() || r.object_id;
 
 									const sourceName = (sourceNode.first_name || '').split(':')[0] || sourceNode.person_id;
 
@@ -725,9 +732,12 @@ class TreeApp {
 						this.AddTriplet(newPid, 'isCousinOf', sourcePid);
 					}
 
-					this.ApplyLayout(); this.RenderNodes(); this.RenderEdges();
+					this.RenderNodes(); this.RenderEdges();
+					
+					// after the person has been added to the tree and placed, call the reset layout function
+					this.ResetLayout();
+					
 					this.SelectNodeAndShowEditor(newPid);
-					this.FitToScreen();
 
 				}
 			});
@@ -1406,7 +1416,15 @@ class TreeApp {
 		}
 	}
 
-	ApplyLayout()																		// APPLY HIERARCHICAL LAYOUT
+	ResetLayout()																		// RESET HIERARCHICAL LAYOUT
+	{
+		this.ApplyLayout(true);
+		this.RenderNodes();
+		this.RenderEdges();
+		this.FitToScreen();
+	}
+
+	ApplyLayout(forceReset = false)																		// APPLY HIERARCHICAL LAYOUT
 	{
 
 		const visibleSet = this.GetVisibleNodes();
@@ -1501,9 +1519,10 @@ class TreeApp {
 			pids.forEach(pid => {
 				if (placed.has(pid)) return;
 				const node = this.GetNode(pid);
-				if (!node.moved) {
+				if (forceReset || !node.moved) {
 					node.x = currentX;
 					node.y = startY + d * ySpacing;
+					if (forceReset) node.moved = false;
 				} else {
 					// Optionally handle currentX if we want alignment to respect moved nodes later
 					// For now just skip overwriting coordinates
@@ -1517,9 +1536,10 @@ class TreeApp {
 						if (snode) {
 							currentX -= xSpacing;									// Undo standard gap
 							currentX += this.nodeWidth + 20;							// Snug 20px physical gap between spouses
-							if (!snode.moved) {
+							if (forceReset || !snode.moved) {
 								snode.x = currentX;
 								snode.y = startY + d * ySpacing;
+								if (forceReset) snode.moved = false;
 							}
 							placed.add(spid);
 							currentX += xSpacing;									// Resume standard spacing
@@ -1531,9 +1551,10 @@ class TreeApp {
 					if (!placed.has(cid) && depths[cid] === d) {
 						const cnode = this.GetNode(cid);
 						if (cnode) {
-							if (!cnode.moved) {
+							if (forceReset || !cnode.moved) {
 								cnode.x = currentX;
 								cnode.y = startY + d * ySpacing;
+								if (forceReset) cnode.moved = false;
 							}
 							placed.add(cid);
 							currentX += xSpacing;

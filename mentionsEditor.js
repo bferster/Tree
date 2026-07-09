@@ -209,6 +209,19 @@ class MentionsEditor {
 			}
 		}
 		results.sort((a, b) => b.score - a.score);
+
+		// When showing search results with active factors, filter out non-matching mentions (score <= 0 means no factor matched)
+		if (this.isSearchResult && this.factors && this.factors.length > 0) {
+			const hasActiveFactors = this.factors.some(f => {
+				const cmp = Array.isArray(f.compare) ? f.compare.find(x => x !== 'rare') : f.compare;
+				return cmp && cmp !== 'ignore';
+			});
+			if (hasActiveFactors) {
+				const positiveResults = results.filter(r => r.score > 0);
+				if (positiveResults.length > 0) return positiveResults;
+			}
+		}
+
 		return results;
 	}
 
@@ -284,7 +297,9 @@ class MentionsEditor {
 			person_id: pid,
 			mentions: [mid],
 			first_name: fmt(getVal('first_name')),
+			middle_name: fmt(getVal('middle_name')),
 			last_name: fmt(getVal('last_name')),
+			suffix: fmt(getVal('suffix')),
 			birth_year: fmt(getVal('birth_year')),
 			death_year: fmt(getVal('death_year')),
 			gender: fmt(getVal('gender')),
@@ -305,6 +320,10 @@ class MentionsEditor {
 		window.treeApp.RenderNodes();
 		window.treeApp.RenderEdges();
 
+		if (typeof window.treeApp.ResetLayout === 'function') {
+			window.treeApp.ResetLayout();
+		}
+
 		window.app.selectNodeAndShowEditor(pid, 'person-editor-container');
 	}
 
@@ -315,12 +334,16 @@ class MentionsEditor {
 			return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 		};
 		const fname = target ? toTitleCase((target.norm_first_name || target.first_name || '').split(':')[0]) : '';
+		const mname = target ? toTitleCase((target.middle_name || '').split(':')[0]) : '';
 		const lname = target ? toTitleCase((target.last_name || '').split(':')[0]) : '';
+		let fullDisplay = [fname, mname, lname].filter(Boolean).join(' ').trim();
+		if (!fullDisplay && target && target.full_name) {
+			fullDisplay = toTitleCase(target.full_name.split(':')[0]);
+		}
 		if (target) {
 			const byear = target.birth_year ? String(target.birth_year).split(':')[0] : '?';
-			const dyear = target.death_year ? String(target.death_year).split(':')[0] : '?';
-			const yearStr = target.death_year ? `(${MentionsEditor._esc(byear)} - ${MentionsEditor._esc(dyear)})` : `(${MentionsEditor._esc(byear)})`;
-			this.targetSummaryEl.innerHTML = `<div style="display: flex; align-items: center;">${MentionsEditor._getGenderSVG(target.gender, 24, 'green')} <span style="transform: translateY(2px); margin-left: 2px;">${MentionsEditor._esc(fname)} ${MentionsEditor._esc(lname)} &nbsp;&nbsp;${yearStr}</span></div>`;
+			const yearStr = byear !== '?' ? `(b. ${MentionsEditor._esc(byear)})` : '';
+			this.targetSummaryEl.innerHTML = `<div style="display: flex; align-items: center;">${MentionsEditor._getGenderSVG(target.gender, 24, 'green')} <span style="transform: translateY(2px); margin-left: 2px;">${MentionsEditor._esc(fullDisplay)} &nbsp;&nbsp;${yearStr}</span></div>`;
 		} else {
 			this.targetSummaryEl.innerHTML = '';
 		}
@@ -337,11 +360,20 @@ class MentionsEditor {
 			const m = match.mention;
 			const active = m.mention_id === this.currentMentionId;
 			const sourceLabel = `${m.source_type || ''}`;
-			const mid = m.middle_name ? ` ${m.middle_name}` : '';
+			
+			// Build the display name cleanly
+			let displayFirst = m.norm_first_name || m.first_name || '';
+			let displayMid = m.middle_name || '';
+			let displayLast = m.last_name || '';
+			let matchName = [displayFirst, displayMid, displayLast].filter(Boolean).join(' ');
+			if (!matchName && m.full_name) {
+				matchName = m.full_name;
+			}
+
 			return `
         <div class="me-match-item ${active ? 'me-active' : ''}" data-id="${m.mention_id}">
           <div class="me-match-row">
-            <span class="me-match-name">${MentionsEditor._esc(m.norm_first_name || m.first_name || '')}${MentionsEditor._esc(mid)} ${MentionsEditor._esc(m.last_name || '')}
+            <span class="me-match-name">${MentionsEditor._esc(matchName)}
               <span class="me-match-score">${Math.round(match.score * 10)}</span>
             </span>
             <span class="me-source-badge">${MentionsEditor._esc(sourceLabel)}</span>
@@ -373,6 +405,14 @@ class MentionsEditor {
 			if (this.contextBtn) this.contextBtn.disabled = true;
 			if (this.addPersonBtn) this.addPersonBtn.disabled = true;
 			return;
+		}
+
+		if (this.targetPerson && this.targetPerson.person_id === -1) {
+			this.addBtn.style.display = 'none';
+			if (this.addPersonBtn) this.addPersonBtn.style.display = 'none';
+		} else {
+			this.addBtn.style.display = '';
+			if (this.addPersonBtn) this.addPersonBtn.style.display = '';
 		}
 
 		this.addBtn.disabled = false;
@@ -533,7 +573,13 @@ class MentionsEditor {
 					if (globalApp && globalApp.mentions) {
 						const fMention = globalApp.mentions.find(m => m.mention_id === f.mention_id);
 						if (fMention) {
-							fullName = (fMention.norm_first_name || fMention.first_name || '') + ' ' + (fMention.last_name || '');
+							let displayFirst = fMention.norm_first_name || fMention.first_name || '';
+							let displayMid = fMention.middle_name || '';
+							let displayLast = fMention.last_name || '';
+							fullName = [displayFirst, displayMid, displayLast].filter(Boolean).join(' ');
+							if (!fullName && fMention.full_name) {
+								fullName = fMention.full_name;
+							}
 							if (fMention.birth_year) byear = String(fMention.birth_year).split(':')[0];
 							if (fMention.death_year) dyear = String(fMention.death_year).split(':')[0];
 						}

@@ -117,8 +117,9 @@ class VirtualGrid {
 
 			if (!isMeasuring && this.sortState.field === h) {
 				const indicator = document.createElement('span');
-				indicator.textContent = this.sortState.direction === 1 ? ' ▲' : ' ▼';
+				indicator.textContent = this.sortState.direction === 1 ? ' ▽' : ' △';
 				indicator.style.fontSize = '0.7rem';
+				indicator.style.color = '#999999';
 				innerPill.appendChild(indicator);
 			}
 
@@ -395,14 +396,14 @@ function renderSourceGrid(mentionsList, sourceLabel, highlightMentionId) {
 	if (!currentGrid) {
 		currentGrid = new VirtualGrid('source-grid-container', 'sg-header', 'sg-body', 'cs-pane-label', {
 			onSort: (field, direction) => {
-				const colIndex = headers.indexOf(field);
+				const colIndex = currentGrid.headers.indexOf(field);
 				if (colIndex === -1) return;
 
 				// Remember highlighted mention_id before sorting
 				let highlightedId = null;
 				if (currentGrid.highlightIndex !== -1 && currentGrid.highlightIndex < currentGrid.data.length) {
 					// We need to find the mention_id column index to save the id
-					const idColIndex = headers.indexOf('mention_id');
+					const idColIndex = currentGrid.headers.indexOf('mention_id');
 					if (idColIndex !== -1) {
 						highlightedId = currentGrid.data[currentGrid.highlightIndex][idColIndex];
 					}
@@ -414,23 +415,38 @@ function renderSourceGrid(mentionsList, sourceLabel, highlightMentionId) {
 					if (valA == null) valA = '';
 					if (valB == null) valB = '';
 					if (typeof valA === 'string' && typeof valB === 'string') {
-						return valA.localeCompare(valB, undefined, { numeric: true }) * direction;
+						return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) * direction;
 					}
 					return (valA > valB ? 1 : valA < valB ? -1 : 0) * direction;
 				});
 
 				// Restore highlight index
 				if (highlightedId !== null) {
-					const idColIndex = headers.indexOf('mention_id');
+					const idColIndex = currentGrid.headers.indexOf('mention_id');
 					if (idColIndex !== -1) {
 						const newIndex = currentGrid.data.findIndex(row => row[idColIndex] == highlightedId);
-						currentGrid.highlightIndex = newIndex;
+						currentGrid.setHighlightIndex(newIndex);
 					}
+				} else {
+					currentGrid.renderBody();
 				}
-
-				currentGrid.renderBody();
 			}
 		});
+	}
+
+	const idColIndex = headers.indexOf('mention_id');
+	if (idColIndex !== -1) {
+		dataArrays.sort((a, b) => {
+			let valA = a[idColIndex];
+			let valB = b[idColIndex];
+			if (valA == null) valA = '';
+			if (valB == null) valB = '';
+			if (typeof valA === 'string' && typeof valB === 'string') {
+				return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+			}
+			return (valA > valB ? 1 : valA < valB ? -1 : 0);
+		});
+		currentGrid.sortState = { field: 'mention_id', direction: 1 };
 	}
 
 	currentGrid.setData(headers, dataArrays, sourceLabel);
@@ -456,10 +472,13 @@ function handleContextSearch() {
 		currentSearchIndex = -1;
 	}
 
+	const terms = term.split(/\s+/).filter(Boolean);
+
 	let foundIndex = -1;
 	const data = currentGrid.data;
 	for (let i = currentSearchIndex + 1; i < data.length; i++) {
-		if (data[i].some(val => String(val).toLowerCase().includes(term))) {
+		const rowString = data[i].map(val => String(val).toLowerCase()).join(' ');
+		if (terms.every(t => rowString.includes(t))) {
 			foundIndex = i;
 			break;
 		}

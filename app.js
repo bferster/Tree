@@ -289,7 +289,7 @@ class App {
 						}
 						fillFields(treeNode);
 					}
-					
+
 					if (window.treeApp) window.treeApp.RenderNodes();
 
 					if (this.personEditor) {
@@ -342,16 +342,19 @@ class App {
 					this.showProgress("Filtering mentions...", 25);
 					setTimeout(() => {
 						let blockedMentions = this.MakeBlockedMentions(["race", "gender"], criteria.factors, criteria.sources);
+						const sample = blockedMentions.filter(m => (m.first_name || '').toLowerCase().includes('mary') || (m.last_name || '').toLowerCase().includes('johnson') || (m.full_name || '').toLowerCase().includes('mary'));
 						this.showProgress("Scoring mentions...", 60);
 						setTimeout(() => {
 							const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName, criteria.person_id);
 							const resultFactors = scoreResult.factors || null;
 							const foundMentions = scoreResult.mentions || blockedMentions;
+							const topPositive = foundMentions.filter(m => m.score > 0);
+							const maryJ = foundMentions.filter(m => (m.first_name || '').toLowerCase().includes('mary') || (m.last_name || '').toLowerCase().includes('johnson') || (m.full_name || '').toLowerCase().includes('mary'));
 							const n = window.treeApp.GetNode(criteria.person_id);
 							this.showProgress("Rendering matches...", 90);
 							setTimeout(() => {
-								if (this.mentionsEditor && n) {
-									this.mentionsEditor.load(n, criteria.sources, foundMentions, resultFactors);
+								if (this.mentionsEditor) {
+									this.mentionsEditor.load(n || { person_id: -1, full_name: 'Search Person', mentions: [] }, criteria.sources, foundMentions, resultFactors);
 									$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
 								}
 								this.hideProgress();
@@ -362,8 +365,8 @@ class App {
 			});
 		}
 
-		if (mEditor && node) {
-			mEditor.load(node, [], []);
+		if (mEditor) {
+			mEditor.load(node || { person_id: -1, full_name: 'Search Person', mentions: [] }, [], []);
 		}
 		if (pEditor) {
 			pEditor.load(personId);
@@ -465,7 +468,11 @@ class App {
 		if (factors) {
 			for (let f of factors) {
 				if (blockingFields.includes(f.field)) {
-					activeFactors[f.field] = f.value;
+					// Only use as a blocker if compare is not 'ignore'
+					const cmp = Array.isArray(f.compare) ? f.compare.find(x => x !== 'rare') : f.compare;
+					if (cmp && cmp !== 'ignore') {
+						activeFactors[f.field] = f.value;
+					}
 				}
 			}
 		}
@@ -489,8 +496,15 @@ class App {
 		};
 
 		// Optimization: Pre-process blocking filters outside the 112k iteration loop
+		// Normalize race: any value that starts with 'w' = 'w' (white), everything else = 'b' (non-white)
+		const normalizeRace = (val) => {
+			if (!val) return '';
+			const v = String(val).trim().toLowerCase();
+			if (!v) return '';
+			return v.charAt(0) === 'w' ? 'w' : 'b';
+		};
 		let targetGen = activeFactors['gender'] !== undefined && activeFactors['gender'] !== null ? String(activeFactors['gender']).charAt(0).toLowerCase() : null;
-		let targetRace = activeFactors['race'] !== undefined && activeFactors['race'] !== null ? String(activeFactors['race']).toLowerCase().trim() : null;
+		let targetRace = activeFactors['race'] !== undefined && activeFactors['race'] !== null ? normalizeRace(activeFactors['race']) : null;
 		let bYearStr = activeFactors['birth_year'] !== undefined && activeFactors['birth_year'] !== null ? String(activeFactors['birth_year']).split(':')[0].split('-')[0] : null;
 		let by = bYearStr ? Number(bYearStr) : NaN;
 
@@ -510,7 +524,7 @@ class App {
 			}
 
 			if (matchesAll && targetRace) {
-				let mentionRace = (m.norm_race || m.race || '').toLowerCase().trim();
+				let mentionRace = normalizeRace(m.norm_race || m.race || '');
 				if (mentionRace && targetRace !== mentionRace) {
 					matchesAll = false;
 				}

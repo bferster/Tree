@@ -230,8 +230,12 @@ class PersonEditor {
 		}
 
 		if (!person) {
-			$target.empty().append($('<p>').text('Person not found: ' + personId));
-			return;
+			if (personId === -1) {
+				person = { person_id: -1, full_name: 'Search Person', mentions: [] };
+			} else {
+				$target.empty().append($('<p>').text('Person not found: ' + personId));
+				return;
+			}
 		}
 
 		// working copy of state (selections, weights, etc.)
@@ -251,6 +255,18 @@ class PersonEditor {
 	/* ----------------------------------------------------------
 	   State initialization
 	   ---------------------------------------------------------- */
+	static calculateVerity(person) {
+		const mentionsCount = Array.isArray(person.mentions) ? person.mentions.length : 0;
+		if (mentionsCount === 0) return 0;
+		if (mentionsCount === 1) {
+			const hasValidFirst = person.first_name && person.first_name.includes(':') && !person.first_name.endsWith(':Added');
+			const hasValidLast = person.last_name && person.last_name.includes(':') && !person.last_name.endsWith(':Added');
+			return (hasValidFirst && hasValidLast) ? 2 : 1;
+		}
+		if (mentionsCount === 2) return 3;
+		return 4;
+	}
+
 	static buildState(person) {
 		if (!PersonEditor.userSettings) {
 			PersonEditor.userSettings = {
@@ -341,10 +357,12 @@ class PersonEditor {
 			}
 		});
 
+		person.verity = PersonEditor.calculateVerity(person);
 		return {
-			fields: fields,
-			sources: sources,
-			verity: Math.max(0, Math.min(4, Math.round(person.verity !== undefined ? person.verity : (person.confidence || 0))))
+			fields,
+			verity: person.verity,
+			sources,
+			editing: false
 		};
 	}
 
@@ -353,14 +371,18 @@ class PersonEditor {
 	   ---------------------------------------------------------- */
 	static renderShell($dialog, person, state) {
 		const fname = (person.first_name || '').split(':')[0];
+		const mname = (person.middle_name || '').split(':')[0];
 		const lname = (person.last_name || '').split(':')[0];
+		let fullDisplay = [fname, mname, lname].filter(Boolean).join(' ').trim();
+		if (!fullDisplay && person.full_name) {
+			fullDisplay = person.full_name.split(':')[0];
+		}
 		const byear = person.birth_year ? String(person.birth_year).split(':')[0] : '?';
-		const dyear = person.death_year ? String(person.death_year).split(':')[0] : '?';
-		const yearStr = person.death_year ? `(${PersonEditor.escapeHtml(byear)} - ${PersonEditor.escapeHtml(dyear)})` : `(${PersonEditor.escapeHtml(byear)})`;
+		const yearStr = byear !== '?' ? `(b. ${PersonEditor.escapeHtml(byear)})` : '';
 		$dialog.append(`
       <div class="vpe-header">
         <div>
-          <p class="vpe-target-summary">${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} &nbsp;&nbsp;${yearStr}</p>
+          <p class="vpe-target-summary">${PersonEditor.escapeHtml(fullDisplay)} &nbsp;&nbsp;${yearStr}</p>
         </div>
         <i class="ti ti-x vpe-close" aria-label="Close"></i>
       </div>
@@ -411,6 +433,7 @@ class PersonEditor {
 		// re-render after any change
 		$factors.off('vpe:rerender').on('vpe:rerender', function () {
 			PersonEditor.renderFactors($dialog, person, state);
+			PersonEditor.renderFooter($dialog, person, state);
 		});
 	}
 
@@ -738,7 +761,10 @@ class PersonEditor {
 			if (window.app && window.app.expand && window.app.expand.mentionsMap) {
 				const m = window.app.expand.mentionsMap.get(r.target_mention);
 				if (m) {
-					linkedName = `${(m.first_name || '').split(':')[0]} ${(m.last_name || '').split(':')[0]}`.trim();
+					const fn = (m.first_name || '').split(':')[0];
+					const mn = (m.middle_name || '').split(':')[0];
+					const ln = (m.last_name || '').split(':')[0];
+					linkedName = [fn, mn, ln].filter(Boolean).join(' ').trim();
 				}
 			}
 			if (!linkedName) linkedName = r.target_mention;
@@ -791,15 +817,15 @@ class PersonEditor {
 				selectedValue = fstate.options[fstate.selected].value;
 			}
 
-			if (cfg.key === 'first_name' && selectedValue) {
-				let norm = window.Normalize.getNickname(selectedValue.split(':')[0]);
-				if (norm) PersonEditor.updateFieldState(state, 'norm_first_name', norm);
-			} else if (cfg.key === 'last_name' && selectedValue) {
-				let baseVal = selectedValue.split(':')[0];
-				let nysiis = window.Normalize.getNYSIIS(baseVal);
-				if (nysiis) PersonEditor.updateFieldState(state, 'nysiis_last_name', nysiis);
-				let soundex = window.Normalize.getSoundex(baseVal);
-				if (soundex) PersonEditor.updateFieldState(state, 'soundex_last_name', soundex);
+			if (cfg.key === 'first_name') {
+				let norm = selectedValue ? window.Normalize.getNickname(selectedValue.split(':')[0]) : '';
+				PersonEditor.updateFieldState(state, 'norm_first_name', norm || '');
+			} else if (cfg.key === 'last_name') {
+				let baseVal = selectedValue ? selectedValue.split(':')[0] : '';
+				let nysiis = baseVal ? window.Normalize.getNYSIIS(baseVal) : '';
+				PersonEditor.updateFieldState(state, 'nysiis_last_name', nysiis || '');
+				let soundex = baseVal ? window.Normalize.getSoundex(baseVal) : '';
+				PersonEditor.updateFieldState(state, 'soundex_last_name', soundex || '');
 			}
 
 			// Update the person object with current state selections
@@ -808,22 +834,46 @@ class PersonEditor {
 				person[k] = (fs && fs.selected >= 0 && fs.options[fs.selected]) ? fs.options[fs.selected].value : null;
 			});
 
+			// Calculate verity before syncing changes
+			person.verity = PersonEditor.calculateVerity(person);
+			state.verity = person.verity;
+
 			// Update the tree node
 			if (window.treeApp) {
 				const node = window.treeApp.GetNode(person.person_id);
 				if (node) {
+					const { x, y, fx, fy, vx, vy } = node;
 					Object.assign(node, person);
+					node.x = x;
+					node.y = y;
+					if (fx !== undefined) node.fx = fx;
+					if (fy !== undefined) node.fy = fy;
+					if (vx !== undefined) node.vx = vx;
+					if (vy !== undefined) node.vy = vy;
 					window.treeApp.RenderNodes();
+				}
+			}
+
+			// Save verity to curTree.persons as well
+			if (window.app && window.app.curTree && window.app.curTree.persons) {
+				let persons = window.app.curTree.persons;
+				let appPerson = Array.isArray(persons) ? persons.find(p => p.person_id === person.person_id) : persons[person.person_id];
+				if (appPerson) {
+					appPerson.verity = person.verity;
 				}
 			}
 
 			// Update the person editor header
 			const fname = (person.first_name || '').split(':')[0];
+			const mname = (person.middle_name || '').split(':')[0];
 			const lname = (person.last_name || '').split(':')[0];
+			let fullDisplay = [fname, mname, lname].filter(Boolean).join(' ').trim();
+			if (!fullDisplay && person.full_name) {
+				fullDisplay = person.full_name.split(':')[0];
+			}
 			const byear = person.birth_year ? String(person.birth_year).split(':')[0] : '?';
-			const dyear = person.death_year ? String(person.death_year).split(':')[0] : '?';
-			const yearStr = person.death_year ? `(${PersonEditor.escapeHtml(byear)} - ${PersonEditor.escapeHtml(dyear)})` : `(${PersonEditor.escapeHtml(byear)})`;
-			$row.closest('.vpe-dialog').find('.vpe-target-summary').html(`${PersonEditor.escapeHtml(fname)} ${PersonEditor.escapeHtml(lname)} &nbsp;&nbsp;${yearStr}`);
+			const yearStr = byear !== '?' ? `(b. ${PersonEditor.escapeHtml(byear)})` : '';
+			$row.closest('.vpe-dialog').find('.vpe-target-summary').html(`${PersonEditor.escapeHtml(fullDisplay)} &nbsp;&nbsp;${yearStr}`);
 
 			$row.closest('.vpe-factors').trigger('vpe:rerender');
 		});
@@ -865,7 +915,6 @@ class PersonEditor {
 		// Search button
 		const $searchBtn = $(`<button type="button" class="vpe-search-btn"><i class="ti ti-search"></i>Search</button>`);
 		$searchBtn.on('click', function () {
-			if (window.Sound) window.Sound("ding");
 			$dialog.trigger('vpe:search', [PersonEditor.collectCriteria(person, state)]);
 		});
 
@@ -1013,6 +1062,10 @@ class PersonEditor {
 	static collectCriteria(person, state) {
 		const useSmartName = $('#vpe-smart-name-cb').is(':checked');
 		const criteria = { person_id: person.person_id, factors: [], sources: [], useSmartName };
+		// Track name parts AND whether they have an active (non-ignore) compare mode
+		let nameParts = { first_name: '', middle_name: '', last_name: '', suffix: '' };
+		let namePartActive = { first_name: false, middle_name: false, last_name: false, suffix: false };
+
 		Object.keys(state.fields).forEach(key => {
 			const f = state.fields[key];
 			const sel = f.selected;
@@ -1022,6 +1075,12 @@ class PersonEditor {
 
 				const isRare = f.active.includes('rare');
 				let compareOpts = f.active.filter(opt => opt !== 'rare');
+				const effectiveCmp = compareOpts.find(c => c !== 'ignore') || compareOpts[0] || 'ignore';
+
+				if (nameParts[key] !== undefined) {
+					nameParts[key] = splitVal;
+					namePartActive[key] = (effectiveCmp !== 'ignore');
+				}
 
 				criteria.factors.push({
 					field: key,
@@ -1033,6 +1092,26 @@ class PersonEditor {
 				});
 			}
 		});
+
+		// Build full_name only from name parts that have an active (non-ignore) compare
+		const fullNameParts = [];
+		if (nameParts.first_name && namePartActive.first_name) fullNameParts.push(nameParts.first_name);
+		if (nameParts.middle_name && namePartActive.middle_name) fullNameParts.push(nameParts.middle_name);
+		if (nameParts.last_name && namePartActive.last_name) fullNameParts.push(nameParts.last_name);
+		if (nameParts.suffix && namePartActive.suffix) fullNameParts.push(nameParts.suffix);
+
+		const fullName = fullNameParts.join(' ').trim();
+		if (fullName) {
+			criteria.factors.push({
+				field: 'full_name',
+				value: fullName,
+				impact: 1.0,
+				compare: ['exact'],
+				rare: false,
+				score: 0
+			});
+		}
+
 		Object.keys(state.sources).forEach(id => {
 			if (state.sources[id].checked) criteria.sources.push(id);
 		});
