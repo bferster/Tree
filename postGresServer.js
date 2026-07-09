@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
 const API_TARGET = 'http://127.0.0.1:3000'; // Target PostgREST API (local end of the SSH tunnel)
 
 const MIME_TYPES = {

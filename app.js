@@ -564,7 +564,7 @@ class App {
 		}
 		else {
 			this.showProgress('Connecting to database...', false);
-			const mentionsCols = 'mention_id,source,source_year,original_data,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,created,narrative,soundex_last_name';
+			const mentionsCols = 'mention_id,source,source_year,original_data,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,narrative,soundex_last_name';
 			const [assertions, mentions] = await Promise.all([
 				this.fetchWithProgress(`/api/assertions?subject_id=like.${countyPrefix}*&order=assertion_id`, 'assertions'),
 				this.fetchWithProgress(`/api/mentions?select=${mentionsCols}&source=like.${countyPrefix}*&order=mention_id`, 'mentions')
