@@ -11,6 +11,7 @@ class App {
 
 		this.curTree = {
 			treeName: "Family",
+			county: "ALB",
 			owner: "Bill",
 			persons: [
 				{ person_id: "P001", mentions: ["ALB-CN-1880-257"], anchor: null, first_name: "William:ALB-CN-1880-257", middle_name: null, last_name: "Spears:ALB-CN-1880-257", suffix: null, birth_year: "1840:ALB-CN-1880-257", death_year: "1910:Added", gender: "M:ALB-CN-1880-257", race: "B:ALB-CN-1880-257", x: 200, y: 200, verity: 2 },
@@ -550,7 +551,30 @@ class App {
 		const urlParams = new URLSearchParams(window.location.search);
 		const isTest = window.location.search.toLowerCase().includes('test');
 		this.county = urlParams.get('c') || 'ALB';
+		const lastSavedTreeName = localStorage.getItem('verite_last_tree_name');
+		if (lastSavedTreeName) {
+			const saved = localStorage.getItem('verite_tree_' + lastSavedTreeName);
+			if (saved) {
+				try {
+					const parsed = JSON.parse(saved);
+					const treeCounty = parsed.county || "ALB";
+					const urlCounty = urlParams.get('c');
+					if (!urlCounty || urlCounty === treeCounty) {
+						this.curTree = parsed;
+						this.county = treeCounty;
+						console.log('Loaded last saved tree on startup:', lastSavedTreeName);
+					} else {
+						console.log('Skipping last saved tree load on startup: county mismatch with URL c parameter');
+					}
+				} catch (e) {
+					console.error('Failed to parse last saved tree on startup:', e);
+				}
+			}
+		}
 		const countyPrefix = this.county + '-';
+		if (!this.curTree.county) {
+			this.curTree.county = this.county;
+		}
 
 		if (isTest) {
 			this.showProgress('Loading data from CSV...', false);
@@ -605,11 +629,19 @@ class App {
 		setTimeout(() => this.hideProgress(), 1500);           // Hide popup
 
 		if (window.treeApp) {                                  // If tree exists
+			let maxPid = 1;
 			Object.values(this.curTree.persons).forEach(p => {  // For each person
 				if (!window.treeApp.GetNode(p.person_id)) {    // If missing
 					window.treeApp.AddNode(p);                 // Add to tree
 				}
+				if (p.person_id && p.person_id.startsWith('P')) {
+					const num = parseInt(p.person_id.substring(1), 10);
+					if (!isNaN(num) && num >= maxPid) {
+						maxPid = num + 1;
+					}
+				}
 			});
+			window.treeApp.pidCounter = maxPid;
 
 			this.expand = new ExpandAssertions(this.assertions, this.mentions);
 			this.rebuildAllRelationships();
@@ -654,6 +686,122 @@ class App {
 		const raw_log = Math.log2(m / u);                          		// Rare -> large +, common -> small -
 		const score = 0.0225 * raw_log - 0.1;							// Calc score
 		return Math.max(0.0, Math.min(0.3, score));                 	// Scale to [0.0, 0.3]
+	}
+
+	async saveTree(name) {
+		if (!name) return;
+		this.curTree.treeName = name;
+		this.curTree.county = this.county;
+		localStorage.setItem('verite_tree_' + name, JSON.stringify(this.curTree));
+		localStorage.setItem('verite_last_tree_name', name);
+		console.log('Saved tree:', name);
+	}
+
+	async loadTree(name) {
+		const saved = localStorage.getItem('verite_tree_' + name);
+		if (!saved) return false;
+		try {
+			const parsed = JSON.parse(saved);
+			const targetCounty = parsed.county || "ALB";
+			if (this.county !== targetCounty) {
+				this.county = targetCounty;
+				const countyPrefix = this.county + '-';
+				const isTest = window.location.search.toLowerCase().includes('test');
+				if (isTest) {
+					this.showProgress('Loading data from CSV...', false);
+					const [allAssertions, allMentions] = await Promise.all([
+						d3.csv(`img/assertions.csv?v=${version}`),
+						d3.csv(`img/mentions.csv?v=${version}`)
+					]);
+					this.assertions = allAssertions.filter(r => r.subject_id && r.subject_id.startsWith(countyPrefix));
+					this.mentions = allMentions.filter(r => r.source && r.source.startsWith(countyPrefix)).map(r => { delete r.narrative_vector; return r; });
+				} else {
+					this.showProgress('Connecting to database...', false);
+					const mentionsCols = 'mention_id,source,source_year,original_data,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,narrative,soundex_last_name';
+					const [assertions, mentions] = await Promise.all([
+						this.fetchWithProgress(`/api/assertions?subject_id=like.${countyPrefix}*&order=assertion_id`, 'assertions'),
+						this.fetchWithProgress(`/api/mentions?select=${mentionsCols}&source=like.${countyPrefix}*&order=mention_id`, 'mentions')
+					]);
+					this.assertions = assertions;
+					this.mentions = mentions;
+				}
+				this.BuildNameFrequencies(this.mentions);
+				setTimeout(() => this.hideProgress(), 1500);
+			}
+
+			this.curTree = parsed;
+			this.curTree.treeName = name;
+			this.curTree.county = this.county;
+			localStorage.setItem('verite_last_tree_name', name);
+
+			if (window.treeApp) {
+				window.treeApp.ClearAll();
+				let maxPid = 1;
+				Object.values(this.curTree.persons).forEach(p => {
+					if (!window.treeApp.GetNode(p.person_id)) {
+						window.treeApp.AddNode(p);
+					}
+					if (p.person_id && p.person_id.startsWith('P')) {
+						const num = parseInt(p.person_id.substring(1), 10);
+						if (!isNaN(num) && num >= maxPid) {
+							maxPid = num + 1;
+						}
+					}
+				});
+				window.treeApp.pidCounter = maxPid;
+
+				this.expand = new ExpandAssertions(this.assertions, this.mentions);
+				this.rebuildAllRelationships();
+
+				window.treeApp.ApplyLayout();
+				window.treeApp.RenderNodes();
+				window.treeApp.RenderEdges();
+				window.treeApp.FitToScreen();
+
+				if (window.treeApp.state.nodes.length > 0) {
+					const pid = window.treeApp.state.nodes[0].person_id;
+					window.treeApp.SelectNodeAndShowEditor(pid);
+				}
+			}
+			return true;
+		} catch (e) {
+			console.error('Failed to load tree:', name, e);
+			return false;
+		}
+	}
+
+	async deleteTree(name) {
+		localStorage.removeItem('verite_tree_' + name);
+		const lastSaved = localStorage.getItem('verite_last_tree_name');
+		if (lastSaved === name) {
+			localStorage.removeItem('verite_last_tree_name');
+			if (this.curTree.treeName === name) {
+				this.curTree = {
+					treeName: "Family",
+					owner: "Bill",
+					persons: [],
+					relationships: []
+				};
+				if (window.treeApp) {
+					window.treeApp.ClearAll();
+					window.treeApp.ApplyLayout();
+					window.treeApp.RenderNodes();
+					window.treeApp.RenderEdges();
+				}
+			}
+		}
+		console.log('Deleted tree:', name);
+	}
+
+	listTrees() {
+		const list = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key.startsWith('verite_tree_')) {
+				list.push(key.substring('verite_tree_'.length));
+			}
+		}
+		return list.sort();
 	}
 
 }

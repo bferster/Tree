@@ -23,6 +23,10 @@ class TreeApp {
 					File
 					<div class="dropdown">
 						<div class="dropdown-item" id="menu-new">New</div>
+						<div class="dropdown-item" id="menu-save">Save</div>
+						<div class="dropdown-item" id="menu-load">Load...</div>
+						<div class="dropdown-item" id="menu-delete">Delete...</div>
+						<div class="dropdown-separator"></div>
 						<div class="dropdown-item has-submenu">
 							Export
 							<div class="submenu">
@@ -149,6 +153,48 @@ class TreeApp {
 				<div class="dialog-footer">
 					<button id="add-node-cancel">Cancel</button>
 					<button id="add-node-confirm" class="primary-btn">Add Person</button>
+				</div>
+			</dialog>
+
+			<dialog id="save-tree-modal" class="modern-dialog" style="min-width: 300px;">
+				<div class="dialog-header">
+					<h3 style="margin:0;">Save Family Tree</h3>
+				</div>
+				<div class="dialog-body" style="margin-bottom: 20px;">
+					<p style="margin-bottom: 10px;">Enter tree name:</p>
+					<input type="text" id="save-tree-name-input" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;" />
+				</div>
+				<div class="dialog-footer">
+					<button id="save-tree-cancel">Cancel</button>
+					<button id="save-tree-confirm" class="primary-btn">Save</button>
+				</div>
+			</dialog>
+
+			<dialog id="load-tree-modal" class="modern-dialog" style="min-width: 300px;">
+				<div class="dialog-header">
+					<h3 style="margin:0;">Load Family Tree</h3>
+				</div>
+				<div class="dialog-body" style="margin-bottom: 20px;">
+					<p style="margin-bottom: 10px;">Select a tree to load:</p>
+					<select id="load-tree-select" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"></select>
+				</div>
+				<div class="dialog-footer">
+					<button id="load-tree-cancel">Cancel</button>
+					<button id="load-tree-confirm" class="primary-btn">Load</button>
+				</div>
+			</dialog>
+
+			<dialog id="delete-tree-modal" class="modern-dialog" style="min-width: 300px;">
+				<div class="dialog-header">
+					<h3 style="margin:0;">Delete Family Tree</h3>
+				</div>
+				<div class="dialog-body" style="margin-bottom: 20px;">
+					<p style="margin-bottom: 10px;">Select a tree to delete:</p>
+					<select id="delete-tree-select" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"></select>
+				</div>
+				<div class="dialog-footer">
+					<button id="delete-tree-cancel">Cancel</button>
+					<button id="delete-tree-confirm" class="danger-btn">Delete</button>
 				</div>
 			</dialog>
 		`);
@@ -369,6 +415,124 @@ class TreeApp {
 						this.RenderEdges();
 						this.SelectNodeAndShowEditor(newPid);
 					}
+				}
+			});
+
+			// Save Tree Handler
+			$('#menu-save').on('click', (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				if (window.app) {
+					const curName = window.app.curTree.treeName || "Family";
+					$('#save-tree-name-input').val(curName);
+					document.getElementById('save-tree-modal').showModal();
+				}
+			});
+
+			$('#save-tree-cancel').on('click', () => {
+				document.getElementById('save-tree-modal').close();
+			});
+
+			$('#save-tree-confirm').on('click', async () => {
+				const name = $('#save-tree-name-input').val().trim();
+				if (!name) {
+					alert('Please enter a valid tree name.');
+					return;
+				}
+				document.getElementById('save-tree-modal').close();
+				await window.app.saveTree(name);
+				if (typeof Sound === 'function') Sound("ding");
+				alert(`Tree saved successfully as "${name}".`);
+			});
+
+			// Load Tree Handler
+			$('#menu-load').on('click', (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				if (window.app) {
+					const trees = window.app.listTrees();
+					if (trees.length === 0) {
+						alert('No saved trees found.');
+						return;
+					}
+					const select = $('#load-tree-select');
+					select.empty();
+					trees.forEach(t => {
+						select.append(`<option value="${t}">${t}</option>`);
+					});
+					if (trees.includes(window.app.curTree.treeName)) {
+						select.val(window.app.curTree.treeName);
+					}
+					document.getElementById('load-tree-modal').showModal();
+				}
+			});
+
+			$('#load-tree-cancel').on('click', () => {
+				document.getElementById('load-tree-modal').close();
+			});
+
+			$('#load-tree-confirm').on('click', async () => {
+				const name = $('#load-tree-select').val();
+				document.getElementById('load-tree-modal').close();
+				if (name) {
+					const success = await window.app.loadTree(name);
+					if (success) {
+						alert(`Tree "${name}" loaded successfully.`);
+					} else {
+						alert(`Failed to load tree "${name}".`);
+					}
+				}
+			});
+
+			// Delete Tree Handler
+			$('#menu-delete').on('click', (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				if (window.app) {
+					const trees = window.app.listTrees();
+					if (trees.length === 0) {
+						alert('No saved trees found.');
+						return;
+					}
+					const select = $('#delete-tree-select');
+					select.empty();
+					trees.forEach(t => {
+						select.append(`<option value="${t}">${t}</option>`);
+					});
+					document.getElementById('delete-tree-modal').showModal();
+				}
+			});
+
+			$('#delete-tree-cancel').on('click', () => {
+				document.getElementById('delete-tree-modal').close();
+			});
+
+			$('#delete-tree-confirm').on('click', async () => {
+				const name = $('#delete-tree-select').val();
+				document.getElementById('delete-tree-modal').close();
+				if (name) {
+					if (confirm(`Are you sure you want to delete the tree "${name}"?`)) {
+						await window.app.deleteTree(name);
+						alert(`Tree "${name}" has been deleted.`);
+					}
+				}
+			});
+
+			// RDF Export Handler
+			$('#menu-export-rdf').on('click', (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				if (window.app && window.app.curTree) {
+					const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.app.curTree, null, 4));
+					const downloadAnchorNode = document.createElement('a');
+					downloadAnchorNode.setAttribute("href", dataStr);
+					downloadAnchorNode.setAttribute("download", (window.app.curTree.treeName || "tree") + "_rdf.json");
+					document.body.appendChild(downloadAnchorNode);
+					downloadAnchorNode.click();
+					downloadAnchorNode.remove();
+					
+					if (typeof Sound === 'function') Sound("ding");
+					alert("RDF JSON file saved successfully!");
 				}
 			});
 
@@ -1022,6 +1186,10 @@ class TreeApp {
 
 		}
 
+		if (window.app && typeof window.app.rebuildAllRelationships === 'function') {
+			window.app.rebuildAllRelationships();
+		}
+
 		return newNode;
 	}
 
@@ -1090,10 +1258,25 @@ class TreeApp {
 		// Remove triplets where any deleted node is subject or object
 		this.state.triplets = this.state.triplets.filter(t => !toDelete.has(t.subject) && !toDelete.has(t.object));
 
+		// Sync with app.curTree
+		if (window.app && window.app.curTree && window.app.curTree.persons) {
+			if (Array.isArray(window.app.curTree.persons)) {
+				window.app.curTree.persons = window.app.curTree.persons.filter(p => !toDelete.has(p.person_id));
+			} else {
+				toDelete.forEach(deletedId => {
+					delete window.app.curTree.persons[deletedId];
+				});
+			}
+		}
+
 		if (toDelete.has(this.state.selectedPid)) {
 			this.state.selectedPid = null;
 		}
 		this.isDirty = true;
+
+		if (window.app && typeof window.app.rebuildAllRelationships === 'function') {
+			window.app.rebuildAllRelationships();
+		}
 	}
 
 	GetNode(pid)																		// GET NODE BY PID
