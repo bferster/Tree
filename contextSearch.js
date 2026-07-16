@@ -233,6 +233,16 @@ class VirtualGrid {
 				}
 				tr.appendChild(td);
 			});
+			tr.addEventListener('dblclick', () => {
+				const idColIndex = this.headers.indexOf('mention_id');
+				if (idColIndex !== -1) {
+					const mentionId = row[idColIndex];
+					const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+					if (globalApp && globalApp.editMention) {
+						globalApp.editMention(mentionId);
+					}
+				}
+			});
 			this.body.appendChild(tr);
 		});
 
@@ -240,6 +250,42 @@ class VirtualGrid {
 		spacerBottom.style.height = `${Math.max(0, totalHeight - (endIndex * this.options.rowHeight))}px`;
 		this.body.appendChild(spacerBottom);
 	}
+}
+
+// -----------------------------------------------------------------------------
+// GetCurrentSource Helper
+// -----------------------------------------------------------------------------
+
+function GetCurrentSource() {
+	const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+	if (!globalApp || !globalApp.mentions || globalApp.mentions.length === 0) return null;
+
+	// 1. Check selected person's mentions
+	if (window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid) {
+		const node = window.treeApp.GetNode(window.treeApp.state.selectedPid);
+		if (node && node.mentions && node.mentions.length > 0) {
+			const targetMention = globalApp.mentions.find(m => String(m.mention_id) === String(node.mentions[0]));
+			if (targetMention && targetMention.source) {
+				return targetMention.source;
+			}
+		}
+	}
+
+	// 2. Check globalApp.county and globalApp.source
+	if (globalApp.county && globalApp.source) {
+		const constructedSource = `${globalApp.county}-${globalApp.source}`;
+		const hasMentions = globalApp.mentions.some(m => m.source === constructedSource);
+		if (hasMentions) {
+			return constructedSource;
+		}
+	}
+
+	// 3. Fallback to first mention's source
+	if (globalApp.mentions[0] && globalApp.mentions[0].source) {
+		return globalApp.mentions[0].source;
+	}
+
+	return null;
 }
 
 // -----------------------------------------------------------------------------
@@ -254,7 +300,11 @@ async function ShowSource(mention_id) {
 	const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
 	if (!globalApp || !globalApp.mentions) return;
 
-	const targetMention = globalApp.mentions.find(m => m.mention_id == mention_id);
+	let targetMention = globalApp.mentions.find(m => String(m.mention_id) === String(mention_id));
+	if (!targetMention) {
+		// Try treating mention_id as a source name and find the first mention in that source
+		targetMention = globalApp.mentions.find(m => m.source === mention_id);
+	}
 	if (!targetMention) return;
 
 	const sourceData = globalApp.mentions.filter(m => m.source === targetMention.source);
@@ -324,7 +374,7 @@ async function ShowSource(mention_id) {
 	if (container) {
 		$('.tab-btn').removeClass('active').css('border-top', '2px solid transparent').css('background', '#d4d4d4');
 		$('.tab-btn[data-target="sources-editor-container"]').addClass('active').css('border-top', '2px solid #0078d7').css('background', '#e5e5e5');
-		$('#person-editor-container, #mentions-editor-container, #sources-editor-container, #familysearch-editor-container, #chat-editor-container').hide();
+		$('#person-editor-container, #mentions-editor-container, #sources-editor-container, #chat-editor-container').hide();
 		$('#sources-editor-container').show();
 
 		setTimeout(() => {

@@ -199,7 +199,6 @@ class App {
 						<div class="tab-btn active" data-target="person-editor-container" style="padding: 10px 20px; cursor: pointer; background: #e5e5e5; border-top: 2px solid #0078d7; font-weight: bold; font-size: 14px; color: #333;">PERSON EDITOR</div>
 						<div class="tab-btn" data-target="mentions-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">MENTIONS</div>
 						<div class="tab-btn" data-target="sources-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">CONTEXT</div>
-						<div class="tab-btn" data-target="familysearch-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">FAMILY-SEARCH</div>
 						<div class="tab-btn" data-target="chat-editor-container" style="padding: 10px 20px; cursor: pointer; background: #d4d4d4; border-top: 2px solid transparent; font-size: 14px; color: #666;">AI-CHAT</div>
 					</div>
 					<div id="editor-scroll-area" style="flex: 1; position: relative; overflow: hidden; background: #e5e5e5;">
@@ -207,9 +206,6 @@ class App {
 						<div id="mentions-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow-y: auto; padding: 12px; box-sizing: border-box; display: none;"></div>
 						<div id="sources-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
 							<div style="display: flex; justify-content: center; align-items: center; height: 100%; color: #888; font-size: 16px;">No context yet...</div>
-						</div>
-						<div id="familysearch-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
-						<br><br><p style="text-align:center">To be added soon!</p>
 						</div>
 						<div id="chat-editor-container" style="position: absolute; top:0; left:0; right:0; bottom:0; overflow: hidden; box-sizing: border-box; display: none;">
 						<br><br><p style="text-align:center">To be added soon!</p>
@@ -227,8 +223,18 @@ class App {
 					document.body.classList.add('show-tree');      // Show tree
 				} else {                                           // If editor tab
 					document.body.classList.remove('show-tree');   // Hide tree
-					rightPanel.find('#person-editor-container, #mentions-editor-container, #sources-editor-container, #familysearch-editor-container, #chat-editor-container').hide(); // Hide all panels
+					rightPanel.find('#person-editor-container, #mentions-editor-container, #sources-editor-container, #chat-editor-container').hide(); // Hide all panels
 					rightPanel.find('#' + target).show();          // Show target panel
+
+					if (target === 'sources-editor-container') {
+						const hasGrid = $('#sources-editor-container').find('.data-grid').length > 0;
+						if (!hasGrid) {
+							const currentSource = (typeof GetCurrentSource === 'function') ? GetCurrentSource() : null;
+							if (currentSource && typeof ShowSource === 'function') {
+								ShowSource(currentSource);
+							}
+						}
+					}
 				}
 			});
 		}
@@ -562,9 +568,6 @@ class App {
 					if (!urlCounty || urlCounty === treeCounty) {
 						this.curTree = parsed;
 						this.county = treeCounty;
-						console.log('Loaded last saved tree on startup:', lastSavedTreeName);
-					} else {
-						console.log('Skipping last saved tree load on startup: county mismatch with URL c parameter');
 					}
 				} catch (e) {
 					console.error('Failed to parse last saved tree on startup:', e);
