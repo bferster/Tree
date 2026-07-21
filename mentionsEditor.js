@@ -609,6 +609,57 @@ class MentionsEditor {
 			}
 		}
 
+		let groupMatchHtml = '';
+		if (match.mention.groupMatch) {
+			const gm = match.mention.groupMatch;
+			const comps = gm.components || {};
+			const compRows = Object.entries(comps).map(([k, v]) => {
+				const label = k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+				const valDisplay = typeof v === 'number' ? v.toFixed(3) : String(v);
+				return `
+					<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 4px; border-bottom: 1px solid rgba(0,0,0,0.03);">
+						<span style="color: #666;">${MentionsEditor._esc(label)}</span>
+						<span style="font-weight: 500;">${MentionsEditor._esc(valDisplay)}</span>
+					</div>
+				`;
+			}).join('');
+
+			const assignRows = (gm.assignments || []).map((a, idx) => {
+				const borderStyle = idx < gm.assignments.length - 1 ? 'border-bottom: 1px solid rgba(0,0,0,0.05);' : '';
+				return `
+					<div style="display: flex; justify-content: space-between; padding: 6px 4px; ${borderStyle} font-size: 12px;">
+						<div style="display: flex; flex-direction: column;">
+							<span style="font-weight: 600; color: #333;">${MentionsEditor._esc(a.family)}</span>
+							<span style="color: #666; font-size: 11px;">Matched to: ${MentionsEditor._esc(a.holding)}</span>
+						</div>
+						<div style="align-self: center; font-weight: bold; color: #2e7d4f;">
+							${Math.round(a.sim * 100)}%
+						</div>
+					</div>
+				`;
+			}).join('');
+
+			groupMatchHtml = `
+				<div class="me-gm-block" style="margin-top: 16px; border-top: 1px solid var(--me-border); padding-top: 12px;">
+					<div class="me-gm-header" style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px; user-select: none;">
+						<p class="me-raw-label" style="margin: 0; font-weight: 600; font-size: 11px; text-transform: uppercase; color: #666;">Group Match</p>
+						<span class="me-gm-toggle-icon" style="font-size: 10px; color: #999; margin-left: 6px; transition: transform 0.2s; display: inline-block;">▶</span>
+					</div>
+					<div class="me-gm-content" style="display: none;">
+						<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
+							<div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #1e293b;">Match Components</div>
+							<div>${compRows}</div>
+						</div>
+
+						<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+							<div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #1e293b;">Roster Assignments (${gm.assignments ? gm.assignments.length : 0})</div>
+							<div>${assignRows || '<div style="font-size: 12px; color: #666; font-style: italic;">No assignments</div>'}</div>
+						</div>
+					</div>
+				</div>
+			`;
+		}
+
 		let combinedBottomHtml = '';
 		if (familyHtml) {
 			combinedBottomHtml += `<div style="height: 1px; background: #e0e0e0; margin: 24px 0 0 0;"></div>`;
@@ -616,6 +667,9 @@ class MentionsEditor {
 		}
 		if (originalDataHtml) {
 			combinedBottomHtml += originalDataHtml;
+		}
+		if (groupMatchHtml) {
+			combinedBottomHtml += groupMatchHtml;
 		}
 
 		this.detailEl.innerHTML = `
@@ -658,6 +712,21 @@ class MentionsEditor {
 					icon.style.transform = 'rotate(90deg)';
 				} else {
 					rawJson.style.display = 'none';
+					icon.style.transform = 'rotate(0deg)';
+				}
+			});
+		}
+
+		const gmHeader = this.detailEl.querySelector('.me-gm-header');
+		if (gmHeader) {
+			gmHeader.addEventListener('click', () => {
+				const gmContent = this.detailEl.querySelector('.me-gm-content');
+				const icon = this.detailEl.querySelector('.me-gm-toggle-icon');
+				if (gmContent.style.display === 'none') {
+					gmContent.style.display = 'block';
+					icon.style.transform = 'rotate(90deg)';
+				} else {
+					gmContent.style.display = 'none';
 					icon.style.transform = 'rotate(0deg)';
 				}
 			});

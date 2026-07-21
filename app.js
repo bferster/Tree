@@ -18,7 +18,7 @@ class App {
 				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeanna:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2 },
 				{ person_id: "P003", mentions: ["ALB-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", suffix: null, birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, verity: 2 },
 				{ person_id: "P004", mentions: ["ALB-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", suffix: null, birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, verity: 2 },
-				{ person_id: "P005", mentions: ["ALB-CN-1880-22721"], anchor: null, first_name: "Dabney:ALB-CN-1880-22721", middle_name: null, last_name: "Johnson:ALB-CN-1880-22721", suffix: null, birth_year: "1832:ALB-CN-1880-22721", death_year: "", gender: "M:ALB-CN-1880-22721", race: "B:ALB-CN-1880-22721", x: 200, y: 200, verity: 2 },
+				{ person_id: "P005", mentions: ["ALB-CN-1880-22721"], anchor: null, first_name: "Dabney:ALB-CN-1880-22721", middle_name: null, last_name: "Johnson:ALB-CN-1880-22721", suffix: null, birth_year: "1832:ALB-CN-1870-1688", death_year: "", gender: "M: ALB- CN - 1880 - 22721", race: "B: ALB - CN - 1880 - 22721", x: 200, y: 200, verity: 2 },
 
 			],
 			relationships: []
@@ -346,28 +346,171 @@ class App {
 
 			$('#person-editor-container').on('vpe:search', (e, criteria) => {
 				if (criteria && criteria.factors) {
-					this.showProgress("Filtering mentions...", 25);
-					setTimeout(() => {
-						let blockedMentions = this.MakeBlockedMentions(["race", "gender"], criteria.factors, criteria.sources);
-						const sample = blockedMentions.filter(m => (m.first_name || '').toLowerCase().includes('mary') || (m.last_name || '').toLowerCase().includes('johnson') || (m.full_name || '').toLowerCase().includes('mary'));
-						this.showProgress("Scoring mentions...", 60);
+					// Check if searching on slave schedule sources (SS-1850 or SS-1860)
+					const slaveScheduleSources = (criteria.sources || []).filter(s => s.includes('SS-1850') || s.includes('SS-1860'));
+					const isSlaveScheduleSearch = slaveScheduleSources.length > 0;
+
+					if (isSlaveScheduleSearch) {
+						// GroupMatcher requires the current person to have a mention from 1870 census
+						const targetPerson = this.curTree ? (Array.isArray(this.curTree.persons) ? this.curTree.persons.find(p => p.person_id === criteria.person_id) : this.curTree.persons[criteria.person_id]) : null;
+						const treeNode = window.treeApp ? window.treeApp.GetNode(criteria.person_id) : null;
+						const personMentions = (treeNode && treeNode.mentions) || (targetPerson && targetPerson.mentions) || [];
+
+						let has1870Mention = false;
+						const mentionsList = personMentions.map(m => typeof m === 'object' ? m : (this.mentions ? this.mentions.find(x => x.mention_id === m) : null)).filter(Boolean);
+						for (const m of mentionsList) {
+							if (m.source && (m.source.includes('1870') || m.source.includes('CN-1870'))) {
+								has1870Mention = true;
+								break;
+							}
+						}
+
+						if (!has1870Mention) {
+							alert('Warning: The current person does not have a mention that refers to the 1870 census. GroupMatcher requires an 1870 census family to match against.');
+							return;
+						}
+
+						this.showProgress("Matching slave schedule with GroupMatcher...", 25);
 						setTimeout(() => {
-							const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName, criteria.person_id);
-							const resultFactors = scoreResult.factors || null;
-							const foundMentions = scoreResult.mentions || blockedMentions;
-							const topPositive = foundMentions.filter(m => m.score > 0);
-							const maryJ = foundMentions.filter(m => (m.first_name || '').toLowerCase().includes('mary') || (m.last_name || '').toLowerCase().includes('johnson') || (m.full_name || '').toLowerCase().includes('mary'));
-							const n = window.treeApp.GetNode(criteria.person_id);
+							// Build family1870 structure from target person and relatives
+							const familyMembers = [];
+
+							// Add target person
+							const tpFirstName = (targetPerson && targetPerson.first_name ? targetPerson.first_name.split(':')[0] : (treeNode && treeNode.first_name ? treeNode.first_name.split(':')[0] : '')) || undefined;
+							const tpLastName = (targetPerson && targetPerson.last_name ? targetPerson.last_name.split(':')[0] : (treeNode && treeNode.last_name ? treeNode.last_name.split(':')[0] : '')) || undefined;
+							const tpBirthYear = targetPerson && targetPerson.birth_year ? Number(String(targetPerson.birth_year).split(':')[0]) : (treeNode && treeNode.birth_year ? Number(String(treeNode.birth_year).split(':')[0]) : undefined);
+							const tpGender = targetPerson && targetPerson.gender ? targetPerson.gender.split(':')[0] : (treeNode && treeNode.gender ? treeNode.gender.split(':')[0] : undefined);
+							const tpRace = targetPerson && targetPerson.race ? targetPerson.race.split(':')[0] : (treeNode && treeNode.race ? treeNode.race.split(':')[0] : undefined);
+
+							let tpHouseholdId = undefined;
+							if (personMentions.length > 0) {
+								const firstPM = this.mentions.find(x => x.mention_id === personMentions[0]);
+								if (firstPM) {
+									tpHouseholdId = firstPM.household_id || firstPM.householdId;
+								}
+							}
+
+							familyMembers.push({
+								personId: criteria.person_id,
+								firstName: tpFirstName,
+								lastName: tpLastName,
+								birthYear: isNaN(tpBirthYear) ? undefined : tpBirthYear,
+								gender: tpGender,
+								race: tpRace,
+								householdId: tpHouseholdId
+							});
+
+							// Add household/family members linked via expandAssertions or tree
+							if (this.expand && personMentions.length > 0) {
+								const uniqueRelPids = new Set();
+								personMentions.forEach(mid => {
+									const view = this.expand.viewFor(mid);
+									if (view && view.results) {
+										view.results.forEach(res => {
+											if (res.mention_id && !personMentions.includes(res.mention_id)) {
+												const relM = this.mentions.find(x => x.mention_id === res.mention_id);
+												if (relM) {
+													const rBY = relM.birth_year != null ? Number(relM.birth_year) : undefined;
+													familyMembers.push({
+														mentionId: relM.mention_id,
+														firstName: relM.first_name || undefined,
+														lastName: relM.last_name || undefined,
+														birthYear: isNaN(rBY) ? undefined : rBY,
+														gender: relM.gender,
+														race: relM.norm_race || relM.race,
+														householdId: relM.household_id || relM.householdId
+													});
+												}
+											}
+										});
+									}
+								});
+							}
+
+							const family1870 = {
+								familyId: `FC1870-${criteria.person_id}`,
+								county: this.county || 'ALB',
+								members: familyMembers
+							};
+
+							// Filter slave schedule mentions for the requested source(s)
+							const sourceTag = slaveScheduleSources[0].includes('1850') ? 'SS-1850' : 'SS-1860';
+							const blockedMentions = this.MakeBlockedMentions([], criteria.factors, criteria.sources);
+
+							const groupMatcher = new GroupMatcher();
+							const groupResults = groupMatcher.matchAll(blockedMentions, family1870, { sourceTag });
+
+							// Flatten top matched holdings into individual candidate mentions sorted by holding probability
+							// and limit to 80 highest scoring mentions
+							const scoredMentions = [];
+							const holdings = groupMatcher.extractHoldings(blockedMentions, { sourceTag });
+							const holdingResultMap = new Map();
+							groupResults.forEach(gr => holdingResultMap.set(gr.holdingId, gr));
+
+							for (const h of holdings) {
+								const matchRes = holdingResultMap.get(h.familyId);
+								const prob = matchRes ? matchRes.probability : 0;
+								// Find the owner mention in blockedMentions for this holding
+								const ownerMention = blockedMentions.find(row => {
+									const key = row.family_id || row.familyId || row.household_id || row.householdId;
+									if (key !== h.familyId) return false;
+									if (row.original_data) {
+										let data = row.original_data;
+										if (typeof data === 'string') {
+											try { data = JSON.parse(data); } catch (e) {}
+										}
+										if (data && data.status === 'Owner') {
+											return true;
+										}
+									}
+									return false;
+								});
+
+								if (ownerMention) {
+									const mCopy = Object.assign({}, ownerMention);
+									mCopy.score = prob * 100; // convert probability [0..1] to score
+									mCopy.groupMatch = matchRes;
+									scoredMentions.push(mCopy);
+								}
+							}
+
+							scoredMentions.sort((a, b) => b.score - a.score);
+							const top80Mentions = scoredMentions.slice(0, 80);
+
 							this.showProgress("Rendering matches...", 90);
 							setTimeout(() => {
 								if (this.mentionsEditor) {
-									this.mentionsEditor.load(n || { person_id: -1, full_name: 'Search Person', mentions: [] }, criteria.sources, foundMentions, resultFactors);
+									const n = window.treeApp ? window.treeApp.GetNode(criteria.person_id) : null;
+									this.mentionsEditor.load(n || { person_id: -1, full_name: 'Search Person', mentions: [] }, criteria.sources, top80Mentions, []);
 									$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
 								}
 								this.hideProgress();
 							}, 50);
 						}, 50);
-					}, 50);
+					} else {
+						this.showProgress("Filtering mentions...", 25);
+						setTimeout(() => {
+							let blockedMentions = this.MakeBlockedMentions(["race", "gender"], criteria.factors, criteria.sources);
+							const sample = blockedMentions.filter(m => (m.first_name || '').toLowerCase().includes('mary') || (m.last_name || '').toLowerCase().includes('johnson') || (m.full_name || '').toLowerCase().includes('mary'));
+							this.showProgress("Scoring mentions...", 60);
+							setTimeout(() => {
+								const scoreResult = app.score.ScoreMentions(blockedMentions, criteria.factors, criteria.sources, criteria.useSmartName, criteria.person_id);
+								const resultFactors = scoreResult.factors || null;
+								const foundMentions = scoreResult.mentions || blockedMentions;
+								const topPositive = foundMentions.filter(m => m.score > 0);
+								const maryJ = foundMentions.filter(m => (m.first_name || '').toLowerCase().includes('mary') || (m.last_name || '').toLowerCase().includes('johnson') || (m.full_name || '').toLowerCase().includes('mary'));
+								const n = window.treeApp.GetNode(criteria.person_id);
+								this.showProgress("Rendering matches...", 90);
+								setTimeout(() => {
+									if (this.mentionsEditor) {
+										this.mentionsEditor.load(n || { person_id: -1, full_name: 'Search Person', mentions: [] }, criteria.sources, foundMentions, resultFactors);
+										$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
+									}
+									this.hideProgress();
+								}, 50);
+							}, 50);
+						}, 50);
+					}
 				}
 			});
 		}
