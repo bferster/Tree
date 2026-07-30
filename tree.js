@@ -1142,7 +1142,7 @@ class TreeApp {
 			norm_first_name: fields.norm_first_name || "",
 			last_name: fields.last_name || "",
 			nysiis_last_name: fields.nysiis_last_name || "",
-			soundex_last_name: fields.soundex_last_name || "",
+			metaphone_last_name: fields.metaphone_last_name || "",
 			suffix: fields.suffix || "",
 			race: fields.race || "",
 			gender: fields.gender || "male",

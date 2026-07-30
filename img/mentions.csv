@@ -1,4 +1,4 @@
-﻿mention_id,source,,,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,,narrative,soundex_last_name,narrative_vector
+mention_id,source,,,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,,narrative,metaphone_last_name,narrative_vector
 ALB-VRM-4178.3,ALB-VRM,,,0.85,John Bryant,John,,Bryant,,,,M,,,JOHN,BRYAD,,,,,,,,,
 ALB-VRM-4179.2,ALB-VRM,,,0.85,Mi(n)a,Mi(n)a,,Mi(n)a,,,,F,,,MINA,MAN,,,,,,,,,
 ALB-VRM-4179.3,ALB-VRM,,,0.85,Harry Perkins,Harry,,Perkins,,,,M,,,HENRY,PARCAN,,,,,,,,,

@@ -46,7 +46,7 @@ narrative: textual summary of the data
 	norm_first_name
 	last_name
 	NYSIIS
-	soundex
+	metaphone
 	suffix
 	race
 	gender 

@@ -4,7 +4,7 @@ class Score {
 	{
 		app.score = this;
 		this.jwThresholds = Object.assign({ default: 0.85 }, options.jwThresholds); // Set thresholds
-		this.nameFields = ['full_name', 'first_name', 'middle_name', 'last_name', 'norm_first_name', 'nysiis_last_name', 'soundex_last_name'];
+		this.nameFields = ['full_name', 'first_name', 'middle_name', 'last_name', 'norm_first_name', 'nysiis_last_name', 'metaphone_last_name'];
 		this.skipFields = new Set(options.skipFields || ['race', 'gender', 'suffix']); // Set skip fields
 		this.useSmartName = true;
 		this.SmartNameScore = 0.0;
@@ -206,8 +206,8 @@ class Score {
 					mentionFactors[fcmp === 'fuzzy' ? 'fuzzyLastName' : 'exactLastName'] = { value: f.score };
 				} else if (!useSmart && f.field === 'nysiis_last_name') {
 					mentionFactors[fcmp === 'fuzzy' ? 'fuzzyNysiisLast' : 'exactNysiisLast'] = { value: f.score };
-				} else if (!useSmart && f.field === 'soundex_last_name') {
-					mentionFactors[fcmp === 'fuzzy' ? 'fuzzySoundexLast' : 'exactSoundexLast'] = { value: f.score };
+				} else if (!useSmart && f.field === 'metaphone_last_name') {
+					mentionFactors[fcmp === 'fuzzy' ? 'fuzzyMetaphoneLast' : 'exactMetaphoneLast'] = { value: f.score };
 				} else if (!this.nameFields.includes(f.field) || !useSmart) {
 					mentionFactors[f.field] = { value: f.score };
 				}
@@ -378,9 +378,9 @@ class Score {
 			} else {
 				const candidateNysi = window.Normalize.getNYSIIS(candidateLast);
 				const anchorNysi = window.Normalize.getNYSIIS(anchorLast);
-				const candidateSndx = window.Normalize.getSoundex(candidateLast);
-				const anchorSndx = window.Normalize.getSoundex(anchorLast);
-				if ((candidateNysi && candidateNysi === anchorNysi) || (candidateSndx && candidateSndx === anchorSndx)) {
+				const candidateMetaphone = window.Normalize.getMetaphone(candidateLast);
+				const anchorMetaphone = window.Normalize.getMetaphone(anchorLast);
+				if ((candidateNysi && candidateNysi === anchorNysi) || (candidateMetaphone && candidateMetaphone === anchorMetaphone)) {
 					surnameMatch = true;
 				}
 			}

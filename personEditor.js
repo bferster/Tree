@@ -16,7 +16,7 @@ class PersonEditor {
 		norm_first_name: 'c-pink',
 		last_name: 'c-teal',
 		nysiis_last_name: 'c-coral',
-		soundex_last_name: 'c-orange',
+		metaphone_last_name: 'c-orange',
 		suffix: 'c-amber',
 		race: 'c-brown',
 		gender: 'c-cyan',
@@ -72,7 +72,7 @@ class PersonEditor {
 			compare: ['ignore', 'exact'], compareMode: 'multi'
 		},
 		{
-			key: 'soundex_last_name', label: 'Soundex', editKind: 'locked',
+			key: 'metaphone_last_name', label: 'Metaphone', editKind: 'locked',
 			compare: ['ignore', 'exact'], compareMode: 'multi'
 		},
 		{
@@ -149,15 +149,19 @@ class PersonEditor {
 				canonical = window.Normalize.getNickname(person.first_name.split(':')[0]);
 			} else if (key === 'nysiis_last_name' && person.last_name) {
 				canonical = window.Normalize.getNYSIIS(person.last_name.split(':')[0]);
-			} else if (key === 'soundex_last_name' && person.last_name) {
-				canonical = window.Normalize.getSoundex(person.last_name.split(':')[0]);
+			} else if (key === 'metaphone_last_name' && person.last_name) {
+				canonical = window.Normalize.getMetaphone(person.last_name.split(':')[0]);
 			}
 		}
 
 		if (canonical != null && canonical !== '') {
 			let valString = String(canonical);
-			let optString = valString.includes(':') ? valString : String(canonical);
-			if (!valString.includes(':')) {
+			let optString = valString;
+			if (key === 'metaphone_last_name') {
+				if (!valString.endsWith(':Added') && !valString.endsWith(':Calculated') && !valString.includes('ALB-')) {
+					valString = `${valString}:Calculated`;
+				}
+			} else if (!valString.includes(':')) {
 				valString = `${valString}:Added`;
 			}
 			let baseVal = valString.split(':')[0].toLowerCase();
@@ -277,7 +281,7 @@ class PersonEditor {
 					norm_first_name: ['exact'],
 					last_name: ['exact'],
 					nysiis_last_name: ['ignore'],
-					soundex_last_name: ['ignore'],
+					metaphone_last_name: ['ignore'],
 					suffix: ['ignore'],
 					race: ['exact'],
 					gender: ['exact'],
@@ -300,8 +304,8 @@ class PersonEditor {
 					canonical = window.Normalize.getNickname(person.first_name.split(':')[0]);
 				} else if (cfg.key === 'nysiis_last_name' && person.last_name) {
 					canonical = window.Normalize.getNYSIIS(person.last_name.split(':')[0]);
-				} else if (cfg.key === 'soundex_last_name' && person.last_name) {
-					canonical = window.Normalize.getSoundex(person.last_name.split(':')[0]);
+				} else if (cfg.key === 'metaphone_last_name' && person.last_name) {
+					canonical = window.Normalize.getMetaphone(person.last_name.split(':')[0]);
 				}
 			}
 
@@ -311,7 +315,18 @@ class PersonEditor {
 				if (exactIdx >= 0) {
 					found = exactIdx;
 				} else {
-					const getBase = (s) => String(s).split(':')[0].trim().toUpperCase();
+					const getBase = (s) => {
+						const str = String(s).trim().toUpperCase();
+						if (cfg.key === 'metaphone_last_name') {
+							const parts = str.split(':');
+							if (parts.length >= 3) return `${parts[0]}:${parts[1]}`;
+							if (parts.length === 2 && (parts[1].includes('-') || parts[1] === 'ADDED' || parts[1] === 'CALCULATED')) {
+								return parts[0];
+							}
+							return str;
+						}
+						return str.split(':')[0];
+					};
 					const canBase = getBase(canonical);
 					found = options.findIndex(o => getBase(o.value) === canBase);
 				}
@@ -453,20 +468,39 @@ class PersonEditor {
 		let fullVal = "";
 		if (!isNull) {
 			fullVal = fstate.options[fstate.selected].value;
-			const parts = fullVal.split(':');
-			if (parts.length > 1) {
-				val1 = parts[0];
-				val2 = parts.slice(1).join(':');
+			if (cfg.key === 'metaphone_last_name') {
+				const parts = fullVal.split(':');
+				if (parts.length >= 3) {
+					val1 = `${parts[0]}:${parts[1]}`.toUpperCase();
+					val2 = parts.slice(2).join(':');
+				} else if (parts.length === 2) {
+					if (parts[1].includes('-') || parts[1].toLowerCase() === 'added' || parts[1].toLowerCase() === 'calculated') {
+						val1 = parts[0].toUpperCase();
+						val2 = parts[1];
+					} else {
+						val1 = `${parts[0]}:${parts[1]}`.toUpperCase();
+						val2 = "";
+					}
+				} else {
+					val1 = fullVal.toUpperCase();
+					val2 = "";
+				}
 			} else {
-				val1 = fullVal;
-				val2 = fullVal;
-			}
+				const parts = fullVal.split(':');
+				if (parts.length > 1) {
+					val1 = parts[0];
+					val2 = parts.slice(1).join(':');
+				} else {
+					val1 = fullVal;
+					val2 = fullVal;
+				}
 
-			if (['norm_first_name', 'nysiis_last_name', 'soundex_last_name'].includes(cfg.key)) {
-				val1 = val1.toUpperCase();
-				val2 = "";
-			} else if (['first_name', 'middle_name', 'last_name'].includes(cfg.key)) {
-				val1 = val1.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+				if (['norm_first_name', 'nysiis_last_name'].includes(cfg.key)) {
+					val1 = val1.toUpperCase();
+					val2 = "";
+				} else if (['first_name', 'middle_name', 'last_name'].includes(cfg.key)) {
+					val1 = val1.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+				}
 			}
 		}
 
@@ -497,7 +531,7 @@ class PersonEditor {
 					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Nick name'; }).find('.vpe-chip').text(norm ? norm.toUpperCase() : '');
 				} else if (cfg.key === 'last_name') {
 					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'NYSIIS'; }).find('.vpe-chip').text(window.Normalize.getNYSIIS(val) ? window.Normalize.getNYSIIS(val).toUpperCase() : '');
-					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Soundex'; }).find('.vpe-chip').text(window.Normalize.getSoundex(val) ? window.Normalize.getSoundex(val).toUpperCase() : '');
+					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Metaphone'; }).find('.vpe-chip').text(window.Normalize.getMetaphone(val) ? window.Normalize.getMetaphone(val).toUpperCase() : '');
 				}
 			});
 
@@ -526,7 +560,7 @@ class PersonEditor {
 			return $row;
 		}
 
-		const chipColor = cfg.key === 'soundex_last_name' ? '#000' : ramp_[1];
+		const chipColor = cfg.key === 'metaphone_last_name' ? '#000' : ramp_[1];
 		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${chipColor}"></span>`);
 		const $chipText = $(`<span></span>`);
 		if (!isNull && val1) $chipText.text(val1);
@@ -541,7 +575,7 @@ class PersonEditor {
 			$sel.append(`<option value="-1" ${isNull ? 'selected' : ''} style="color:${ramp_[1]}">Make blank</option>`);
 			if (cfg.editKind === 'free') {
 				$sel.append(`<option value="addtext" style="color:${ramp_[1]}">Add text</option>`);
-				$sel.on('dblclick', function(e) {
+				$sel.on('dblclick', function (e) {
 					e.stopPropagation();
 					fstate.editing = true;
 					$row.trigger('vpe:changed');
@@ -675,7 +709,7 @@ class PersonEditor {
 		// COMPARE
 		const $compare = $(`<div class="vpe-compare-row"></div>`);
 		const isSmartNameChecked = PersonEditor.userSettings ? PersonEditor.userSettings.useSmartName : false;
-		const nameFields = ['first_name', 'middle_name', 'norm_first_name', 'last_name', 'nysiis_last_name', 'soundex_last_name', 'suffix'];
+		const nameFields = ['first_name', 'middle_name', 'norm_first_name', 'last_name', 'nysiis_last_name', 'metaphone_last_name', 'suffix'];
 		const isNameField = nameFields.includes(cfg.key);
 		const shouldColorActive = !(isSmartNameChecked && isNameField);
 
@@ -726,7 +760,7 @@ class PersonEditor {
 	/* ----- linked people row ----- */
 	static renderLinkedRow(person, cfg) {
 		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS.linked_persons];
-		
+
 		let rels = [];
 		if (window.app && window.app.expand && person.mentions) {
 			const uniqueRelsMap = new Map();
@@ -824,8 +858,8 @@ class PersonEditor {
 				let baseVal = selectedValue ? selectedValue.split(':')[0] : '';
 				let nysiis = baseVal ? window.Normalize.getNYSIIS(baseVal) : '';
 				PersonEditor.updateFieldState(state, 'nysiis_last_name', nysiis || '');
-				let soundex = baseVal ? window.Normalize.getSoundex(baseVal) : '';
-				PersonEditor.updateFieldState(state, 'soundex_last_name', soundex || '');
+				let metaphone = baseVal ? window.Normalize.getMetaphone(baseVal) : '';
+				PersonEditor.updateFieldState(state, 'metaphone_last_name', metaphone || '');
 			}
 
 			// Update the person object with current state selections

@@ -5,7 +5,7 @@ Lever A — Name agreement (cascade, gender-aware):
 	Surname match fires if any of these hold:
 
 		candidate full_name equals anchor full_name ; OR
-		candidate last_name equals anchor last_name (exact, or via hasNameVariant alias, or NYSIIS→Soundex phonetic — see independence note below); OR
+		candidate last_name equals anchor last_name (exact, or via hasNameVariant alias, or NYSIIS→Metaphone phonetic — see independence note below); OR
 		an assertion (isSpouseOf, marriage record) bridges the two surnames.
 
 		Score the strongest rung that fires:

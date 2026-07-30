@@ -209,7 +209,7 @@ html_content = """<!DOCTYPE html>
     <p>A surname match holds if <strong>any</strong> of the following are true:</p>
     <ul>
         <li>Candidate's full name matches anchor's full name.</li>
-        <li>Candidate's last name matches anchor's last name (exact, via <code>hasNameVariant</code> alias in tree, or via NYSIIS/Soundex phonetics).</li>
+        <li>Candidate's last name matches anchor's last name (exact, via <code>hasNameVariant</code> alias in tree, or via NYSIIS/Metaphone phonetics).</li>
         <li>Either record's last name matches the other's maiden name.</li>
         <li>An assertion (such as <code>isSpouseOf</code> in the tree) bridges the two surnames.</li>
     </ul>

@@ -119,7 +119,7 @@ html_content = """<!DOCTYPE html>
         <span class="color-badge" style="background:#FBEAF0; color:#4B1528;">Nick name</span>
         <span class="color-badge" style="background:#E1F5EE; color:#04342C;">Last name</span>
         <span class="color-badge" style="background:#FAECE7; color:#4A1B0C;">NYSIIS</span>
-        <span class="color-badge" style="background:#FFF3E0; color:#E65100;">Soundex</span>
+        <span class="color-badge" style="background:#FFF3E0; color:#E65100;">Metaphone</span>
         <span class="color-badge" style="background:#FCEFD9; color:#4A2E07;">Suffix</span>
         <span class="color-badge" style="background:#EFEBE9; color:#3E2723;">Race</span>
         <span class="color-badge" style="background:#E0F7FA; color:#006064;">Gender</span>
@@ -167,7 +167,7 @@ html_content = """<!DOCTYPE html>
         <li>Exact match on initials or normalized nickname: <strong>0.90</strong></li>
         <li>Jaro-Winkler above threshold on first and last names: <strong>0.70</strong></li>
         <li>Phonetic sound match via NYSIIS: <strong>0.60</strong></li>
-        <li>Phonetic sound match via Soundex: <strong>0.50</strong></li>
+        <li>Phonetic sound match via Metaphone: <strong>0.50</strong></li>
     </ol>
 
     <h3>C. Individual/Year Factor Scoring</h3>

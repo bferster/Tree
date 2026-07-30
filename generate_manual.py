@@ -65,7 +65,7 @@ doc.add_paragraph(
     "When you click on a search result, the Mentions Editor displays a detailed breakdown of the Match Score. "
     "This score is calculated by the AI using several factors to determine confidence:"
 )
-doc.add_paragraph("• Name Matching: Checks for exact matches, common nicknames (e.g., \"Wm\" for William), and phonetic similarities using NYSIIS and Soundex algorithms.", style='List Bullet')
+doc.add_paragraph("• Name Matching: Checks for exact matches, common nicknames (e.g., \"Wm\" for William), and phonetic similarities using NYSIIS and Metaphone algorithms.", style='List Bullet')
 doc.add_paragraph("• Demographic Matching: Compares birth and death years, allowing for minor discrepancies common in historical documents.", style='List Bullet')
 doc.add_paragraph("• Household Continuity: The most powerful factor. The system checks if the candidate record contains other family members who are already linked to your anchor person in the tree. Finding a co-resident spouse or child drastically increases the match score.", style='List Bullet')
 doc.add_paragraph(

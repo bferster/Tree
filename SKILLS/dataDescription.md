@@ -91,7 +91,7 @@
 
 	*Normalization*
 
-	If a source has a name, it is normalized to full_name, first_name, middle_name, last_name, NYSIIS-encoded nysiis_last_name, Soundex-encoded Soundex_ last_name. If a source has race, it is normalized into norm_race as W (white) or B (non-white) or null. If a source has an occupation, it is normalized into norm_occupation into 21 categories.
+	If a source has a name, it is normalized to full_name, first_name, middle_name, last_name, NYSIIS-encoded nysiis_last_name, Metaphone-encoded metaphone_last_name. If a source has race, it is normalized into norm_race as W (white) or B (non-white) or null. If a source has an occupation, it is normalized into norm_occupation into 21 categories.
 
 	*Other fields*
 
