@@ -1004,7 +1004,7 @@ class PersonEditor {
 	static renderSourcesDropdown($wrap, state) {
 		$wrap.empty();
 
-		const sourceOptions = [
+		const allSourceOptions = [
 			{ label: 'All sources', value: 'ALL' },
 			{ label: '1870 Census', value: 'CN-1870' },
 			{ label: '1880 Census', value: 'CN-1880' },
@@ -1014,10 +1014,52 @@ class PersonEditor {
 			{ label: 'Birth Records', value: 'VRB' },
 			{ label: 'Marriage Records', value: 'VRM' },
 			{ label: 'Death Records', value: 'VRD' },
+			{ label: 'Vital Records', value: 'VR' },
 			{ label: 'Church Records', value: 'CH' },
 			{ label: 'Free Black Register', value: 'FBR' },
-			{ label: 'Freemans Records', value: 'FL' }
+			{ label: 'Freemans Records', value: 'FL' },
+			{ label: 'Slave Births', value: 'SB' },
+			{ label: 'Cohabitation Children', value: 'CC' },
+			{ label: 'Cohabitation Families', value: 'CF' }
 		];
+
+		const currentCounty = (window.app && window.app.county) ? String(window.app.county).toUpperCase() : 'ALB';
+		const knownSources = new Set();
+
+		if (window.GlobalSources) {
+			Object.keys(window.GlobalSources).forEach(k => {
+				const kUpper = k.toUpperCase();
+				if (kUpper.startsWith(currentCounty + '-') || kUpper.startsWith(currentCounty + '_')) {
+					knownSources.add(kUpper);
+				}
+			});
+		}
+		if (state && state.sources) {
+			Object.keys(state.sources).forEach(k => {
+				const kUpper = k.toUpperCase();
+				if (kUpper.startsWith(currentCounty + '-') || kUpper.startsWith(currentCounty + '_')) {
+					knownSources.add(kUpper);
+				}
+			});
+		}
+
+		const sourceOptions = allSourceOptions.filter(opt => {
+			if (opt.value === 'ALL') return true;
+			if (knownSources.size === 0) return true;
+
+			for (let src of knownSources) {
+				let sParts = src.split('-');
+				let core = sParts.length > 1 && (sParts[0] === 'ALB' || sParts[0] === 'AUG' || sParts[0] === 'FAQ')
+					? sParts.slice(1).join('-')
+					: src;
+
+				if (core === opt.value) return true;
+				if (core.startsWith('VR') && (opt.value.startsWith('VR') || opt.value === 'VR')) return true;
+				if (opt.value.includes('-') && core.startsWith(opt.value)) return true;
+				if (!opt.value.includes('-') && (core === opt.value || core.startsWith(opt.value))) return true;
+			}
+			return false;
+		});
 
 		const ids = Object.keys(state.sources);
 		const allChecked = ids.length > 0 && ids.every(id => state.sources[id].checked);

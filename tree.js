@@ -145,6 +145,7 @@ class TreeApp {
 								<option value="isFatherOf">is Father of</option>
 								<option value="isSiblingOf">is Sibling of</option>
 								<option value="isSpouseOf">is Spouse of</option>
+								<option value="isEnslaverOf">is Enslaver of</option>
 								<option value="isDifferentFamily">in Different family</option>
 							</select>
 						</span>
@@ -301,6 +302,7 @@ class TreeApp {
 		this.femalePath = "M 34,49 A 16,16 0 0,1 66,49 A 16,16 0 0,1 34,49 Z M 35,65 L 15,100 L 85,100 L 65,65 Z";
 		this.malePath = "M 34,49 A 16,16 0 0,1 66,49 A 16,16 0 0,1 34,49 Z M 15,100 A 35,35 0 0,1 85,100 Z";
 		this.circlePath = "M 50, 50 m -40, 0 a 40,40 0 1,0 80,0 a 40,40 0 1,0 -80,0";
+		this.squarePath = "M 31,30 H 69 A 16,16 0 0 1 85,46 V 84 A 16,16 0 0 1 69,100 H 31 A 16,16 0 0 1 15,84 V 46 A 16,16 0 0 1 31,30 Z";
 
 		// Drag Behavior
 		this.drag = d3.drag()
@@ -809,19 +811,49 @@ class TreeApp {
 						newX += 200; newY += 0;
 					} else if (relation === 'isDifferentFamily') {
 						newX += 400; newY += 200;
+					} else if (relation === 'isEnslaverOf') {
+						let topNode = sourceNode;
+						const connectedPids = new Set([sourcePid]);
+						let changed = true;
+						while (changed) {
+							changed = false;
+							this.state.triplets.forEach(t => {
+								if (connectedPids.has(t.subject) && !connectedPids.has(t.object)) {
+									connectedPids.add(t.object);
+									changed = true;
+								}
+								if (connectedPids.has(t.object) && !connectedPids.has(t.subject)) {
+									connectedPids.add(t.subject);
+									changed = true;
+								}
+							});
+						}
+						connectedPids.forEach(pid => {
+							const node = this.GetNode(pid);
+							if (node && node.y < topNode.y) {
+								topNode = node;
+							}
+						});
+						newX = topNode.x;
+						newY = topNode.y - 250;
 					}
 
 					const newNodeInfo = {
 						person_id: newPid,
+						anchor: (sourcePid && relation && relation !== 'isDifferentFamily') ? `${relation}:${sourcePid}` : null,
 						first_name: '',
-						last_name: (sourceNode && relation !== 'isDifferentFamily') ? (sourceNode.last_name || '') : '',
+						last_name: (sourceNode && relation !== 'isDifferentFamily' && relation !== 'isEnslaverOf') ? (sourceNode.last_name || '') : '',
 						gender: newGender,
 						birth_year: newBirth,
 						x: newX,
-						y: newY
+						y: newY,
+						isEnslaver: relation === 'isEnslaverOf',
+						color: undefined,
+						fillColor: undefined,
+						moved: true
 					};
 
-					if (sourceNode && relation !== 'isDifferentFamily') {
+					if (sourceNode && relation !== 'isDifferentFamily' && relation !== 'isEnslaverOf') {
 						newNodeInfo.linked_persons = sourceNode.linked_persons ? JSON.parse(JSON.stringify(sourceNode.linked_persons)) : [];
 
 						// Add the source node's formal relatives as plain text
@@ -894,6 +926,25 @@ class TreeApp {
 						this.AddTriplet(newPid, 'isSpouseOf', sourcePid);
 					} else if (relation === 'isCousinOf') {
 						this.AddTriplet(newPid, 'isCousinOf', sourcePid);
+					} else if (relation === 'isEnslaverOf') {
+						this.AddTriplet(newPid, 'isEnslaverOf', sourcePid);
+					}
+
+					if (window.app && window.app.curTree) {
+						if (!Array.isArray(window.app.curTree.relationships)) {
+							window.app.curTree.relationships = [];
+						}
+						const relObj = {
+							subject_id: newPid,
+							predicate: relation,
+							object_id: sourcePid
+						};
+						const exists = window.app.curTree.relationships.some(
+							r => r.subject_id === relObj.subject_id && r.predicate === relObj.predicate && r.object_id === relObj.object_id
+						);
+						if (!exists) {
+							window.app.curTree.relationships.push(relObj);
+						}
 					}
 
 					this.RenderNodes(); this.RenderEdges();
@@ -1137,6 +1188,7 @@ class TreeApp {
 		const pid = fields.person_id || this.GeneratePid();
 		const newNode = {
 			person_id: pid,
+			anchor: fields.anchor !== undefined ? fields.anchor : null,
 			first_name: fields.first_name || "",
 			middle_name: fields.middle_name || "",
 			norm_first_name: fields.norm_first_name || "",
@@ -1152,6 +1204,9 @@ class TreeApp {
 			mentions: fields.mentions || [],
 			linked_persons: fields.linked_persons || [],
 			enslaved: fields.enslaved || false,									// kept for node color/tan styling
+			isEnslaver: fields.isEnslaver !== undefined ? Boolean(fields.isEnslaver) : false,
+			color: fields.color,
+			fillColor: fields.fillColor,
 
 			// Canvas layout properties
 			x: fields.x !== undefined ? fields.x : 0,
@@ -1174,6 +1229,8 @@ class TreeApp {
 					existingAppNode = Object.assign({}, newNode);
 					existingAppNode.linked_persons = newNode.linked_persons ? JSON.parse(JSON.stringify(newNode.linked_persons)) : [];
 					personCollection.push(existingAppNode);
+				} else {
+					existingAppNode.isEnslaver = newNode.isEnslaver;
 				}
 			} else {
 				existingAppNode = personCollection[newNode.person_id];
@@ -1181,6 +1238,8 @@ class TreeApp {
 					existingAppNode = Object.assign({}, newNode);
 					existingAppNode.linked_persons = newNode.linked_persons ? JSON.parse(JSON.stringify(newNode.linked_persons)) : [];
 					personCollection[newNode.person_id] = existingAppNode;
+				} else {
+					existingAppNode.isEnslaver = newNode.isEnslaver;
 				}
 			}
 
@@ -1291,9 +1350,10 @@ class TreeApp {
 		return this.state.triplets.filter(t => t.subject === pid);
 	}
 
-	GetGenderPath(gender)																		// GET SILHOUETTE PATH BY GENDER
+	GetGenderPath(gender, isEnslaver = false)																		// GET SILHOUETTE PATH BY GENDER
 	{
 
+		if (isEnslaver) return this.squarePath;
 		if (!gender) return this.circlePath;
 		const g = gender.split(':')[0].toLowerCase();
 		if (g === 'female' || g === 'f') return this.femalePath;
@@ -1366,12 +1426,12 @@ class TreeApp {
 			})
 			.call(this.drag);
 
-		// 1. Background Shape (Gendered Silhouette)
+		// 1. Background Shape (Gendered Silhouette / Enslaver Rounded Square)
 		nodeEnter.append("path")
 			.attr("class", "node-bg")
-			.attr("d", d => this.GetGenderPath(d.gender))
+			.attr("d", d => this.GetGenderPath(d.gender, d.isEnslaver))
 			.attr("transform", "translate(22, 0) scale(1.16)")
-			.attr("fill", "#f5d506d9")
+			.attr("fill", d => d.isEnslaver ? "#ffe0b2" : (d.color || d.fillColor || d.interiorColor || "#ffe0b2"))
 			.attr("stroke", "#999999")
 			.attr("stroke-width", 3)
 			.attr("stroke-linejoin", "round")
@@ -1481,8 +1541,39 @@ class TreeApp {
 			return d.death_year ? `${by} – ${dy}` : by;
 		});
 		nodeUpdate.select(".node-bg")
-			.attr("d", d => this.GetGenderPath(d.gender))
-			.attr("fill", "#ffe0b2");
+			.attr("d", d => this.GetGenderPath(d.gender, d.isEnslaver))
+			.attr("fill", d => d.isEnslaver ? "#ffe0b2" : (d.color || d.fillColor || d.interiorColor || "#ffe0b2"));
+
+		nodeUpdate.each(function(d) {
+			const group = d3.select(this);
+			let chain = group.select(".enslaver-chain");
+			const nodeColor = d.isEnslaver ? "#ffe0b2" : (d.color || d.fillColor || d.interiorColor || "#ffe0b2");
+			if (d.isEnslaver) {
+				if (chain.empty()) {
+					chain = group.insert("g", ".node-name")
+						.attr("class", "enslaver-chain")
+						.attr("transform", "translate(22, 0) scale(1.16)");
+
+					// Link 1 (top-left)
+					const link1 = chain.append("g").attr("transform", "translate(44, 55) rotate(-35)");
+					link1.append("ellipse").attr("class", "chain-ellipse-outer-1").attr("rx", 8.5).attr("ry", 14.5).attr("stroke", "#888888").attr("stroke-width", 2.2);
+					link1.append("ellipse").attr("class", "chain-ellipse-inner-1").attr("rx", 4).attr("ry", 8.5).attr("stroke", "#888888").attr("stroke-width", 1.8);
+
+					// Link 2 (bottom-right)
+					const link2 = chain.append("g").attr("transform", "translate(56, 70) rotate(-35)");
+					link2.append("ellipse").attr("class", "chain-ellipse-outer-2").attr("rx", 8.5).attr("ry", 14.5).attr("stroke", "#888888").attr("stroke-width", 2.2);
+					link2.append("ellipse").attr("class", "chain-ellipse-inner-2").attr("rx", 4).attr("ry", 8.5).attr("stroke", "#888888").attr("stroke-width", 1.8);
+
+					// Interlocking overlay arc from top-left link
+					const link1Arc = chain.append("g").attr("transform", "translate(44, 55) rotate(-35)");
+					link1Arc.append("path").attr("d", "M -8.5,3 A 8.5,14.5 0 0,0 8.5,3").attr("fill", "none").attr("stroke", "#888888").attr("stroke-width", 2.2);
+				}
+				chain.selectAll("ellipse").attr("fill", nodeColor);
+				chain.style("display", "block");
+			} else {
+				if (!chain.empty()) chain.style("display", "none");
+			}
+		});
 
 		// Update triangle fill colors if they are actively hiding a branch
 		nodeUpdate.select(".tri-right").attr("fill", d => d.hiddenDirs && d.hiddenDirs.right ? "green" : "#999");
@@ -1680,6 +1771,43 @@ class TreeApp {
 			});
 		}
 
+		// Adjust depths for enslaver nodes to be 1 row higher than top-most family member
+		vTriplets.forEach(t => {
+			if (t.predicate === 'isEnslaverOf' || t.predicate === 'wasEnslavedBy' || t.predicate === 'enslaves') {
+				let enslaverPid = t.subject, enslavedPid = t.object;
+				if (t.predicate === 'wasEnslavedBy') {
+					enslaverPid = t.object;
+					enslavedPid = t.subject;
+				}
+
+				let minDepth = depths[enslavedPid] !== undefined ? depths[enslavedPid] : 0;
+				const connectedPids = new Set([enslavedPid]);
+				let changed = true;
+				while (changed) {
+					changed = false;
+					vTriplets.forEach(t2 => {
+						if (t2.predicate !== 'isEnslaverOf' && t2.predicate !== 'wasEnslavedBy' && t2.predicate !== 'enslaves') {
+							if (connectedPids.has(t2.subject) && !connectedPids.has(t2.object)) {
+								connectedPids.add(t2.object);
+								changed = true;
+							}
+							if (connectedPids.has(t2.object) && !connectedPids.has(t2.subject)) {
+								connectedPids.add(t2.subject);
+								changed = true;
+							}
+						}
+					});
+				}
+				connectedPids.forEach(pid => {
+					if (depths[pid] !== undefined && depths[pid] < minDepth) {
+						minDepth = depths[pid];
+					}
+				});
+
+				depths[enslaverPid] = minDepth - 1;
+			}
+		});
+
 		const nodesByDepth = {};
 		vNodes.forEach(n => {
 			let d = depths[n.person_id] || 0;
@@ -1857,6 +1985,11 @@ class TreeApp {
 				if (seenExtended.has(pairKey)) return;
 				seenExtended.add(pairKey);
 				edgeData.push({ type: 'ExtendedOf', source: s, target: o, id: pairKey + '-Extended' });
+			} else if (t.predicate === 'isEnslaverOf' || t.predicate === 'wasEnslavedBy' || t.predicate === 'enslaves') {
+				const pairKey = [t.subject, t.object].sort().join("-");
+				let enslaver = s, enslaved = o;
+				if (t.predicate === 'wasEnslavedBy') { enslaver = o; enslaved = s; }
+				edgeData.push({ type: 'isEnslaverOf', source: enslaver, target: enslaved, id: pairKey + '-Enslaver' });
 			} else if (t.predicate === 'isParentOf' || t.predicate === 'isChildOf') {
 				let parent = s, child = o;
 				if (t.predicate === 'isChildOf') { parent = o; child = s; }
@@ -2023,6 +2156,25 @@ class TreeApp {
 			.attr("stroke-width", 1)
 			.attr("stroke-dasharray", "2,4")
 			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
+
+		// Enslaver (Double dotted line effect)
+		const enslaverEdges = edgeGroups.filter(d => d.type === 'isEnslaverOf');
+		enslaverEdges.append("path")
+			.attr("class", "enslaver-bg")
+			.attr("fill", "none")
+			.attr("stroke", "#999999")
+			.attr("stroke-width", 3.5)
+			.attr("stroke-dasharray", "4,4")
+			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
+
+		enslaverEdges.append("path")
+			.attr("class", "enslaver-fg")
+			.attr("fill", "none")
+			.attr("stroke", "var(--canvas-bg, #ffffff)")
+			.attr("stroke-width", 1.5)
+			.attr("stroke-dasharray", "4,4")
+			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
+
 		this.UpdateTriangleVisibility();
 	}
 
