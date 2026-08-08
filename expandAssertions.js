@@ -36,11 +36,11 @@ class ExpandAssertions {
 	};
 
 	static CENSUS_RELATION_MAP = {
-		'son': 'isChildOf', 'daughter': 'isChildOf', 'child': 'isChildOf',
-		'father': 'isParentOf', 'mother': 'isParentOf', 'parent': 'isParentOf',
-		'brother': 'isSiblingOf', 'sister': 'isSiblingOf', 'sibling': 'isSiblingOf',
-		'wife': 'isSpouseOf', 'husband': 'isSpouseOf', 'spouse': 'isSpouseOf',
-		'stepson': 'isChildOf', 'stepdaughter': 'isChildOf',
+		'son': 'isChildOf', 's': 'isChildOf', 'daughter': 'isChildOf', 'd': 'isChildOf', 'dau': 'isChildOf', 'child': 'isChildOf',
+		'father': 'isParentOf', 'fa': 'isParentOf', 'mother': 'isParentOf', 'mo': 'isParentOf', 'parent': 'isParentOf',
+		'brother': 'isSiblingOf', 'bro': 'isSiblingOf', 'sister': 'isSiblingOf', 'sis': 'isSiblingOf', 'sibling': 'isSiblingOf',
+		'wife': 'isSpouseOf', 'w': 'isSpouseOf', 'wf': 'isSpouseOf', 'husband': 'isSpouseOf', 'h': 'isSpouseOf', 'spouse': 'isSpouseOf',
+		'stepson': 'isChildOf', 'stepdaughter': 'isChildOf', 'stepdau': 'isChildOf',
 		'halfson': 'isChildOf', 'halfdaughter': 'isChildOf'
 	};
 
@@ -60,14 +60,14 @@ class ExpandAssertions {
 				if (!this.mentionsBySource.has(src)) this.mentionsBySource.set(src, []);
 				this.mentionsBySource.get(src).push(m);
 
-				const famId = String(m.family_id || '').trim();
+				const famId = String(m.family_id || m.familyId || m.household_id || m.householdId || '').trim();
 				if (famId && famId.toLowerCase() !== 'null' && famId.toLowerCase() !== 'undefined') {
 					const famKey = `${src}|${famId}`;
 					if (!this.mentionsByFamily.has(famKey)) this.mentionsByFamily.set(famKey, []);
 					this.mentionsByFamily.get(famKey).push(m);
 				}
 
-				const houseId = String(m.household_id || '').trim();
+				const houseId = String(m.household_id || m.householdId || m.family_id || m.familyId || '').trim();
 				if (houseId && houseId.toLowerCase() !== 'null' && houseId.toLowerCase() !== 'undefined') {
 					const houseKey = `${src}|${houseId}`;
 					if (!this.mentionsByHousehold.has(houseKey)) this.mentionsByHousehold.set(houseKey, []);
@@ -90,18 +90,19 @@ class ExpandAssertions {
 
 		const allAssertions = [...assertions];
 		for (const [famKey, members] of this.mentionsByFamily.entries()) {
-			if (famKey.includes('CN-1880')) {
+			if (famKey.includes('CN-1880') || famKey.includes('CN-1870')) {
 				let head = members.find(m => m.head === true || String(m.head || '').trim().toLowerCase() === 't' || String(m.head || '').trim().toLowerCase() === 'y' || (m.original_data && String(m.original_data.head || '').trim().toLowerCase() === 'y'));
 				if (!head) head = members.find(m => {
-					const rel = m.original_data ? m.original_data.relation : m.relation;
+					const rel = m.original_data ? (m.original_data.relation || m.original_data.Relation) : m.relation;
 					const rStr = String(rel || '').trim().toLowerCase();
-					return rStr === 'head' || rStr === 'self';
+					return rStr === 'head' || rStr === 'self' || rStr === 'hd' || rStr === 'h';
 				});
+				if (!head && members.length > 0) head = members[0];
 				
 				if (head) {
 					for (const m of members) {
 						if (m.mention_id !== head.mention_id) {
-							const rel = m.original_data ? m.original_data.relation : m.relation;
+							const rel = m.original_data ? (m.original_data.relation || m.original_data.Relation) : m.relation;
 							const rawRel = String(rel || '').trim().toLowerCase().replace(/[-\s]+/g, '');
 							const pred = ExpandAssertions.CENSUS_RELATION_MAP[rawRel];
 							if (pred) {

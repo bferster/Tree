@@ -176,10 +176,19 @@ class MentionsEditor {
 		this._renderList();
 		this._renderDetail();
 
+		this.scrollToTop();
+		setTimeout(() => this.scrollToTop(), 10);
+		setTimeout(() => this.scrollToTop(), 50);
+	}
+
+	scrollToTop() {
 		if (this.listEl) this.listEl.scrollTop = 0;
 		if (this.detailEl) this.detailEl.scrollTop = 0;
+		if (this.container) this.container.scrollTop = 0;
 		const containerParent = document.getElementById('right-panel-content');
 		if (containerParent) containerParent.scrollTop = 0;
+		const mentionsContainer = document.getElementById('mentions-editor-container');
+		if (mentionsContainer) mentionsContainer.scrollTop = 0;
 	}
 
 
@@ -470,9 +479,9 @@ class MentionsEditor {
 		};
 
 		const pillsHtml = Object.keys(MentionsEditor.FACTOR_LABELS).map(key => {
-			if (isSmartNameOn) {
+			if (isSmartNameOn && !this.isSearchResult) {
 				if ((nameKeys.includes(key) && key !== 'rarityLastName') || key === 'suffix') return '';
-			} else {
+			} else if (this.factors) {
 				const fieldKey = factorToFieldMap[key];
 				if (fieldKey && this.factors) {
 					const factorConfig = this.factors.find(f => f.field === fieldKey);

@@ -1,86 +1,86 @@
-const NICKNAMES = {
-	"WM": "WILLIAM", "BILL": "WILLIAM", "BILLY": "WILLIAM", "WILL": "WILLIAM", "WILLY": "WILLIAM", "WILLIE": "WILLIAM",
-	"ROBT": "ROBERT", "ROB": "ROBERT", "BOB": "ROBERT", "BOBBY": "ROBERT", "ROBBIE": "ROBERT",
-	"JAS": "JAMES", "JIM": "JAMES", "JIMMY": "JAMES", "JAMIE": "JAMES",
-	"CHAS": "CHARLES", "CHARLIE": "CHARLES", "CHUCK": "CHARLES", "CARL": "CHARLES",
-	"THOS": "THOMAS", "TOM": "THOMAS", "TOMMY": "THOMAS",
-	"JNO": "JOHN", "JON": "JOHN", "JACK": "JOHN", "JACKIE": "JOHN", "JONNY": "JOHN", "JOHNNY": "JOHN",
-	"DAN": "DANIEL", "DANNY": "DANIEL",
-	"ED": "EDWARD", "EDDIE": "EDWARD", "NED": "EDWARD", "TED": "EDWARD", "TEDDY": "EDWARD",
-	"GEO": "GEORGE",
-	"JOS": "JOSEPH", "JOE": "JOSEPH", "JOEY": "JOSEPH",
-	"SAM": "SAMUEL", "SAMMY": "SAMUEL",
-	"ALEX": "ALEXANDER", "ALECK": "ALEXANDER", "ALEC": "ALEXANDER", "SANDY": "ALEXANDER",
-	"PAT": "PATRICK", "PADDY": "PATRICK",
-	"MATT": "MATTHEW", "MAT": "MATTHEW",
-	"MIKE": "MICHAEL", "MICK": "MICHAEL", "MICKEY": "MICHAEL", "MICH": "MICHAEL",
-	"DAVE": "DAVID", "DAVEY": "DAVID", "DAVY": "DAVID",
-	"CHRIS": "CHRISTOPHER", "KIT": "CHRISTOPHER",
-	"RICH": "RICHARD", "RICK": "RICHARD", "DICK": "RICHARD", "RICHD": "RICHARD", "DICKY": "RICHARD",
-	"HARRY": "HENRY", "HAL": "HENRY", "HEN": "HENRY",
-	"BEN": "BENJAMIN", "BENNY": "BENJAMIN", "BENJ": "BENJAMIN",
-	"FRED": "FREDERICK", "FREDDY": "FREDERICK", "FREDK": "FREDERICK",
-	"FRANK": "FRANCIS", "FRAN": "FRANCIS", "FRAS": "FRANCIS",
-	"ANDY": "ANDREW",
-	"TONY": "ANTHONY", "ANT": "ANTHONY",
-	"ART": "ARTHUR", "ARTIE": "ARTHUR",
-	"AL": "ALBERT", "ALB": "ALBERT",
-	"ALF": "ALFRED", "ALFIE": "ALFRED",
-	"WALT": "WALTER", "WALLY": "WALTER",
-	"PETE": "PETER",
-	"STEVE": "STEPHEN", "STEPH": "STEPHEN",
-	"NICK": "NICHOLAS", "NICKY": "NICHOLAS",
-	"NAT": "NATHANIEL", "NATE": "NATHANIEL", "NATHL": "NATHANIEL",
-	"ABE": "ABRAHAM",
-	"IKE": "ISAAC",
-	"LI": "ELIJAH", "LIJE": "ELIJAH",
-	"MANNY": "EMANUEL", "MANUEL": "EMANUEL",
-	"HARV": "HARVEY",
-	"LEW": "LEWIS",
-	"MOSE": "MOSES",
-	"SOL": "SOLOMON",
-	"TOBY": "TOBIAS",
-	"JERRY": "JEREMIAH", "JER": "JEREMIAH",
-	"ZEKE": "EZEKIEL",
-	"NEIL": "CORNELIUS", "CORN": "CORNELIUS",
-	"BART": "BARTHOLOMEW",
-	"ARCH": "ARCHIBALD", "ARCHIE": "ARCHIBALD",
-	"GUS": "AUGUSTUS",
-	"AMB": "AMBROSE",
-	"ZACH": "ZACHARIAH", "ZACK": "ZACHARIAH",
-	"LIZ": "ELIZABETH", "LIZZIE": "ELIZABETH", "LIZZY": "ELIZABETH", "BETH": "ELIZABETH", "BETTY": "ELIZABETH", "BETTE": "ELIZABETH", "BESS": "ELIZABETH", "BESSIE": "ELIZABETH", "ELIZA": "ELIZABETH", "ELIZ": "ELIZABETH", "LIBBY": "ELIZABETH",
-	"MOLLY": "MARY", "POLLY": "MARY", "MAE": "MARY", "MAMIE": "MARY",
-	"MAG": "MARGARET", "MAGGIE": "MARGARET", "MEG": "MARGARET", "PEGGY": "MARGARET", "MARG": "MARGARET", "MARGT": "MARGARET", "RITA": "MARGARET",
-	"KATE": "CATHERINE", "KATIE": "CATHERINE", "KITTY": "CATHERINE", "KATH": "CATHERINE",
-	"SARA": "SARAH", "SALLY": "SARAH", "SAL": "SARAH",
-	"SUE": "SUSAN", "SUSIE": "SUSAN", "SUSY": "SUSAN", "SUSA": "SUSANNAH",
-	"ANNIE": "ANN", "ANNA": "ANN", "NAN": "ANN", "NANNY": "ANN", "HANNA": "HANNAH",
-	"MART": "MARTHA", "MATTIE": "MARTHA",
-	"BECCA": "REBECCA", "BECKY": "REBECCA",
-	"GEORGEANA": "GEORGEANNA", "GEORGIANA": "GEORGEANNA", "GEORGIANNA": "GEORGEANNA", "GEORGEANNE": "GEORGEANNA",
-	"CARRIE": "CAROLINE", "CAROL": "CAROLINE",
-	"NELL": "ELEANOR", "NELLIE": "ELEANOR", "NORA": "ELEANOR",
-	"FANNY": "FRANCES",
-	"HATTIE": "HARRIET",
-	"LOU": "LOUISA", "LULA": "LOUISA",
-	"TILLY": "MATILDA", "TILLIE": "MATILDA",
-	"GINNY": "VIRGINIA",
-	"VINA": "LAVINIA", "VINEY": "LAVINIA",
-	"PRISSY": "PRISCILLA", "CILLA": "PRISCILLA",
-	"DELIA": "DELILAH", "LILA": "DELILAH",
-	"LUCY": "LUCINDA",
-	"PHILLIS": "PHYLLIS",
-	"MINNIE": "MINERVA"
-};
+class Normalize {
+	static NICKNAMES = {
+		"WM": "WILLIAM", "BILL": "WILLIAM", "BILLY": "WILLIAM", "WILL": "WILLIAM", "WILLY": "WILLIAM", "WILLIE": "WILLIAM",
+		"ROBT": "ROBERT", "ROB": "ROBERT", "BOB": "ROBERT", "BOBBY": "ROBERT", "ROBBIE": "ROBERT",
+		"JAS": "JAMES", "JIM": "JAMES", "JIMMY": "JAMES", "JAMIE": "JAMES",
+		"CHAS": "CHARLES", "CHARLIE": "CHARLES", "CHUCK": "CHARLES", "CARL": "CHARLES",
+		"THOS": "THOMAS", "TOM": "THOMAS", "TOMMY": "THOMAS",
+		"JNO": "JOHN", "JON": "JOHN", "JACK": "JOHN", "JACKIE": "JOHN", "JONNY": "JOHN", "JOHNNY": "JOHN",
+		"DAN": "DANIEL", "DANNY": "DANIEL",
+		"ED": "EDWARD", "EDDIE": "EDWARD", "NED": "EDWARD", "TED": "EDWARD", "TEDDY": "EDWARD",
+		"GEO": "GEORGE",
+		"JOS": "JOSEPH", "JOE": "JOSEPH", "JOEY": "JOSEPH",
+		"SAM": "SAMUEL", "SAMMY": "SAMUEL",
+		"ALEX": "ALEXANDER", "ALECK": "ALEXANDER", "ALEC": "ALEXANDER", "SANDY": "ALEXANDER",
+		"PAT": "PATRICK", "PADDY": "PATRICK",
+		"MATT": "MATTHEW", "MAT": "MATTHEW",
+		"MIKE": "MICHAEL", "MICK": "MICHAEL", "MICKEY": "MICHAEL", "MICH": "MICHAEL",
+		"DAVE": "DAVID", "DAVEY": "DAVID", "DAVY": "DAVID",
+		"CHRIS": "CHRISTOPHER", "KIT": "CHRISTOPHER",
+		"RICH": "RICHARD", "RICK": "RICHARD", "DICK": "RICHARD", "RICHD": "RICHARD", "DICKY": "RICHARD",
+		"HARRY": "HENRY", "HAL": "HENRY", "HEN": "HENRY",
+		"BEN": "BENJAMIN", "BENNY": "BENJAMIN", "BENJ": "BENJAMIN",
+		"FRED": "FREDERICK", "FREDDY": "FREDERICK", "FREDK": "FREDERICK",
+		"FRANK": "FRANCIS", "FRAN": "FRANCIS", "FRAS": "FRANCIS",
+		"ANDY": "ANDREW",
+		"TONY": "ANTHONY", "ANT": "ANTHONY",
+		"ART": "ARTHUR", "ARTIE": "ARTHUR",
+		"AL": "ALBERT", "ALB": "ALBERT",
+		"ALF": "ALFRED", "ALFIE": "ALFRED",
+		"WALT": "WALTER", "WALLY": "WALTER",
+		"PETE": "PETER",
+		"STEVE": "STEPHEN", "STEPH": "STEPHEN",
+		"NICK": "NICHOLAS", "NICKY": "NICHOLAS",
+		"NAT": "NATHANIEL", "NATE": "NATHANIEL", "NATHL": "NATHANIEL",
+		"ABE": "ABRAHAM",
+		"IKE": "ISAAC",
+		"LI": "ELIJAH", "LIJE": "ELIJAH",
+		"MANNY": "EMANUEL", "MANUEL": "EMANUEL",
+		"HARV": "HARVEY",
+		"LEW": "LEWIS",
+		"MOSE": "MOSES",
+		"SOL": "SOLOMON",
+		"TOBY": "TOBIAS",
+		"JERRY": "JEREMIAH", "JER": "JEREMIAH",
+		"ZEKE": "EZEKIEL",
+		"NEIL": "CORNELIUS", "CORN": "CORNELIUS",
+		"BART": "BARTHOLOMEW",
+		"ARCH": "ARCHIBALD", "ARCHIE": "ARCHIBALD",
+		"GUS": "AUGUSTUS",
+		"AMB": "AMBROSE",
+		"ZACH": "ZACHARIAH", "ZACK": "ZACHARIAH",
+		"LIZ": "ELIZABETH", "LIZZIE": "ELIZABETH", "LIZZY": "ELIZABETH", "BETH": "ELIZABETH", "BETTY": "ELIZABETH", "BETTE": "ELIZABETH", "BESS": "ELIZABETH", "BESSIE": "ELIZABETH", "ELIZA": "ELIZABETH", "ELIZ": "ELIZABETH", "LIBBY": "ELIZABETH",
+		"MOLLY": "MARY", "POLLY": "MARY", "MAE": "MARY", "MAMIE": "MARY",
+		"MAG": "MARGARET", "MAGGIE": "MARGARET", "MEG": "MARGARET", "PEGGY": "MARGARET", "MARG": "MARGARET", "MARGT": "MARGARET", "RITA": "MARGARET",
+		"KATE": "CATHERINE", "KATIE": "CATHERINE", "KITTY": "CATHERINE", "KATH": "CATHERINE",
+		"SARA": "SARAH", "SALLY": "SARAH", "SAL": "SARAH",
+		"SUE": "SUSAN", "SUSIE": "SUSAN", "SUSY": "SUSAN", "SUSA": "SUSANNAH",
+		"ANNIE": "ANN", "ANNA": "ANN", "NAN": "ANN", "NANNY": "ANN", "HANNA": "HANNAH",
+		"MART": "MARTHA", "MATTIE": "MARTHA",
+		"BECCA": "REBECCA", "BECKY": "REBECCA",
+		"GEORGEANA": "GEORGEANNA", "GEORGIANA": "GEORGEANNA", "GEORGIANNA": "GEORGEANNA", "GEORGEANNE": "GEORGEANNA",
+		"CARRIE": "CAROLINE", "CAROL": "CAROLINE",
+		"NELL": "ELEANOR", "NELLIE": "ELEANOR", "NORA": "ELEANOR",
+		"FANNY": "FRANCES",
+		"HATTIE": "HARRIET",
+		"LOU": "LOUISA", "LULA": "LOUISA",
+		"TILLY": "MATILDA", "TILLIE": "MATILDA",
+		"GINNY": "VIRGINIA",
+		"VINA": "LAVINIA", "VINEY": "LAVINIA",
+		"PRISSY": "PRISCILLA", "CILLA": "PRISCILLA",
+		"DELIA": "DELILAH", "LILA": "DELILAH",
+		"LUCY": "LUCINDA",
+		"PHILLIS": "PHYLLIS",
+		"MINNIE": "MINERVA"
+	};
 
-window.Normalize = {
-	getNickname: function (name) {
+	static getNickname(name) {
 		if (!name) return "";
 		let norm = name.toUpperCase().replace(/[^A-Z]/g, '');
-		return NICKNAMES[norm] || norm;
-	},
+		return Normalize.NICKNAMES[norm] || norm;
+	}
 
-	getNYSIIS: function (name) {
+	static getNYSIIS(name) {
 		if (!name) return "";
 		let n = name.toUpperCase().replace(/[^A-Z]/g, '');
 		if (!n) return "";
@@ -115,9 +115,9 @@ window.Normalize = {
 			res += c;
 		}
 		return res;
-	},
+	}
 
-	getSoundex: function (name) {
+	static getSoundex(name) {
 		if (!name) return "";
 		let s = name.toUpperCase().replace(/[^A-Z]/g, '');
 		if (!s) return "";
@@ -151,56 +151,69 @@ window.Normalize = {
 			}
 		}
 		return (res + "000").substring(0, 4);
-	},
-
-	getMetaphone: function (name) {
-		if (!name) return "";
-		const res = doubleMetaphone(name);
-		return res;
 	}
-};
 
+	static getMetaphone(name) {
+		if (!name) return "";
+		return Normalize.doubleMetaphone(name);
+	}
 
-/*///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	static buildNameFrequencies(dataset) {
+		const firstNameFreq = new Map();
+		const lastNameFreq = new Map();
 
- * doubleMetaphone.js
- *
- * Double Metaphone phonetic algorithm as standard JavaScript functions.
- * Original algorithm by Lawrence Philips (1990, improved 2000).
- *
- * doubleMetaphone(word)  → colon-separated string 'primary:secondary'
- * doubleMetaphoneMatchScore(word1, word2)  → 0.0 | 0.6 | 0.8 | 1.0
- *
- * Usage:
- *   doubleMetaphone('Smith');                        // => 'SM0:XMT'
- *   doubleMetaphoneMatchScore('Smith', 'Smyth');     // => 1.0
- */
+		for (const m of dataset || []) {
+			const fn = (m.norm_first_name !== undefined && m.norm_first_name !== null && String(m.norm_first_name).trim() !== "")
+				? m.norm_first_name : m.first_name;
+			if (fn !== undefined && fn !== null && String(fn).trim() !== "") {
+				const k = String(fn).trim().toUpperCase().replace(/[^A-Z]/g, "");
+				if (k) firstNameFreq.set(k, (firstNameFreq.get(k) || 0) + 1);
+			}
+			const ln = m.last_name;
+			if (ln !== undefined && ln !== null && String(ln).trim() !== "") {
+				const k = String(ln).trim().toUpperCase().replace(/[^A-Z]/g, "");
+				if (k) lastNameFreq.set(k, (lastNameFreq.get(k) || 0) + 1);
+			}
+		}
 
-/**
- * Returns a match-confidence score between two words based on their
- * Double Metaphone codes.
- * @param {string} word1
- * @param {string} word2
- * @returns {number} 1.0 | 0.8 | 0.6 | 0.0
- */
+		return { firstNameFreq, lastNameFreq };
+	}
 
-function doubleMetaphoneMatchScore(word1, word2) {
-	const [p1, s1] = doubleMetaphone(word1).split(':');
-	const [p2, s2] = doubleMetaphone(word2).split(':');
-	if (p1 === p2) return 1.0;        // Both primaries match → highest confidence
-	if (p1 === s2 || s1 === p2) return 0.8; // Primary matches other's secondary
-	if (s1 === s2) return 0.6;        // Only secondaries match → weakest
-	return 0.0;                        // No match
-}
+	static getNameWeightModifier(name, freqMap, rarityConfig) {
+		if (!name || !freqMap) return 0;
+		const k = String(name).trim().toUpperCase().replace(/[^A-Z]/g, "");
+		const count = freqMap.get(k);
+		if (count === undefined || count === null) return 0;
 
-const matchScore = doubleMetaphoneMatchScore;
+		const r = rarityConfig || {
+			veryRareMax: 5,
+			uncommonMax: 20,
+			averageMax: 100,
+			commonMax: 500,
+			modVeryRare: 15,
+			modUncommon: 5,
+			modAverage: 0,
+			modCommon: -5,
+			modExtremelyCommon: -15,
+		};
 
-/**
- * Encodes a word using the Double Metaphone algorithm.
- * @param {string} word
- * @returns {string} 'primary:secondary' codes
- */
-function doubleMetaphone(word) {
+		if (count <= r.veryRareMax) return r.modVeryRare;
+		if (count <= r.uncommonMax) return r.modUncommon;
+		if (count <= r.averageMax) return r.modAverage;
+		if (count <= r.commonMax) return r.modCommon;
+		return r.modExtremelyCommon;
+	}
+
+	static doubleMetaphoneMatchScore(word1, word2) {
+		const [p1, s1] = Normalize.doubleMetaphone(word1).split(':');
+		const [p2, s2] = Normalize.doubleMetaphone(word2).split(':');
+		if (p1 === p2) return 1.0;
+		if (p1 === s2 || s1 === p2) return 0.8;
+		if (s1 === s2) return 0.6;
+		return 0.0;
+	}
+
+	static doubleMetaphone(word) {
 	if (!word || typeof word !== "string") return ":";
 
 	// Keep original (for multi-word checks like 'san jose')
@@ -862,6 +875,38 @@ function doubleMetaphone(word) {
 
 	const sec = secondary === primary ? primary : secondary;
 	return `${primary}:${sec}`;
+	}
+}
+
+// Standalone function wrappers for backwards compatibility
+function buildNameFrequencies(dataset) {
+	return Normalize.buildNameFrequencies(dataset);
+}
+
+function getNameWeightModifier(name, freqMap, rarityConfig) {
+	return Normalize.getNameWeightModifier(name, freqMap, rarityConfig);
+}
+
+function doubleMetaphone(word) {
+	return Normalize.doubleMetaphone(word);
+}
+
+function doubleMetaphoneMatchScore(word1, word2) {
+	return Normalize.doubleMetaphoneMatchScore(word1, word2);
+}
+
+const matchScore = doubleMetaphoneMatchScore;
+
+if (typeof window !== 'undefined') {
+	window.Normalize = Normalize;
+	window.buildNameFrequencies = buildNameFrequencies;
+	window.getNameWeightModifier = getNameWeightModifier;
+	window.doubleMetaphone = doubleMetaphone;
+	window.doubleMetaphoneMatchScore = doubleMetaphoneMatchScore;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+	module.exports = Normalize;
 }
 
 

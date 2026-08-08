@@ -53,47 +53,35 @@ class PersonEditor {
 	static FIELD_CONFIG = [
 		{
 			key: 'first_name', label: 'First name', editKind: 'free',
-			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
+			compareOptions: ['Exact', 'Ignore', 'Fuzzy', 'Nickname'], defaultMatch: 'Exact', hasRare: true
 		},
 		{
 			key: 'middle_name', label: 'Middle name', editKind: 'free',
-			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
-		},
-		{
-			key: 'norm_first_name', label: 'Nick name', editKind: 'locked',
-			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
+			compareOptions: ['Exact', 'Ignore', 'Fuzzy'], defaultMatch: 'Exact', hasRare: true
 		},
 		{
 			key: 'last_name', label: 'Last name', editKind: 'free',
-			compare: ['ignore', 'exact', 'fuzzy', 'rare'], compareMode: 'multi'
-		},
-		{
-			key: 'nysiis_last_name', label: 'NYSIIS', editKind: 'locked',
-			compare: ['ignore', 'exact'], compareMode: 'multi'
-		},
-		{
-			key: 'metaphone_last_name', label: 'Metaphone', editKind: 'locked',
-			compare: ['ignore', 'exact'], compareMode: 'multi'
+			compareOptions: ['Exact', 'Ignore', 'Fuzzy', 'NYSIIS', 'Metaphone'], defaultMatch: 'Exact', hasRare: true
 		},
 		{
 			key: 'suffix', label: 'Suffix', editKind: 'choice', choices: ['Jr', 'Sr'],
-			compare: ['ignore', 'exact'], compareMode: 'multi'
+			compareOptions: ['Exact', 'Ignore'], defaultMatch: 'Exact', hasRare: false
 		},
 		{
 			key: 'race', label: 'Race', editKind: 'choice', choices: [{ v: 'B', l: 'Black' }, { v: 'W', l: 'White' }],
-			compare: ['ignore', 'exact'], compareMode: 'multi'
+			compareOptions: ['B', 'Ignore', 'W'], defaultMatch: 'B', hasRare: false
 		},
 		{
 			key: 'gender', label: 'Gender', editKind: 'choice', choices: [{ v: 'M', l: 'M' }, { v: 'F', l: 'F' }],
-			compare: ['ignore', 'exact'], compareMode: 'multi'
+			compareOptions: ['F', 'Ignore', 'M'], defaultMatch: 'F', hasRare: false
 		},
 		{
 			key: 'birth_year', label: 'Birth year', editKind: 'free',
-			compare: ['ignore', 'exact', '±1', '±2', '±3', '±5'], compareMode: 'radio'
+			compareOptions: ['Exact', 'Ignore', '±1', '±2', '±3', '±5', '±10'], defaultMatch: 'Exact', hasRare: false
 		},
 		{
 			key: 'death_year', label: 'Death year', editKind: 'free',
-			compare: ['ignore', 'exact', '±1', '±2', '±3', '±5'], compareMode: 'radio'
+			compareOptions: ['Exact', 'Ignore', '±1', '±2', '±3', '±5', '±10'], defaultMatch: 'Exact', hasRare: false
 		},
 		{ key: 'linked_persons', label: 'Linked people', editKind: 'linked' }
 	];
@@ -274,19 +262,21 @@ class PersonEditor {
 	static buildState(person) {
 		if (!PersonEditor.userSettings) {
 			PersonEditor.userSettings = {
-				useSmartName: true,
-				compareActive: {
-					first_name: ['exact'],
-					middle_name: ['exact'],
-					norm_first_name: ['exact'],
-					last_name: ['exact'],
-					nysiis_last_name: ['ignore'],
-					metaphone_last_name: ['ignore'],
-					suffix: ['ignore'],
-					race: ['exact'],
-					gender: ['exact'],
-					birth_year: ['±1'],
-					death_year: ['±2']
+				useSmartName: false,
+				matches: {
+					first_name: 'Exact',
+					middle_name: 'Exact',
+					last_name: 'Exact',
+					suffix: 'Exact',
+					race: 'B',
+					gender: 'F',
+					birth_year: 'Exact',
+					death_year: 'Exact'
+				},
+				rares: {
+					first_name: true,
+					middle_name: true,
+					last_name: true
 				}
 			};
 		}
@@ -333,15 +323,19 @@ class PersonEditor {
 			}
 			if (found >= 0) selectedIdx = found;
 
-			let defaultActive = PersonEditor.userSettings.compareActive[cfg.key] || ['exact'];
+			let defaultMatch = cfg.defaultMatch || 'Exact';
+			let savedMatch = PersonEditor.userSettings.matches ? PersonEditor.userSettings.matches[cfg.key] : undefined;
+			let matchVal = savedMatch !== undefined ? savedMatch : defaultMatch;
+
+			let defaultRare = cfg.hasRare ? true : false;
+			let savedRare = PersonEditor.userSettings.rares ? PersonEditor.userSettings.rares[cfg.key] : undefined;
+			let rareVal = savedRare !== undefined ? savedRare : defaultRare;
 
 			fields[cfg.key] = {
 				options: options,
 				selected: selectedIdx,
-				weight: 0,                       // default impact
-				compare: cfg.compare,
-				compareMode: cfg.compareMode,
-				active: defaultActive,
+				match: matchVal,
+				rare: rareVal,
 				editing: false
 			};
 		});
@@ -421,21 +415,9 @@ class PersonEditor {
       <div class="vpe-row vpe-row-header">
         <div>FIELD</div>
         <div>VALUE</div>
-        <div style="margin-left: 22px;">IMPACT</div>
-        <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
-          <span>COMPARE</span>
-          <label id="vpe-smart-name-label"${PersonEditor.userSettings.useSmartName ? ' class="tab-active"' : ''}>
-            <input type="checkbox" id="vpe-smart-name-cb"${PersonEditor.userSettings.useSmartName ? ' checked' : ''}> Smart name matching
-          </label>
-        </div>
+        <div>COMPARE</div>
       </div>
     `);
-
-		$factors.find('#vpe-smart-name-cb').on('change', function () {
-			PersonEditor.userSettings.useSmartName = $(this).is(':checked');
-			$factors.trigger('vpe:rerender');
-			$('#person-editor-container').trigger('change');
-		});
 
 		PersonEditor.FIELD_CONFIG.forEach(cfg => {
 			if (cfg.editKind === 'linked') {
@@ -553,8 +535,6 @@ class PersonEditor {
 			$val.append($input, $cancel);
 			$row.append($val);
 
-			// empty impact/compare placeholders to keep grid alignment
-			$row.append('<div></div><div></div>');
 			PersonEditor.bindChanged($row, person, cfg, state);
 			setTimeout(() => $input.trigger('focus'), 0);
 			return $row;
@@ -617,141 +597,44 @@ class PersonEditor {
 		}
 		$row.append($val);
 
-		// IMPACT
-		const $impact = $(`<div class="vpe-amount-row" style="display:flex; gap:4px; align-items:center; margin-left:22px;"></div>`);
-		const options = [
-			{ val: -1, label: '-' },
-			{ val: 0, label: '0' },
-			{ val: 1, label: '+' }
-		];
-		options.forEach(opt => {
-			const displayVal = opt.label;
-			const val = opt.val;
-			const isActive = fstate.weight === val;
+		// COMPARE / MATCH
+		const $compareCol = $(`<div style="display:flex; align-items:center; gap:8px;"></div>`);
+		const compareOpts = cfg.compareOptions || ['Exact', 'Ignore'];
+		const $matchSel = $(`<select style="width:105px; min-width:105px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:3px 6px; font-size:12px; cursor:pointer; color:#333; box-sizing:border-box;"></select>`);
 
-			let baseBg = 'transparent';
-			let baseBorder = '#e5e7eb';
-			let baseColor = '#6b7280';
+		compareOpts.forEach(opt => {
+			const isSel = (fstate.match === opt);
+			$matchSel.append(`<option value="${opt}" ${isSel ? 'selected' : ''}>${opt}</option>`);
+		});
 
-			if (isActive) {
-				if (val < 0) {
-					baseBg = '#fde8e8';
-					baseBorder = '#f8b4b4';
-					baseColor = '#9b1c1c';
-				} else if (val > 0) {
-					baseBg = '#def7ec';
-					baseBorder = '#bcf0da';
-					baseColor = '#03543f';
-				} else {
-					baseBg = '#f3f4f6';
-					baseBorder = '#d1d5db';
-					baseColor = '#374151';
-				}
+		$matchSel.on('change', function () {
+			const val = $(this).val();
+			fstate.match = val;
+			if (PersonEditor.userSettings) {
+				if (!PersonEditor.userSettings.matches) PersonEditor.userSettings.matches = {};
+				PersonEditor.userSettings.matches[cfg.key] = val;
 			}
+			$row.trigger('vpe:changed');
+		});
 
-			const isSign = displayVal === '+' || displayVal === '-';
-			const $btn = $(`<button type="button" class="vpe-amount-btn" style="
-				display: inline-flex;
-				align-items: center;
-				justify-content: center;
-				width: 24px;
-				height: 24px;
-				border-radius: 50%;
-				font-size: ${isSign ? '14px' : '11px'};
-				font-weight: ${isSign ? '800' : '600'};
-				cursor: pointer;
-				border: 1px solid ${baseBorder};
-				background: ${baseBg};
-				color: ${baseColor};
-				padding: 0;
-				line-height: 1;
-				transition: all 0.2s;
-			">${displayVal}</button>`);
+		$compareCol.append($matchSel);
 
-			$btn.on('click', function () {
-				fstate.weight = val;
-				$impact.children().each(function (idx) {
-					const optInner = options[idx];
-					const v = optInner.val;
-					const active = fstate.weight === v;
-					let bg = 'transparent';
-					let border = '#e5e7eb';
-					let c = '#6b7280';
-
-					if (active) {
-						if (v < 0) {
-							bg = '#fde8e8';
-							border = '#f8b4b4';
-							c = '#9b1c1c';
-						} else if (v > 0) {
-							bg = '#def7ec';
-							border = '#bcf0da';
-							c = '#03543f';
-						} else {
-							bg = '#f3f4f6';
-							border = '#d1d5db';
-							c = '#374151';
-						}
-					}
-
-					$(this).css({
-						'background-color': bg,
-						'border-color': border,
-						'color': c
-					});
-				});
+		if (cfg.hasRare) {
+			const isRareChecked = fstate.rare !== undefined ? fstate.rare : true;
+			const $rareLabel = $(`<label style="display:flex; align-items:center; gap:3px; font-size:12px; color:#444; cursor:pointer; white-space:nowrap;"><input type="checkbox" ${isRareChecked ? 'checked' : ''} style="cursor:pointer;"> Rare</label>`);
+			$rareLabel.find('input').on('change', function () {
+				const checked = $(this).is(':checked');
+				fstate.rare = checked;
+				if (PersonEditor.userSettings) {
+					if (!PersonEditor.userSettings.rares) PersonEditor.userSettings.rares = {};
+					PersonEditor.userSettings.rares[cfg.key] = checked;
+				}
 				$row.trigger('vpe:changed');
 			});
-			$impact.append($btn);
-		});
-		$row.append($impact);
-
-		// COMPARE
-		const $compare = $(`<div class="vpe-compare-row"></div>`);
-		const isSmartNameChecked = PersonEditor.userSettings ? PersonEditor.userSettings.useSmartName : false;
-		const nameFields = ['first_name', 'middle_name', 'norm_first_name', 'last_name', 'nysiis_last_name', 'metaphone_last_name', 'suffix'];
-		const isNameField = nameFields.includes(cfg.key);
-		const shouldColorActive = !(isSmartNameChecked && isNameField);
-
-		if (isNameField && isSmartNameChecked) {
-			$compare.addClass('name-group');
-			if (cfg.key === 'first_name') $compare.addClass('top');
-			if (cfg.key === 'suffix') $compare.addClass('bottom');
+			$compareCol.append($rareLabel);
 		}
 
-		fstate.compare.forEach(label => {
-			const isActive = fstate.active.includes(label);
-			const hasActiveColor = isActive && shouldColorActive;
-			const $pill = $(`<button type="button" class="vpe-pill ${hasActiveColor ? 'active' : ''}">${PersonEditor.escapeHtml(label)}</button>`);
-			$pill.on('click', function () {
-				if (fstate.compareMode === 'radio') {
-					fstate.active = [label];
-				} else {
-					if (label === 'ignore') {
-						fstate.active = ['ignore'];
-					} else {
-						fstate.active = fstate.active.filter(a => a !== 'ignore');
-						if (!fstate.active.includes(label)) {
-							if (label === 'fuzzy' && fstate.active.includes('exact')) {
-								fstate.active = fstate.active.filter(a => a !== 'exact');
-							} else if (label === 'exact' && fstate.active.includes('fuzzy')) {
-								fstate.active = fstate.active.filter(a => a !== 'fuzzy');
-							}
-							fstate.active = [...fstate.active, label];
-						} else {
-							fstate.active = fstate.active.filter(a => a !== label);
-							if (fstate.active.length === 0) fstate.active = ['ignore'];
-						}
-					}
-				}
-				if (PersonEditor.userSettings) {
-					PersonEditor.userSettings.compareActive[cfg.key] = fstate.active;
-				}
-				$row.trigger('vpe:changed');
-			});
-			$compare.append($pill);
-		});
-		$row.append($compare);
+		$row.append($compareCol);
 
 		PersonEditor.bindChanged($row, person, cfg, state);
 		return $row;
@@ -949,7 +832,26 @@ class PersonEditor {
 		// Search button
 		const $searchBtn = $(`<button type="button" class="vpe-search-btn"><i class="ti ti-search"></i>Search</button>`);
 		$searchBtn.on('click', function () {
-			$dialog.trigger('vpe:search', [PersonEditor.collectCriteria(person, state)]);
+			const search_criteria = PersonEditor.buildSearchCriteriaFromState(person, state);
+			console.log('Search criteria:', search_criteria);
+			const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
+
+			const searcher = new SearchMentions(mentionsArray);
+			const results = searcher.Search(search_criteria);
+
+			if (window.app && window.app.mentionsEditor) {
+				window.app.mentionsEditor.load(
+					person,
+					[search_criteria.source],
+					results,
+					[]
+				);
+				$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
+				if (typeof window.app.mentionsEditor.scrollToTop === 'function') {
+					window.app.mentionsEditor.scrollToTop();
+					setTimeout(() => window.app.mentionsEditor.scrollToTop(), 50);
+				}
+			}
 		});
 
 		const $right = $('<div class="vpe-footer-right"></div>');
@@ -984,7 +886,7 @@ class PersonEditor {
 		if (window.app && window.app.county) {
 			$countySelect.val(window.app.county);
 		} else {
-			$countySelect.val('ALB');
+			$countySelect.val('AUG');
 		}
 		$countySelect.on('change', function () {
 			if (window.app) {
@@ -1023,7 +925,7 @@ class PersonEditor {
 			{ label: 'Cohabitation Families', value: 'CF' }
 		];
 
-		const currentCounty = (window.app && window.app.county) ? String(window.app.county).toUpperCase() : 'ALB';
+		const currentCounty = (window.app && window.app.county) ? String(window.app.county).toUpperCase() : 'AUG';
 		const knownSources = new Set();
 
 		if (window.GlobalSources) {
@@ -1125,7 +1027,7 @@ class PersonEditor {
 
 			// If nothing was checked, force a fallback
 			if (!anyChecked) {
-				const prefix = window.app && window.app.county ? window.app.county + '_' : 'ALB_';
+				const prefix = window.app && window.app.county ? window.app.county + '_' : 'AUG_';
 				let fullSource = prefix + newSel.replace('-', '_');
 				state.sources[fullSource] = { label: fullSource, checked: true };
 			}
@@ -1136,7 +1038,7 @@ class PersonEditor {
 
 
 	static collectCriteria(person, state) {
-		const useSmartName = $('#vpe-smart-name-cb').is(':checked');
+		const useSmartName = false;
 		const criteria = { person_id: person.person_id, factors: [], sources: [], useSmartName };
 		// Track name parts AND whether they have an active (non-ignore) compare mode
 		let nameParts = { first_name: '', middle_name: '', last_name: '', suffix: '' };
@@ -1146,23 +1048,23 @@ class PersonEditor {
 			const f = state.fields[key];
 			const sel = f.selected;
 			const val = (sel === -1 || sel == null) ? null : f.options[sel].value;
-			if (val) {
-				const splitVal = String(val).split(':')[0].trim();
+			const cfg = PersonEditor.FIELD_CONFIG.find(c => c.key === key);
+			const matchVal = f.match || (cfg ? cfg.defaultMatch : 'Exact');
+			const isRare = f.rare !== undefined ? f.rare : (cfg && cfg.hasRare);
 
-				const isRare = f.active.includes('rare');
-				let compareOpts = f.active.filter(opt => opt !== 'rare');
-				const effectiveCmp = compareOpts.find(c => c !== 'ignore') || compareOpts[0] || 'ignore';
+			if (val || ['race', 'gender'].includes(key)) {
+				const splitVal = val ? String(val).split(':')[0].trim() : null;
 
 				if (nameParts[key] !== undefined) {
 					nameParts[key] = splitVal;
-					namePartActive[key] = (effectiveCmp !== 'ignore');
+					namePartActive[key] = (matchVal !== 'Ignore');
 				}
 
 				criteria.factors.push({
 					field: key,
-					value: splitVal,
-					impact: f.weight / 5,
-					compare: compareOpts,
+					value: (key === 'race' || key === 'gender') ? matchVal : splitVal,
+					compare: [matchVal],
+					match: matchVal,
 					rare: isRare,
 					score: 0
 				});
@@ -1192,6 +1094,46 @@ class PersonEditor {
 			if (state.sources[id].checked) criteria.sources.push(id);
 		});
 		return criteria;
+	}
+
+	static buildSearchCriteriaFromState(person, state) {
+		const activeCounty = (window.app && window.app.county) ? String(window.app.county).toUpperCase() : 'AUG';
+		let activeSource = (window.app && window.app.source) ? window.app.source : 'CN-1870';
+		if (activeSource === 'ALL' || !activeSource) activeSource = 'CN-1870';
+
+		let source = activeSource;
+		const prefix = activeCounty + '-';
+		if (!source.toUpperCase().startsWith(prefix)) {
+			source = `${activeCounty}-${activeSource}`;
+		}
+
+		const fields = [];
+		PersonEditor.FIELD_CONFIG.forEach(cfg => {
+			if (cfg.editKind === 'linked') return;
+			const f = state.fields[cfg.key];
+			if (!f) return;
+			const sel = f.selected;
+			const val = (sel === -1 || sel == null) ? null : f.options[sel].value;
+			const splitVal = val ? String(val).split(':')[0].trim() : null;
+			const matchVal = f.match || cfg.defaultMatch || 'Exact';
+			const isRare = f.rare !== undefined ? f.rare : !!cfg.hasRare;
+
+			let term = cfg.key;
+			if (term === 'race') term = 'norm_race';
+
+			fields.push({
+				term: term,
+				value: (term === 'norm_race' || term === 'gender') ? ((matchVal === 'Ignore' || !splitVal) ? null : matchVal) : splitVal,
+				match: matchVal,
+				rare: isRare
+			});
+		});
+
+		return {
+			source: source,
+			max_results: 80,
+			fields: fields
+		};
 	}
 
 	/* ----------------------------------------------------------
@@ -1224,17 +1166,17 @@ class PersonEditor {
       .vpe-target-summary { font-size:18px; font-weight:600; color:#333; margin:2px 0 0; }
       .vpe-close { font-size:20px; color:#757575; cursor:pointer; }
       .vpe-section-label { font-size:13px; font-weight:500; letter-spacing:.05em; color:#9e9e9e; margin:0 0 .75rem; }
-      .vpe-row { display:grid; grid-template-columns:130px 240px 110px 1fr; gap:8px 16px; align-items:center;
+      .vpe-row { display:grid; grid-template-columns:110px 190px 190px; gap:8px 12px; align-items:center;
         padding:4px 8px; border-top:0.5px solid #f0f0f0; }
       .vpe-row-header { font-size:12px; font-weight:500; color:#9e9e9e; border-top:none; padding:4px 8px; }
-      .vpe-row-linked { grid-template-columns:130px 1fr; }
+      .vpe-row-linked { grid-template-columns:110px 1fr; }
       .vpe-field-label { font-size:13px; font-weight:500; }
-      .vpe-value-pill { display:flex; align-items:center; flex-wrap:wrap; gap:4px; width:100%;
-        min-height:24px; border-radius:999px; padding:2px 6px; }
-      .vpe-chip { display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:2px 6px;
-        border-radius:999px; white-space:nowrap; min-width:24px; min-height:18px; background:#fff; }
+      .vpe-value-pill { display:flex; align-items:center; flex-wrap:nowrap; gap:4px; width:100%; box-sizing:border-box;
+        min-height:24px; border-radius:999px; padding:2px 6px; overflow:hidden; }
+      .vpe-chip { display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:2px 8px;
+        border-radius:999px; white-space:nowrap; width:fit-content; max-width:100%; flex:0 0 auto; min-height:18px; background:#fff; box-sizing:border-box; }
       .vpe-value-pill select, .vpe-value-pill input[type=text] {
-        font-size:12px; height:20px; padding:0 4px; min-width:90px; flex:1; background:transparent;
+        font-size:12px; height:20px; padding:0 2px; min-width:0; flex:1; width:100%; background:transparent;
         border:none; }
       .vpe-star-row { display:flex; gap:3px; align-items:center; }
       .vpe-compare-row { display:flex; flex-wrap:wrap; gap:6px; }

@@ -344,10 +344,6 @@ async function ShowSource(mention_id) {
 				<div id="search-pane">
 					<div class="pane-label" id="cs-pane-label">Source Data</div>
 					<div class="search-grid">
-						<div class="field-unit">
-							<label>Search:</label>
-							<input type="text" id="cs-search-input" placeholder="Type to search...">
-						</div>
 						<div class="search-actions">
 							<button id="cs-search-btn" class="btn btn-search"><i class="ti ti-search"></i>Search</button>
 						</div>
@@ -364,9 +360,12 @@ async function ShowSource(mention_id) {
 			</div>
 		`;
 
-		document.getElementById('cs-search-btn').addEventListener('click', handleContextSearch);
-		document.getElementById('cs-search-input').addEventListener('keyup', (e) => {
-			if (e.key === 'Enter') handleContextSearch();
+		document.getElementById('cs-search-btn').addEventListener('click', () => {
+			if (typeof SearchBox !== 'undefined') {
+				SearchBox.openDialog();
+			} else {
+				handleContextSearch();
+			}
 		});
 	}
 

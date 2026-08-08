@@ -6,20 +6,20 @@ class App {
 		this.mentions = [];
 		this.isLoaded = false;
 		this.curPerson = -1;
-		this.county = "ALB";
+		this.county = "AUG";
 		this.source = "CN-1870";
 
 		this.curTree = {
 			treeName: "Family",
-			county: "ALB",
+			county: "AUG",
 			owner: "Bill",
-			persons: [
+			persons: [ /*
 				{ person_id: "P001", mentions: ["ALB-CN-1880-257"], anchor: null, first_name: "William:ALB-CN-1880-257", middle_name: null, last_name: "Spears:ALB-CN-1880-257", suffix: null, birth_year: "1840:ALB-CN-1880-257", death_year: "1910:Added", gender: "M:ALB-CN-1880-257", race: "B:ALB-CN-1880-257", x: 200, y: 200, verity: 2, isEnslaver: false },
 				{ person_id: "P002", mentions: ["ALB-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeanna:ALB-CN-1880-258", middle_name: null, last_name: "Spears:ALB-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F: ALB- CN - 1880 - 258", race: "B: ALB - CN - 1880 - 258", x: 500, y: 200, verity: 2, isEnslaver: false },
 				{ person_id: "P003", mentions: ["ALB-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:ALB-CN-1880-259", middle_name: "M:ALB-CN-1880-259", last_name: "Spears:ALB-CN-1880-259", suffix: null, birth_year: "1875:ALB-CN-1880-259", death_year: null, gender: "M", race: "B:ALB-CN-1880-259", x: 200, y: 450, verity: 2, isEnslaver: false },
 				{ person_id: "P004", mentions: ["ALB-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:ALB-CN-1880-260", middle_name: null, last_name: "Spears:ALB-CN-1880-260", suffix: null, birth_year: "1880:ALB-CN-1880-260", death_year: null, gender: "M", race: "B:ALB-CN-1880-260", x: 200, y: 450, verity: 2, isEnslaver: false },
 				{ person_id: "P005", mentions: ["ALB-CN-1880-22721"], anchor: "isEnslaverOf:P002", first_name: "Dabney:ALB-CN-1880-22721", middle_name: null, last_name: "Johnson:ALB-CN-1880-22721", suffix: null, birth_year: "1832:ALB-CN-1870-1688", death_year: "", gender: "M: ALB- CN - 1880 - 22721", race: "B: ALB - CN - 1880 - 22721", x: 200, y: 200, verity: 2, isEnslaver: true },
-
+*/
 			],
 			relationships: []
 		};
@@ -123,13 +123,49 @@ class App {
 
 		// Pull in ExpandAssertions relationships
 		if (this.expand) {
+			let nextPidNum = 1;
+			persons.forEach(p => {
+				if (p.person_id && p.person_id.startsWith('P')) {
+					const n = parseInt(p.person_id.substring(1), 10);
+					if (!isNaN(n) && n >= nextPidNum) nextPidNum = n + 1;
+				}
+			});
+
 			persons.forEach(p => {
 				if (!p.mentions) return;
 				p.mentions.forEach(mid => {
 					const view = this.expand.viewFor(mid);
 					if (view && view.results) {
 						view.results.forEach(res => {
-							const targetPid = mentionToPerson.get(res.mention_id);
+							if (!res.mention_id) return;
+							let targetPid = mentionToPerson.get(res.mention_id);
+							if (!targetPid) {
+								const pred = res.predicate;
+								if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf'].includes(pred)) {
+									const relM = this.mentions.find(m => m.mention_id === res.mention_id);
+									if (relM) {
+										targetPid = `P${String(nextPidNum++).padStart(3, '0')}`;
+										const fname = (relM.first_name || '').trim();
+										const lname = (relM.last_name || '').trim();
+										const newP = {
+											person_id: targetPid,
+											first_name: fname ? `${fname}:${relM.mention_id}` : undefined,
+											last_name: lname ? `${lname}:${relM.mention_id}` : undefined,
+											birth_year: relM.birth_year ? `${relM.birth_year}:${relM.mention_id}` : undefined,
+											gender: relM.gender ? `${relM.gender}:${relM.mention_id}` : undefined,
+											race: (relM.norm_race || relM.race) ? `${relM.norm_race || relM.race}:${relM.mention_id}` : undefined,
+											mentions: [relM.mention_id]
+										};
+										mentionToPerson.set(relM.mention_id, targetPid);
+										persons.push(newP);
+
+										if (window.treeApp && !window.treeApp.GetNode(targetPid)) {
+											window.treeApp.AddNode(newP);
+										}
+									}
+								}
+							}
+
 							if (targetPid && targetPid !== p.person_id) {
 								const pred = res.predicate;
 								if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf', 'isEnslaverOf', 'wasEnslavedBy', 'enslaves'].includes(pred)) {
@@ -371,7 +407,13 @@ class App {
 						fillFields(treeNode);
 					}
 
-					if (window.treeApp) window.treeApp.RenderNodes();
+					// Rebuild relationships from all attached mentions
+					this.rebuildAllRelationships();
+
+					if (window.treeApp) {
+						window.treeApp.RenderNodes();
+						window.treeApp.RenderEdges();
+					}
 
 					if (this.personEditor) {
 						this.personEditor.load(pid);
@@ -388,6 +430,14 @@ class App {
 					const treeNode = window.treeApp ? window.treeApp.GetNode(pid) : null;
 					if (treeNode && Array.isArray(treeNode.mentions)) {
 						treeNode.mentions = treeNode.mentions.filter(id => id !== mentionId);
+					}
+
+					// Rebuild relationships after mention removal
+					this.rebuildAllRelationships();
+
+					if (window.treeApp) {
+						window.treeApp.RenderNodes();
+						window.treeApp.RenderEdges();
 					}
 
 					if (this.personEditor) {
@@ -503,7 +553,7 @@ class App {
 
 							const family1870 = {
 								familyId: `FC1870-${criteria.person_id}`,
-								county: this.county || 'ALB',
+								county: this.county || 'AUG',
 								members: familyMembers
 							};
 
@@ -641,7 +691,7 @@ class App {
 		if (!mentionSource || !targetSources || targetSources.length === 0) return false;
 		if (targetSources.some(ts => String(ts).toUpperCase() === 'ALL')) return true;
 		let ms = String(mentionSource).toUpperCase().replace(/_/g, '-');
-		let currentCounty = (this.county || 'ALB').toUpperCase();
+		let currentCounty = (this.county || 'AUG').toUpperCase();
 
 		let activeFilter = (window.app && window.app.source) ? String(window.app.source).toUpperCase() : '';
 
@@ -777,14 +827,14 @@ class App {
 	{
 		const urlParams = new URLSearchParams(window.location.search);
 		const isTest = window.location.search.toLowerCase().includes('test');
-		this.county = urlParams.get('c') || 'ALB';
+		this.county = urlParams.get('c') || 'AUG';
 		const lastSavedTreeName = localStorage.getItem('verite_last_tree_name');
 		if (lastSavedTreeName) {
 			const saved = localStorage.getItem('verite_tree_' + lastSavedTreeName);
 			if (saved) {
 				try {
 					const parsed = JSON.parse(saved);
-					const treeCounty = parsed.county || "ALB";
+					const treeCounty = parsed.county || "AUG";
 					const urlCounty = urlParams.get('c');
 					if (!urlCounty || urlCounty === treeCounty) {
 						this.curTree = parsed;
@@ -927,7 +977,7 @@ class App {
 		if (!saved) return false;
 		try {
 			const parsed = JSON.parse(saved);
-			const targetCounty = parsed.county || "ALB";
+			const targetCounty = parsed.county || "AUG";
 			if (this.county !== targetCounty) {
 				this.county = targetCounty;
 				const countyPrefix = this.county + '-';
