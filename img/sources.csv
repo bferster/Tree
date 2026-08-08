@@ -1,4 +1,5 @@
 display_name,year,url,format,county,state
+ALB-CN-1860,1860,"","1860CensusFormat.md","ALB","VA"
 ALB-CN-1870,1870,"https://docs.google.com/spreadsheets/d/1BvrDE7-hJ-qUnTlZXw4fX1AcphGtdYjr9opJy2d-5Hg/export?format=csv","1870CensusFormat.md","ALB","VA"
 ALB-CN-1880,1880,"https://docs.google.com/spreadsheets/d/1K9DA3aoXkU_Yicts8Umtr92N9Hug3cdeTHcUN1gDf4E/export?format=csv","1880CensusFormat.md","ALB","VA"
 ALB-FG,1600,"https://docs.google.com/spreadsheets/d/1zU5MIzmXrO6dDoxBu0VaE1Wc1Ihwh56BIJhSCPPxqT4/export?format=csv","FindAGraveFormat.md","ALB","VA"
@@ -9,6 +10,7 @@ ALB-SS-1850,1850,"https://docs.google.com/spreadsheets/d/1Jf2zsFW_sh-QVmwhJUD8SN
 ALB-SS-1860,1860,"https://docs.google.com/spreadsheets/d/1c4Dn747B-rRbK8_x0H78XmddksnGECLLj_xuaP_6zg8/export?format=csv","SlaveScheduleFormat.md","ALB","VA"
 ALB-CH,1851,"https://docs.google.com/spreadsheets/d/1f9A99ZuJHJt8zCakNgLdniIOpiYkf1uIAKmnaJ4Ax40/export?format=csv","ChurchFormat.md","ALB","VA"
 
+AUG-CN-1860,1860,"","1860CensusFormat.md","AUG","VA"
 AUG-CN-1870,1870,"https://docs.google.com/spreadsheets/d/1-pJ3MrWWEnPyrSNE8QxVi-EfxyO-oLhlwMudygU3HG8/export?format=csv","1870CensusFormat.md","AUG","VA"
 AUG-CN-1880,1880,"https://docs.google.com/spreadsheets/d/1W4Z4mu9LqnrxUhpAi5r2nxJgNFW2HLUhMbAohDzR7Qo/export?format=csv","1880CensusFormat.md","AUG","VA"
 AUG-FG,1600,"https://docs.google.com/spreadsheets/d/1ukxS6aH0hYn3OQEpxPsj_mhx80axKrrcIDBKIZTikbw/export?format=csv","FindAGraveFormat.md","AUG","VA"
@@ -20,6 +22,7 @@ AUG-SB,1853,"https://docs.google.com/spreadsheets/d/1qyowsVe171KUJgJId636dXtBW4i
 AUG-CC,1866,"https://docs.google.com/spreadsheets/d/1-s92vkRZknCm6EohYFp5smiWlGBH7joDOxQDsu1_IYI/export?format=csv","CohabChildFormat.md","AUG","VA"
 AUG-CF,1866,"https://docs.google.com/spreadsheets/d/1IFgOe5aRjpUGnon4Dw8pdiODx26O8JiDbHkCX7W5WTU/export?format=csv","CohabFamilyFormat.md","AUG","VA"
 
+FAQ-CN-1860,1860,"","1860CensusFormat.md","FAQ","VA"
 FAQ-CN-1870,1870,"https://docs.google.com/spreadsheets/d/1AvfIHKe4KYJ6-5F-VG909466JTj_6zNNISGoQdA0VcQ/export?format=csv","1870CensusFormat.md","FAQ","VA"
 FAQ-CN-1880,1880,"https://docs.google.com/spreadsheets/d/1LF3HPc8RLoGnnZBvcwdjj4s9GC6qexqqjfB6ZDWYbls/export?format=csv","1880CensusFormat.md","FAQ","VA"
 FAQ-FG,1600,"https://docs.google.com/spreadsheets/d/14OEc2oiBrN5UqT9pHd4OlojU3uBUFchE3vqDhA34p1U/export?format=csv","FindAGraveFormat.md","FAQ","VA"

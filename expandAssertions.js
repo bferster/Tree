@@ -90,7 +90,7 @@ class ExpandAssertions {
 
 		const allAssertions = [...assertions];
 		for (const [famKey, members] of this.mentionsByFamily.entries()) {
-			if (famKey.includes('CN-1880') || famKey.includes('CN-1870')) {
+			if (famKey.includes('CN-1880') || famKey.includes('CN-1870') || famKey.includes('CN-1860')) {
 				let head = members.find(m => m.head === true || String(m.head || '').trim().toLowerCase() === 't' || String(m.head || '').trim().toLowerCase() === 'y' || (m.original_data && String(m.original_data.head || '').trim().toLowerCase() === 'y'));
 				if (!head) head = members.find(m => {
 					const rel = m.original_data ? (m.original_data.relation || m.original_data.Relation) : m.relation;
@@ -218,7 +218,7 @@ class ExpandAssertions {
 			if (m && m.source) {
 				const source = String(m.source).trim();
 				const year = this._getCensusYear(source);
-				const isCensus = source.includes('CN-1870') || source.includes('CN-1880');
+				const isCensus = source.includes('CN-1860') || source.includes('CN-1870') || source.includes('CN-1880');
 				const isSlaveSchedule = source.includes('SS-1850') || source.includes('SS-1860');
 
 				if (isCensus || isSlaveSchedule) {
@@ -227,7 +227,7 @@ class ExpandAssertions {
 					const hasFam = famId && famId.toLowerCase() !== 'null' && famId.toLowerCase() !== 'undefined';
 					const hasHouse = houseId && houseId.toLowerCase() !== 'null' && houseId.toLowerCase() !== 'undefined';
 
-					// 1. inFamilyOf (CN-1870, CN-1880)
+					// 1. inFamilyOf (CN-1860, CN-1870, CN-1880)
 					if (isCensus && hasFam) {
 						const famKey = `${source}|${famId}`;
 						const members = this.mentionsByFamily.get(famKey) || [];
@@ -240,10 +240,10 @@ class ExpandAssertions {
 					}
 
 					// 2. inHouseholdOf:
-					// - 1870: same household_id
+					// - 1860 / 1870: same household_id
 					// - 1880: same family_id
 					// - 1850/1860 slave schedule: same household_id
-					if (source.includes('CN-1870') && hasHouse) {
+					if ((source.includes('CN-1870') || source.includes('CN-1860')) && hasHouse) {
 						const houseKey = `${source}|${houseId}`;
 						const members = this.mentionsByHousehold.get(houseKey) || [];
 						for (const member of members) {

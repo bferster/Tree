@@ -231,18 +231,24 @@ class App {
 
 	async fetchWithProgress(url, label, maxRecords = null)     // FETCH WITH PROGRESS
 	{
-		// 1. Get the total count
-		const headResp = await fetch(url, { method: 'HEAD', headers: { 'Prefer': 'count=exact' } });
-		if (!headResp.ok) throw new Error(`Failed to count ${label}`);
-
-		const contentRange = headResp.headers.get('content-range');
 		let totalRecords = 0;
-		if (contentRange) {
-			// contentRange is like "0-0/5000" or "*/5000"
-			const parts = contentRange.split('/');
-			if (parts.length === 2) {
-				totalRecords = parseInt(parts[1], 10);
+		try {
+			// 1. Get the total count
+			const headResp = await fetch(url, { method: 'HEAD', headers: { 'Prefer': 'count=exact' } });
+			if (headResp.ok) {
+				const contentRange = headResp.headers.get('content-range');
+				if (contentRange) {
+					// contentRange is like "0-0/5000" or "*/5000"
+					const parts = contentRange.split('/');
+					if (parts.length === 2) {
+						totalRecords = parseInt(parts[1], 10);
+					}
+				}
+			} else {
+				console.warn(`HEAD count request returned HTTP ${headResp.status} for ${label}`);
 			}
+		} catch (err) {
+			console.warn(`HEAD count request failed for ${label}:`, err);
 		}
 
 		if (maxRecords && totalRecords > maxRecords) {
@@ -254,6 +260,7 @@ class App {
 			this.showProgress(`Loading ${label}...`, false);
 			const separator = url.includes('?') ? '&' : '?';
 			const res = await fetch(url + (maxRecords ? `${separator}limit=${maxRecords}` : ''));
+			if (!res.ok) throw new Error(`Failed to load ${label}: ${res.status} ${res.statusText}`);
 			return await res.json();
 		}
 

@@ -4,6 +4,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 8000;
 const API_TARGET = 'http://127.0.0.1:3000'; // Target PostgREST API (local end of the SSH tunnel)
+const ROOT_DIR = path.resolve(__dirname, '..');
 
 const MIME_TYPES = {
 	'.html': 'text/html',
@@ -15,6 +16,7 @@ const MIME_TYPES = {
 	'.svg': 'image/svg+xml',
 	'.ico': 'image/x-icon',
 	'.mp3': 'audio/mpeg',
+	'.csv': 'text/csv',
 };
 
 const server = http.createServer((req, res) => {
@@ -31,7 +33,7 @@ const server = http.createServer((req, res) => {
 
 
 	if (req.url === '/sources.csv') {
-		const csvPath = path.resolve(__dirname, 'sources.csv');
+		const csvPath = path.resolve(ROOT_DIR, 'sources.csv');
 		fs.readFile(csvPath, 'utf8', (err, data) => {
 			if (err) {
 				res.statusCode = 404;
@@ -46,10 +48,10 @@ const server = http.createServer((req, res) => {
 
 	// 2. Serve static files
 	let urlPath = req.url.split('?')[0];
-	let filePath = path.join(__dirname, urlPath === '/' ? 'index.html' : urlPath);
+	let filePath = path.join(ROOT_DIR, urlPath === '/' ? 'index.html' : urlPath);
 
 	// Basic security check to prevent directory traversal
-	if (!filePath.startsWith(__dirname)) {
+	if (!filePath.startsWith(ROOT_DIR)) {
 		res.statusCode = 403;
 		res.setHeader('Content-Type', 'text/plain');
 		res.end('Forbidden');
@@ -85,6 +87,7 @@ function proxyRequest(targetUrl, req, res) {
 	res.setHeader('Access-Control-Allow-Origin', '*');
 	res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
 	res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Prefer');
+	res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Location, Preference-Applied');
 
 	if (req.method === 'OPTIONS') {
 		res.statusCode = 200;
@@ -128,6 +131,11 @@ function proxyRequest(targetUrl, req, res) {
 			res.setHeader('Content-Type', 'text/plain');
 			res.end(`Bad Gateway: Could not connect to API at ${API_TARGET}`);
 		}
+	});
+
+	req.on('error', (err) => {
+		console.error('Client request error:', err.message);
+		proxyReq.destroy();
 	});
 
 	req.pipe(proxyReq);

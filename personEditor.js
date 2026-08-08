@@ -21,7 +21,7 @@ class PersonEditor {
 		race: 'c-brown',
 		gender: 'c-cyan',
 		birth_year: 'c-blue',
-		death_year: 'c-lime',
+		death_year: 'c-red',
 		linked_persons: 'c-green'
 	};
 
@@ -38,6 +38,7 @@ class PersonEditor {
 		'c-lime': ['#F9FBE7', '#827717'],
 		'c-orange': ['#FFF3E0', '#E65100'],
 		'c-brown': ['#EFEBE9', '#3E2723'],
+		'c-red': ['#FCE8E6', '#5C1D18'],
 		'c-gray': ['#F1EFE8', '#2C2C2A']
 	};
 
@@ -69,11 +70,11 @@ class PersonEditor {
 		},
 		{
 			key: 'race', label: 'Race', editKind: 'choice', choices: [{ v: 'B', l: 'Black' }, { v: 'W', l: 'White' }],
-			compareOptions: ['B', 'Ignore', 'W'], defaultMatch: 'B', hasRare: false
+			compareOptions: ['Exact', 'Ignore'], defaultMatch: 'Exact', hasRare: false
 		},
 		{
 			key: 'gender', label: 'Gender', editKind: 'choice', choices: [{ v: 'M', l: 'M' }, { v: 'F', l: 'F' }],
-			compareOptions: ['F', 'Ignore', 'M'], defaultMatch: 'F', hasRare: false
+			compareOptions: ['Exact', 'Ignore'], defaultMatch: 'Exact', hasRare: false
 		},
 		{
 			key: 'birth_year', label: 'Birth year', editKind: 'free',
@@ -274,9 +275,9 @@ class PersonEditor {
 					death_year: 'Exact'
 				},
 				rares: {
-					first_name: true,
-					middle_name: true,
-					last_name: true
+					first_name: false,
+					middle_name: false,
+					last_name: false
 				}
 			};
 		}
@@ -327,7 +328,7 @@ class PersonEditor {
 			let savedMatch = PersonEditor.userSettings.matches ? PersonEditor.userSettings.matches[cfg.key] : undefined;
 			let matchVal = savedMatch !== undefined ? savedMatch : defaultMatch;
 
-			let defaultRare = cfg.hasRare ? true : false;
+			let defaultRare = false;
 			let savedRare = PersonEditor.userSettings.rares ? PersonEditor.userSettings.rares[cfg.key] : undefined;
 			let rareVal = savedRare !== undefined ? savedRare : defaultRare;
 
@@ -620,7 +621,7 @@ class PersonEditor {
 		$compareCol.append($matchSel);
 
 		if (cfg.hasRare) {
-			const isRareChecked = fstate.rare !== undefined ? fstate.rare : true;
+			const isRareChecked = fstate.rare !== undefined ? fstate.rare : false;
 			const $rareLabel = $(`<label style="display:flex; align-items:center; gap:3px; font-size:12px; color:#444; cursor:pointer; white-space:nowrap;"><input type="checkbox" ${isRareChecked ? 'checked' : ''} style="cursor:pointer;"> Rare</label>`);
 			$rareLabel.find('input').on('change', function () {
 				const checked = $(this).is(':checked');
@@ -907,9 +908,9 @@ class PersonEditor {
 		$wrap.empty();
 
 		const allSourceOptions = [
-			{ label: 'All sources', value: 'ALL' },
-			{ label: '1870 Census', value: 'CN-1870' },
 			{ label: '1880 Census', value: 'CN-1880' },
+			{ label: '1870 Census', value: 'CN-1870' },
+			{ label: '1860 Census', value: 'CN-1860' },
 			{ label: '1860 Slave Schedule', value: 'SS-1860' },
 			{ label: '1850 Slave Schedule', value: 'SS-1850' },
 			{ label: 'Find A Grave', value: 'FG' },
@@ -1050,7 +1051,7 @@ class PersonEditor {
 			const val = (sel === -1 || sel == null) ? null : f.options[sel].value;
 			const cfg = PersonEditor.FIELD_CONFIG.find(c => c.key === key);
 			const matchVal = f.match || (cfg ? cfg.defaultMatch : 'Exact');
-			const isRare = f.rare !== undefined ? f.rare : (cfg && cfg.hasRare);
+			const isRare = f.rare !== undefined ? f.rare : false;
 
 			if (val || ['race', 'gender'].includes(key)) {
 				const splitVal = val ? String(val).split(':')[0].trim() : null;
@@ -1062,7 +1063,7 @@ class PersonEditor {
 
 				criteria.factors.push({
 					field: key,
-					value: (key === 'race' || key === 'gender') ? matchVal : splitVal,
+					value: matchVal === 'Ignore' ? null : splitVal,
 					compare: [matchVal],
 					match: matchVal,
 					rare: isRare,
@@ -1116,14 +1117,14 @@ class PersonEditor {
 			const val = (sel === -1 || sel == null) ? null : f.options[sel].value;
 			const splitVal = val ? String(val).split(':')[0].trim() : null;
 			const matchVal = f.match || cfg.defaultMatch || 'Exact';
-			const isRare = f.rare !== undefined ? f.rare : !!cfg.hasRare;
+			const isRare = f.rare !== undefined ? f.rare : false;
 
 			let term = cfg.key;
 			if (term === 'race') term = 'norm_race';
 
 			fields.push({
 				term: term,
-				value: (term === 'norm_race' || term === 'gender') ? ((matchVal === 'Ignore' || !splitVal) ? null : matchVal) : splitVal,
+				value: (matchVal === 'Ignore' || !splitVal) ? null : splitVal,
 				match: matchVal,
 				rare: isRare
 			});
@@ -1166,7 +1167,7 @@ class PersonEditor {
       .vpe-target-summary { font-size:18px; font-weight:600; color:#333; margin:2px 0 0; }
       .vpe-close { font-size:20px; color:#757575; cursor:pointer; }
       .vpe-section-label { font-size:13px; font-weight:500; letter-spacing:.05em; color:#9e9e9e; margin:0 0 .75rem; }
-      .vpe-row { display:grid; grid-template-columns:110px 190px 190px; gap:8px 12px; align-items:center;
+      .vpe-row { display:grid; grid-template-columns:110px 238px 190px; gap:8px 12px; align-items:center;
         padding:4px 8px; border-top:0.5px solid #f0f0f0; }
       .vpe-row-header { font-size:12px; font-weight:500; color:#9e9e9e; border-top:none; padding:4px 8px; }
       .vpe-row-linked { grid-template-columns:110px 1fr; }

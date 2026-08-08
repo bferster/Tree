@@ -136,8 +136,7 @@ class SearchBox {
 							</select>
 						</div>
 						<select id="sb-race-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
-							<option value="B" selected>B</option>
-							<option value="W">W</option>
+							<option value="Exact" selected>Exact</option>
 							<option value="Ignore">Ignore</option>
 						</select>
 						<div></div>
@@ -153,8 +152,7 @@ class SearchBox {
 							</select>
 						</div>
 						<select id="sb-gender-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
-							<option value="M" selected>M</option>
-							<option value="F">F</option>
+							<option value="Exact" selected>Exact</option>
 							<option value="Ignore">Ignore</option>
 						</select>
 						<div></div>
@@ -181,8 +179,8 @@ class SearchBox {
 					<!-- Death year -->
 					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
 						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Death year</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#F9FBE7; color:#827717; border-radius:999px; padding:2px 10px; min-height:26px;">
-							<input type="text" id="sb-death-year-val" placeholder="Year..." style="width:100%; border:none; background:transparent; font-size:12px; color:#827717; font-weight:500; outline:none;">
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#FCE8E6; color:#5C1D18; border-radius:999px; padding:2px 10px; min-height:26px;">
+							<input type="text" id="sb-death-year-val" placeholder="Year..." style="width:100%; border:none; background:transparent; font-size:12px; color:#5C1D18; font-weight:500; outline:none;">
 						</div>
 						<select id="sb-death-year-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
 							<option value="Ignore">Ignore</option>
@@ -218,22 +216,12 @@ class SearchBox {
 
 		// Sync race & gender dropdown value when match dropdown changes
 		$('#sb-race-match, #sb-race-val').on('change', function () {
-			const matchVal = $('#sb-race-match').val();
-			const raceVal = $('#sb-race-val').val();
-			if (matchVal === 'B' || matchVal === 'W') {
-				$('#sb-race-val').val(matchVal);
-			}
-			SearchBox.lastRaceMatch = matchVal;
+			SearchBox.lastRaceMatch = $('#sb-race-match').val();
 			SearchBox.lastRace = $('#sb-race-val').val();
 		});
 
 		$('#sb-gender-match, #sb-gender-val').on('change', function () {
-			const matchVal = $('#sb-gender-match').val();
-			const genderVal = $('#sb-gender-val').val();
-			if (matchVal === 'M' || matchVal === 'F') {
-				$('#sb-gender-val').val(matchVal);
-			}
-			SearchBox.lastGenderMatch = matchVal;
+			SearchBox.lastGenderMatch = $('#sb-gender-match').val();
 			SearchBox.lastGender = $('#sb-gender-val').val();
 		});
 
@@ -289,12 +277,12 @@ class SearchBox {
 		$('#sb-last-name-rare').prop('checked', lnRareDefault);
 
 		const raceDefault = initialValues.norm_race || SearchBox.lastRace || 'B';
-		const raceMatchDefault = initialValues.norm_race_match || initialValues.norm_race || SearchBox.lastRaceMatch || 'B';
+		const raceMatchDefault = initialValues.norm_race_match || SearchBox.lastRaceMatch || 'Exact';
 		$('#sb-race-val').val(raceDefault);
 		$('#sb-race-match').val(raceMatchDefault);
 
 		const genderDefault = initialValues.gender || SearchBox.lastGender || 'M';
-		const genderMatchDefault = initialValues.gender_match || initialValues.gender || SearchBox.lastGenderMatch || 'M';
+		const genderMatchDefault = initialValues.gender_match || SearchBox.lastGenderMatch || 'Exact';
 		$('#sb-gender-val').val(genderDefault);
 		$('#sb-gender-match').val(genderMatchDefault);
 
