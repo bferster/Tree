@@ -121,16 +121,8 @@ class App {
 			}
 		});
 
-		// Pull in ExpandAssertions relationships
+		// Pull in ExpandAssertions relationships for existing persons in tree
 		if (this.expand) {
-			let nextPidNum = 1;
-			persons.forEach(p => {
-				if (p.person_id && p.person_id.startsWith('P')) {
-					const n = parseInt(p.person_id.substring(1), 10);
-					if (!isNaN(n) && n >= nextPidNum) nextPidNum = n + 1;
-				}
-			});
-
 			persons.forEach(p => {
 				if (!p.mentions) return;
 				p.mentions.forEach(mid => {
@@ -138,33 +130,7 @@ class App {
 					if (view && view.results) {
 						view.results.forEach(res => {
 							if (!res.mention_id) return;
-							let targetPid = mentionToPerson.get(res.mention_id);
-							if (!targetPid) {
-								const pred = res.predicate;
-								if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf'].includes(pred)) {
-									const relM = this.mentions.find(m => m.mention_id === res.mention_id);
-									if (relM) {
-										targetPid = `P${String(nextPidNum++).padStart(3, '0')}`;
-										const fname = (relM.first_name || '').trim();
-										const lname = (relM.last_name || '').trim();
-										const newP = {
-											person_id: targetPid,
-											first_name: fname ? `${fname}:${relM.mention_id}` : undefined,
-											last_name: lname ? `${lname}:${relM.mention_id}` : undefined,
-											birth_year: relM.birth_year ? `${relM.birth_year}:${relM.mention_id}` : undefined,
-											gender: relM.gender ? `${relM.gender}:${relM.mention_id}` : undefined,
-											race: (relM.norm_race || relM.race) ? `${relM.norm_race || relM.race}:${relM.mention_id}` : undefined,
-											mentions: [relM.mention_id]
-										};
-										mentionToPerson.set(relM.mention_id, targetPid);
-										persons.push(newP);
-
-										if (window.treeApp && !window.treeApp.GetNode(targetPid)) {
-											window.treeApp.AddNode(newP);
-										}
-									}
-								}
-							}
+							const targetPid = mentionToPerson.get(res.mention_id);
 
 							if (targetPid && targetPid !== p.person_id) {
 								const pred = res.predicate;
@@ -190,12 +156,16 @@ class App {
 
 		// Sync to treeApp
 		if (window.treeApp && window.treeApp.state) {
-			window.treeApp.state.triplets = [];
+			const tripletSet = new Set();
+			const triplets = [];
 			this.curTree.relationships.forEach(r => {
-				if (r.predicate !== 'isChildOf' && r.predicate !== 'isUncleOf') {
-					window.treeApp.state.triplets.push({ subject: r.subject_id, predicate: r.predicate, object: r.object_id });
+				const key = `${r.subject_id}|${r.predicate}|${r.object_id}`;
+				if (!tripletSet.has(key)) {
+					tripletSet.add(key);
+					triplets.push({ subject: r.subject_id, predicate: r.predicate, object: r.object_id });
 				}
 			});
+			window.treeApp.state.triplets = triplets;
 		}
 	}
 
@@ -914,7 +884,7 @@ class App {
 			let maxPid = 1;
 			Object.values(this.curTree.persons).forEach(p => {  // For each person
 				if (!window.treeApp.GetNode(p.person_id)) {    // If missing
-					window.treeApp.AddNode(p);                 // Add to tree
+					window.treeApp.AddNode(p, false);           // Add to tree
 				}
 				if (p.person_id && p.person_id.startsWith('P')) {
 					const num = parseInt(p.person_id.substring(1), 10);
@@ -928,10 +898,7 @@ class App {
 			this.expand = new ExpandAssertions(this.assertions, this.mentions);
 			this.rebuildAllRelationships();
 
-			window.treeApp.ApplyLayout();                      // Lay out nodes
-			window.treeApp.RenderNodes();                      // Draw nodes
-			window.treeApp.RenderEdges();                      // Draw edges
-			window.treeApp.FitToScreen();                      // Fit viewport
+			window.treeApp.ResetLayout();                      // Reset layout & fit
 		}
 
 		if (window.treeApp && window.treeApp.state.nodes.length > 0) { // If nodes present
@@ -1022,7 +989,7 @@ class App {
 				let maxPid = 1;
 				Object.values(this.curTree.persons).forEach(p => {
 					if (!window.treeApp.GetNode(p.person_id)) {
-						window.treeApp.AddNode(p);
+						window.treeApp.AddNode(p, false);
 					}
 					if (p.person_id && p.person_id.startsWith('P')) {
 						const num = parseInt(p.person_id.substring(1), 10);
@@ -1036,10 +1003,7 @@ class App {
 				this.expand = new ExpandAssertions(this.assertions, this.mentions);
 				this.rebuildAllRelationships();
 
-				window.treeApp.ApplyLayout();
-				window.treeApp.RenderNodes();
-				window.treeApp.RenderEdges();
-				window.treeApp.FitToScreen();
+				window.treeApp.ResetLayout();
 
 				if (window.treeApp.state.nodes.length > 0) {
 					const pid = window.treeApp.state.nodes[0].person_id;

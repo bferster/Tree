@@ -213,9 +213,17 @@ class Score {
 				}
 			}
 
-			// --- LEVER C: Evaluate Household / Family Continuity ---
-			// Check if candidate mention has co-resident kin in the same source.
-			if (anchorKin.length > 0 && mention.source && (mention.household_id || mention.family_id)) {
+			// --- LEVER C: Evaluate Household / Family Continuity & Family Boost ---
+			const famFactor = factors ? factors.find(f => f.field === 'family_boost' || f.term === 'family_boost' || f.key === 'family_boost') : null;
+			const isFamBoostIgnored = famFactor && (famFactor.compare === 'Ignore' || famFactor.match === 'Ignore');
+
+			if (!isFamBoostIgnored) {
+				const familyBoostResult = this._calculateFamilyBoost(anchorPerson, mention, factors);
+				if (familyBoostResult && familyBoostResult.value > 0) {
+					totalScore += familyBoostResult.value;
+					mentionFactors['familyBoost'] = { value: familyBoostResult.value, matches: familyBoostResult.matches };
+				}
+			} else if (anchorKin.length > 0 && mention.source && (mention.household_id || mention.family_id)) {
 				const hid = mention.household_id;
 				const fid = mention.family_id;
 
@@ -323,6 +331,168 @@ class Score {
 		blockedMentions.sort((a, b) => (b.score || 0) - (a.score || 0)); 		// Sort the mention objects by score in descending order
 		let mention_ids = blockedMentions.map(m => m.mention_id);
 		return { mentions: blockedMentions, mention_ids, factors, totalScore: 0 };
+	}
+
+	_getFamilyIndex(mentions) {
+		if (!this._familyIndexCache || this._familyIndexCache.mentions !== mentions) {
+			const idx = new Map();
+			if (Array.isArray(mentions)) {
+				for (let i = 0; i < mentions.length; i++) {
+					const m = mentions[i];
+					if (m.source && m.family_id) {
+						const key = m.source + '|F|' + m.family_id;
+						let list = idx.get(key);
+						if (!list) {
+							list = [];
+							idx.set(key, list);
+						}
+						list.push(m);
+					}
+				}
+			}
+			this._familyIndexCache = { mentions, index: idx };
+		}
+		return this._familyIndexCache.index;
+	}
+
+	_calculateFamilyBoost(anchorPerson, candidateMention, factors, familyIndex = null) {
+		if (!candidateMention || !candidateMention.source || !candidateMention.family_id) return null;
+
+		const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+		if (!globalApp || !globalApp.mentions) return null;
+
+		// Fallback to selected person in tree if anchorPerson not directly provided
+		if (!anchorPerson && globalApp.curTree) {
+			const pid = (window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid) || globalApp.curPerson;
+			if (pid && globalApp.curTree.persons) {
+				anchorPerson = Array.isArray(globalApp.curTree.persons) 
+					? globalApp.curTree.persons.find(p => p.person_id === pid) 
+					: globalApp.curTree.persons[pid];
+			}
+		}
+
+		if (!anchorPerson) return null;
+
+		if (!familyIndex) {
+			familyIndex = this._getFamilyIndex(globalApp.mentions);
+		}
+
+		// 1. Get anchor person's family roster
+		let anchorRoster = anchorPerson._cachedFamilyRoster;
+		if (!anchorRoster || anchorPerson._cachedFamilyPerson !== anchorPerson) {
+			const anchorMentions = (anchorPerson.mentions || []).map(mid => {
+				if (typeof mid === 'object') return mid;
+				return globalApp.mentions.find(m => m.mention_id === mid);
+			}).filter(Boolean);
+
+			if (anchorMentions.length === 0) return null;
+
+			let anchorM = anchorMentions.find(m => m.family_id);
+			if (!anchorM) return null;
+
+			const key = anchorM.source + '|F|' + anchorM.family_id;
+			const fullGroup = familyIndex.get(key) || [];
+			anchorRoster = fullGroup.filter(m => m.mention_id !== anchorM.mention_id);
+			anchorPerson._cachedFamilyRoster = anchorRoster;
+			anchorPerson._cachedFamilyPerson = anchorPerson;
+		}
+
+		if (!anchorRoster || anchorRoster.length === 0) return null;
+
+		// 2. Get candidate mention's family roster (O(1) Map lookup)
+		const candKey = candidateMention.source + '|F|' + candidateMention.family_id;
+		const fullCandGroup = familyIndex.get(candKey);
+		if (!fullCandGroup || fullCandGroup.length <= 1) return null;
+
+		const candRoster = fullCandGroup.filter(m => m.mention_id !== candidateMention.mention_id);
+		if (candRoster.length === 0) return null;
+
+		// 3. Match roster members between the two family units
+		const matchedKin = [];
+		const usedCandPids = new Set();
+
+		for (const aM of anchorRoster) {
+			const aFirst = (aM.norm_first_name || aM.first_name || '').toLowerCase().trim().split(':')[0];
+			const aLast = (aM.last_name || '').toLowerCase().trim().split(':')[0];
+			const aGender = (aM.gender || '').toUpperCase().trim();
+			const aRace = (aM.norm_race || aM.race || '').toUpperCase().trim();
+			const aBY = aM.birth_year ? parseInt(aM.birth_year) : null;
+
+			if (!aFirst) continue;
+
+			let bestMatch = null;
+			let bestScore = 0;
+
+			for (const cM of candRoster) {
+				if (usedCandPids.has(cM.mention_id)) continue;
+
+				const cFirst = (cM.norm_first_name || cM.first_name || '').toLowerCase().trim().split(':')[0];
+				const cLast = (cM.last_name || '').toLowerCase().trim().split(':')[0];
+
+				if (!cFirst) continue;
+
+				// Gender check
+				const cGender = (cM.gender || '').toUpperCase().trim();
+				if (aGender && cGender && aGender !== cGender) continue;
+
+				// Race check
+				const cRace = (cM.norm_race || cM.race || '').toUpperCase().trim();
+				if (aRace && cRace && aRace !== cRace && !(aRace.startsWith('B') && cRace.startsWith('M')) && !(aRace.startsWith('M') && cRace.startsWith('B'))) continue;
+
+				// Birth year check (gap <= 3 years)
+				const cBY = cM.birth_year ? parseInt(cM.birth_year) : null;
+				if (aBY && cBY && Math.abs(aBY - cBY) > 3) continue;
+
+				// Last name compatibility check if both present
+				if (aLast && cLast && aLast !== cLast) {
+					if (typeof this.JaroWinkler === 'function' && this.JaroWinkler(aLast, cLast) < 0.80) {
+						continue;
+					}
+				}
+
+				// First name similarity
+				let nameMatch = 0;
+				if (aFirst === cFirst) nameMatch = 1.0;
+				else if (typeof this.JaroWinkler === 'function' && this.JaroWinkler(aFirst, cFirst) >= 0.82) nameMatch = 0.8;
+
+				if (nameMatch > 0.7 && nameMatch > bestScore) {
+					bestScore = nameMatch;
+					bestMatch = cM;
+				}
+			}
+
+			if (bestMatch) {
+				usedCandPids.add(bestMatch.mention_id);
+				const rawName = bestMatch.first_name || bestMatch.norm_first_name || 'Relative';
+				const nameStr = rawName.split(':')[0];
+				matchedKin.push({ name: nameStr, mention_id: bestMatch.mention_id, score: bestScore });
+			}
+		}
+
+		if (matchedKin.length === 0) return null;
+
+		const boostVal = matchedKin.length * 0.5;
+		if (boostVal <= 0) return null;
+
+		const candName = [candidateMention.first_name, candidateMention.last_name].filter(Boolean).join(' ') || candidateMention.mention_id;
+		const matchedNames = matchedKin.map(m => m.name).join(', ');
+
+		if (typeof window !== 'undefined' && window.console) {
+			console.log(`%c[Family Boost] %c${candName} (${candidateMention.mention_id}): +${boostVal.toFixed(2)} pts (%c${matchedKin.length} matched: ${matchedNames}%c)`, 
+				'color: #0F3D1F; font-weight: bold; background: #E5F4E9; padding: 2px 6px; border-radius: 4px;', 
+				'color: #111; font-weight: bold;', 
+				'color: #0F3D1F; font-style: italic;', 
+				'color: #111;'
+			);
+		} else {
+			console.log(`[Family Boost Trace] Anchor: ${anchorPerson.person_id} | Candidate: ${candidateMention.mention_id} (${candName}) | Matched (${matchedKin.length}): [${matchedNames}] | Boost Value: +${boostVal.toFixed(2)}`);
+		}
+
+		return {
+			value: boostVal,
+			matches: matchedKin,
+			count: matchedKin.length
+		};
 	}
 
 	computeCascadeNameScore(mention, factors, personId, mentionFactors) {

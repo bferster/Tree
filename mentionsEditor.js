@@ -53,6 +53,7 @@ class MentionsEditor {
 		deathYear: "Death Year",
 		familyMember: "Relative match",
 		householdContinuity: "Family",
+		familyBoost: "Family Boost",
 		race: "Race",
 		gender: "Gender",
 		suffix: "Suffix",
@@ -78,6 +79,7 @@ class MentionsEditor {
 		deathYear: 'c-blue',
 		familyMember: 'c-purple',
 		householdContinuity: 'c-purple',
+		familyBoost: 'c-green',
 		knockout: 'c-pink',
 		race: 'c-pink',
 		gender: 'c-pink',
@@ -475,10 +477,12 @@ class MentionsEditor {
 			raritySoundexLast: 'soundex_last_name',
 			suffix: 'suffix',
 			birthYear: 'birth_year',
-			deathYear: 'death_year'
+			deathYear: 'death_year',
+			familyBoost: 'family_boost'
 		};
 
 		const pillsHtml = Object.keys(MentionsEditor.FACTOR_LABELS).map(key => {
+			if (key === 'householdContinuity') return '';
 			if (isSmartNameOn && !this.isSearchResult) {
 				if ((nameKeys.includes(key) && key !== 'rarityLastName') || key === 'suffix') return '';
 			} else if (this.factors) {
@@ -514,9 +518,9 @@ class MentionsEditor {
 			const text = ramp[1];
 
 			let tooltip = '';
-			if (key === 'householdContinuity' && factor.matches && factor.matches.length > 0) {
+			if ((key === 'householdContinuity' || key === 'familyBoost') && factor.matches && factor.matches.length > 0) {
 				const names = factor.matches.map(m => m.name).join(', ');
-				tooltip = ` title="Matched: ${names}"`;
+				tooltip = ` title="Matched family: ${names}"`;
 			} else if (key === 'knockout') {
 				tooltip = ` title="${MentionsEditor._esc(factor.reason)}"`;
 				label = `Knockout: ${factor.reason}`;

@@ -75,7 +75,7 @@ class TreeApp {
 			<!-- Workspace Area -->
 			<div class="main-workspace">
 				<!-- Main Canvas Area -->
-				<div class="canvas-container" style="width: 50%; position: relative;">
+				<div class="canvas-container" style="width: 66%; position: relative;">
 					<img src="Vlogo.png" style="position: absolute; bottom: 20px; left: 20px; width: 4vw;opacity: 0.5; pointer-events: none;">
 				</div>
 		
@@ -83,7 +83,7 @@ class TreeApp {
 				<div id="divider"></div>
 		
 				<!-- Matching Module Placeholder -->
-				<div class="matching-module-placeholder" style="width: calc(50% - 6px);">
+				<div class="matching-module-placeholder" style="width: calc(34% - 6px);">
 					<div id="right-panel-content" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #666; font-size: 16px; overflow-y: auto;">
 						Select a person node to view/edit details
 					</div>
@@ -887,7 +887,7 @@ class TreeApp {
 							});
 						}
 					}
-					const newNode = this.AddNode(newNodeInfo);
+					const newNode = this.AddNode(newNodeInfo, false);
 
 					if (relation === 'isChildOf') {
 						this.AddTriplet(newPid, 'isChildOf', sourcePid);
@@ -1181,7 +1181,7 @@ class TreeApp {
 		this.isDirty = true;
 	}
 
-	AddNode(fields)																		// ADD PERSON NODE TO STATE
+	AddNode(fields, resetLayout = true)																		// ADD PERSON NODE TO STATE
 	{
 
 		this.SaveState();
@@ -1247,6 +1247,10 @@ class TreeApp {
 
 		if (window.app && typeof window.app.rebuildAllRelationships === 'function') {
 			window.app.rebuildAllRelationships();
+		}
+
+		if (resetLayout) {
+			this.ResetLayout();
 		}
 
 		return newNode;
@@ -1712,29 +1716,29 @@ class TreeApp {
 		const directedCousinsOf = {};
 
 		vNodes.forEach(n => {
-			parentsOf[n.person_id] = [];
-			childrenOf[n.person_id] = [];
-			spousesOf[n.person_id] = [];
-			cousinsOf[n.person_id] = [];
-			directedCousinsOf[n.person_id] = [];
+			parentsOf[n.person_id] = new Set();
+			childrenOf[n.person_id] = new Set();
+			spousesOf[n.person_id] = new Set();
+			cousinsOf[n.person_id] = new Set();
+			directedCousinsOf[n.person_id] = new Set();
 		});
 
 		vTriplets.forEach(t => {
 			if (t.predicate === 'isParentOf') {
-				parentsOf[t.object].push(t.subject);
-				childrenOf[t.subject].push(t.object);
+				parentsOf[t.object].add(t.subject);
+				childrenOf[t.subject].add(t.object);
 			} else if (t.predicate === 'isChildOf') {
-				parentsOf[t.subject].push(t.object);
-				childrenOf[t.object].push(t.subject);
+				parentsOf[t.subject].add(t.object);
+				childrenOf[t.object].add(t.subject);
 			}
 			if (t.predicate === 'isSpouseOf') {
-				spousesOf[t.subject].push(t.object);
-				spousesOf[t.object].push(t.subject);
+				spousesOf[t.subject].add(t.object);
+				spousesOf[t.object].add(t.subject);
 			}
 			if (t.predicate === 'isCousinOf') {
-				cousinsOf[t.subject].push(t.object);
-				cousinsOf[t.object].push(t.subject);
-				directedCousinsOf[t.object].push(t.subject);
+				cousinsOf[t.subject].add(t.object);
+				cousinsOf[t.object].add(t.subject);
+				directedCousinsOf[t.object].add(t.subject);
 			}
 		});
 
@@ -1742,30 +1746,45 @@ class TreeApp {
 		const queue = [];
 
 		vNodes.forEach(n => {
-			if (parentsOf[n.person_id].length === 0) {
+			if (parentsOf[n.person_id].size === 0) {
 				depths[n.person_id] = 0;
 				queue.push(n.person_id);
 			}
 		});
 
-		while (queue.length > 0) {
+		// Fallback if graph is a pure cycle and no root nodes were found
+		if (queue.length === 0 && vNodes.length > 0) {
+			depths[vNodes[0].person_id] = 0;
+			queue.push(vNodes[0].person_id);
+		}
+
+		const maxAllowedDepth = vNodes.length + 5;
+		let queueOps = 0;
+		const maxQueueOps = Math.max(1000, vNodes.length * 100);
+
+		while (queue.length > 0 && queueOps < maxQueueOps) {
+			queueOps++;
 			const curr = queue.shift();
 			const d = depths[curr];
+			if (d > maxAllowedDepth) continue;
+
 			childrenOf[curr].forEach(child => {
-				if (depths[child] === undefined || depths[child] < d + 1) {
-					depths[child] = d + 1;
+				const nextD = d + 1;
+				if (nextD <= maxAllowedDepth && (depths[child] === undefined || depths[child] < nextD)) {
+					depths[child] = nextD;
 					queue.push(child);
 				}
 			});
 			spousesOf[curr].forEach(spouse => {
-				if (depths[spouse] === undefined || depths[spouse] < d) {
+				if (d <= maxAllowedDepth && (depths[spouse] === undefined || depths[spouse] < d)) {
 					depths[spouse] = d;
 					queue.push(spouse);
 				}
 			});
 			directedCousinsOf[curr].forEach(cousin => {
-				if (depths[cousin] === undefined || depths[cousin] === 0) {
-					depths[cousin] = d + 2;
+				const nextD = d + 2;
+				if (nextD <= maxAllowedDepth && (depths[cousin] === undefined || depths[cousin] === 0)) {
+					depths[cousin] = nextD;
 					queue.push(cousin);
 				}
 			});
@@ -1783,7 +1802,9 @@ class TreeApp {
 				let minDepth = depths[enslavedPid] !== undefined ? depths[enslavedPid] : 0;
 				const connectedPids = new Set([enslavedPid]);
 				let changed = true;
-				while (changed) {
+				let iterations = 0;
+				while (changed && iterations < 1000) {
+					iterations++;
 					changed = false;
 					vTriplets.forEach(t2 => {
 						if (t2.predicate !== 'isEnslaverOf' && t2.predicate !== 'wasEnslavedBy' && t2.predicate !== 'enslaves') {

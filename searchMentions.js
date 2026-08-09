@@ -215,6 +215,27 @@ class SearchMentions {
 			activeFieldScorers.push((m) => this._scoreDeathYear(m, deathField, deathWindow));
 		}
 
+		// Pre-resolve activePerson and familyIndex once before scoring candidates
+		const famField = fieldByTerm(fields, "family_boost");
+		const isFamBoostActive = !famField || famField.match !== "Ignore";
+		const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+		let activePerson = null;
+		let familyIndex = null;
+
+		if (isFamBoostActive && globalApp) {
+			if (globalApp.curTree) {
+				const pid = (window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid) || globalApp.curPerson;
+				if (pid && globalApp.curTree.persons) {
+					activePerson = Array.isArray(globalApp.curTree.persons) 
+						? globalApp.curTree.persons.find(p => p.person_id === pid) 
+						: globalApp.curTree.persons[pid];
+				}
+			}
+			if (globalApp.score && typeof globalApp.score._getFamilyIndex === 'function') {
+				familyIndex = globalApp.score._getFamilyIndex(globalApp.mentions);
+			}
+		}
+
 		const scored = candidates.map((m) => {
 			const mFactors = {};
 
@@ -259,12 +280,23 @@ class SearchMentions {
 				mFactors['deathYear'] = { value: dyScore };
 			}
 
-			if (activeFieldScorers.length === 0) {
+			// Family Boost (O(1) indexed lookup)
+			if (isFamBoostActive && m.family_id && activePerson && globalApp && globalApp.score) {
+				const fRes = globalApp.score._calculateFamilyBoost(activePerson, m, fields, familyIndex);
+				if (fRes && fRes.value > 0) {
+					mFactors['familyBoost'] = { value: fRes.value, matches: fRes.matches };
+				}
+			}
+
+			if (activeFieldScorers.length === 0 && !mFactors['familyBoost']) {
 				return { mention: m, rawScore: 0.5, factors: mFactors };
 			}
 			let total = 0;
 			for (const scorer of activeFieldScorers) {
 				total += scorer(m);
+			}
+			if (mFactors['familyBoost']) {
+				total += mFactors['familyBoost'].value;
 			}
 			const rawScore = Math.max(0, total);
 			return { mention: m, rawScore, factors: mFactors };

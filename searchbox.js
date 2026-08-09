@@ -194,6 +194,21 @@ class SearchBox {
 						<div></div>
 					</div>
 
+					<!-- Family boost -->
+					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Family boost</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#FEF9D7; border-radius:999px; padding:2px 6px; min-height:26px;">
+							<div style="background:#ffffff; border:1px solid #d0d0d0; border-radius:999px; padding:2px 10px; display:flex; align-items:center;">
+								<span id="sb-family-boost-pill-text" style="font-size:12px; font-weight:500; color:#333;">Use</span>
+							</div>
+						</div>
+						<select id="sb-family-boost-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
+							<option value="Use" selected>Use</option>
+							<option value="Ignore">Ignore</option>
+						</select>
+						<div></div>
+					</div>
+
 				</div>
 
 				<!-- Footer -->
@@ -288,6 +303,12 @@ class SearchBox {
 
 		$('#sb-birth-year-match').val(initialValues.birth_year_match || 'Exact');
 		$('#sb-death-year-match').val(initialValues.death_year_match || 'Exact');
+		const fbVal = initialValues.family_boost_match || initialValues.family_boost || SearchBox.lastFamilyBoostMatch || 'Use';
+		$('#sb-family-boost-match').val(fbVal);
+		$('#sb-family-boost-pill-text').text(fbVal);
+		$('#sb-family-boost-match').off('change.fb').on('change.fb', function() {
+			$('#sb-family-boost-pill-text').text($(this).val());
+		});
 	}
 
 	buildSearchCriteria() {
@@ -369,6 +390,16 @@ class SearchBox {
 			term: 'death_year',
 			value: deathYearVal,
 			match: deathYearMatch,
+			rare: false
+		});
+
+		// family_boost
+		const familyBoostMatch = $('#sb-family-boost-match').val() || 'Use';
+		SearchBox.lastFamilyBoostMatch = familyBoostMatch;
+		fields.push({
+			term: 'family_boost',
+			value: familyBoostMatch,
+			match: familyBoostMatch,
 			rare: false
 		});
 

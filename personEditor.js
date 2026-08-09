@@ -22,6 +22,7 @@ class PersonEditor {
 		gender: 'c-cyan',
 		birth_year: 'c-blue',
 		death_year: 'c-red',
+		family_boost: 'c-yellow',
 		linked_persons: 'c-green'
 	};
 
@@ -39,6 +40,8 @@ class PersonEditor {
 		'c-orange': ['#FFF3E0', '#E65100'],
 		'c-brown': ['#EFEBE9', '#3E2723'],
 		'c-red': ['#FCE8E6', '#5C1D18'],
+		'c-yellow': ['#FEF9D7', '#4A3B00'],
+		'c-white': ['#FFFFFF', '#333333'],
 		'c-gray': ['#F1EFE8', '#2C2C2A']
 	};
 
@@ -83,6 +86,10 @@ class PersonEditor {
 		{
 			key: 'death_year', label: 'Death year', editKind: 'free',
 			compareOptions: ['Exact', 'Ignore', '±1', '±2', '±3', '±5', '±10'], defaultMatch: 'Exact', hasRare: false
+		},
+		{
+			key: 'family_boost', label: 'Family boost', editKind: 'free',
+			compareOptions: ['Use', 'Ignore'], defaultMatch: 'Use', hasRare: false
 		},
 		{ key: 'linked_persons', label: 'Linked people', editKind: 'linked' }
 	];
@@ -272,7 +279,8 @@ class PersonEditor {
 					race: 'B',
 					gender: 'F',
 					birth_year: 'Exact',
-					death_year: 'Exact'
+					death_year: 'Exact',
+					family_boost: 'Use'
 				},
 				rares: {
 					first_name: false,
@@ -439,12 +447,14 @@ class PersonEditor {
 	static renderFieldRow(person, cfg, state) {
 		const fstate = state.fields[cfg.key];
 		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS[cfg.key]] || PersonEditor.RAMP['c-gray'];
+		const isWhitePill = cfg.key === 'family_boost';
 
 		const $row = $(`<div class="vpe-row"></div>`);
 		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
 
 		// VALUE
-		const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]}"></div>`);
+		const valPillBg = isWhitePill ? '#FEF9D7' : ramp_[0];
+		const $val = $(`<div class="vpe-value-pill" style="background:${valPillBg};"></div>`);
 
 		const isNull = fstate.selected === -1 || fstate.selected == null;
 		let val1 = "", val2 = "";
@@ -542,9 +552,14 @@ class PersonEditor {
 		}
 
 		const chipColor = cfg.key === 'metaphone_last_name' ? '#000' : ramp_[1];
-		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${chipColor}"></span>`);
+		const chipStyle = isWhitePill ? "position: relative; background:#FFFFFF; border:1px solid #d0d0d0; border-radius:999px; padding:2px 10px; color:#333; display:inline-flex; align-items:center;" : `position: relative; color:${chipColor}`;
+		const $chip = $(`<span class="vpe-chip" style="${chipStyle}"></span>`);
 		const $chipText = $(`<span></span>`);
-		if (!isNull && val1) $chipText.text(val1);
+		if (cfg.key === 'family_boost') {
+			$chipText.text(fstate.match || cfg.defaultMatch || 'Use');
+		} else if (!isNull && val1) {
+			$chipText.text(val1);
+		}
 		$chip.append($chipText);
 
 		if (cfg.editKind === 'free' || cfg.editKind === 'choice') {
@@ -611,6 +626,9 @@ class PersonEditor {
 		$matchSel.on('change', function () {
 			const val = $(this).val();
 			fstate.match = val;
+			if (cfg.key === 'family_boost') {
+				$chipText.text(val);
+			}
 			if (PersonEditor.userSettings) {
 				if (!PersonEditor.userSettings.matches) PersonEditor.userSettings.matches = {};
 				PersonEditor.userSettings.matches[cfg.key] = val;
