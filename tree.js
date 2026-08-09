@@ -25,13 +25,20 @@ class TreeApp {
 						<div class="dropdown-item" id="menu-new">New</div>
 						<div class="dropdown-item" id="menu-save">Save</div>
 						<div class="dropdown-item" id="menu-load">Load...</div>
+						<div class="dropdown-item" id="menu-load-demo">Load demo</div>
 						<div class="dropdown-item" id="menu-delete">Delete...</div>
 						<div class="dropdown-separator"></div>
+						<div class="dropdown-item has-submenu">
+							Import
+							<div class="submenu">
+								<div class="dropdown-item" id="menu-import-json">JSON</div>
+							</div>
+						</div>
 						<div class="dropdown-item has-submenu">
 							Export
 							<div class="submenu">
 								<div class="dropdown-item" id="menu-export-gedcom">GEDCOM</div>
-								<div class="dropdown-item" id="menu-export-rdf">RDF</div>
+								<div class="dropdown-item" id="menu-export-json">JSON</div>
 							</div>
 						</div>
 					</div>
@@ -444,7 +451,7 @@ class TreeApp {
 				document.getElementById('save-tree-modal').close();
 				await window.app.saveTree(name);
 				if (typeof Sound === 'function') Sound("ding");
-				alert(`Tree saved successfully as "${name}".`);
+				this.showToast(`Tree saved successfully as "${name}".`);
 			});
 
 			// Load Tree Handler
@@ -454,7 +461,7 @@ class TreeApp {
 				if (window.app) {
 					const trees = window.app.listTrees();
 					if (trees.length === 0) {
-						alert('No saved trees found.');
+						this.showToast('No saved trees found.', 3000);
 						return;
 					}
 					const select = $('#load-tree-select');
@@ -479,9 +486,25 @@ class TreeApp {
 				if (name) {
 					const success = await window.app.loadTree(name);
 					if (success) {
-						alert(`Tree "${name}" loaded successfully.`);
+						if (typeof Sound === 'function') Sound("ding");
+						this.showToast(`Tree "${name}" loaded successfully.`);
 					} else {
-						alert(`Failed to load tree "${name}".`);
+						this.showToast(`Failed to load tree "${name}".`, 3500);
+					}
+				}
+			});
+
+			// Load Demo Handler
+			$('#menu-load-demo').on('click', async (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				if (window.app) {
+					const success = await window.app.loadDemo();
+					if (success) {
+						if (typeof Sound === 'function') Sound("ding");
+						this.showToast("Demo tree loaded successfully!");
+					} else {
+						this.showToast("Failed to load demo tree.", 3500);
 					}
 				}
 			});
@@ -493,7 +516,7 @@ class TreeApp {
 				if (window.app) {
 					const trees = window.app.listTrees();
 					if (trees.length === 0) {
-						alert('No saved trees found.');
+						this.showToast('No saved trees found.', 3000);
 						return;
 					}
 					const select = $('#delete-tree-select');
@@ -515,26 +538,59 @@ class TreeApp {
 				if (name) {
 					if (confirm(`Are you sure you want to delete the tree "${name}"?`)) {
 						await window.app.deleteTree(name);
-						alert(`Tree "${name}" has been deleted.`);
+						this.showToast(`Tree "${name}" has been deleted.`);
 					}
 				}
 			});
 
-			// RDF Export Handler
-			$('#menu-export-rdf').on('click', (e) => {
+			// JSON Import Handler
+			$('#menu-import-json').on('click', (e) => {
+				e.stopPropagation();
+				$('.menu-top-level').removeClass('active');
+				const input = document.createElement('input');
+				input.type = 'file';
+				input.accept = '.json,application/json';
+				input.onchange = (event) => {
+					const file = event.target.files[0];
+					if (!file) return;
+					const reader = new FileReader();
+					reader.onload = async (evt) => {
+						try {
+							const data = JSON.parse(evt.target.result);
+							if (window.app) {
+								const success = await window.app.loadTreeData(data);
+								if (success) {
+									if (typeof Sound === 'function') Sound("ding");
+									this.showToast("JSON file imported successfully!");
+								} else {
+									this.showToast("Failed to import JSON file. Invalid tree format.", 3500);
+								}
+							}
+						} catch (err) {
+							console.error("JSON parse error:", err);
+							alert("Failed to parse JSON file: " + err.message);
+						}
+					};
+					reader.readAsText(file);
+				};
+				input.click();
+			});
+
+			// JSON Export Handler
+			$('#menu-export-json').on('click', (e) => {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (window.app && window.app.curTree) {
 					const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.app.curTree, null, 4));
 					const downloadAnchorNode = document.createElement('a');
 					downloadAnchorNode.setAttribute("href", dataStr);
-					downloadAnchorNode.setAttribute("download", (window.app.curTree.treeName || "tree") + "_rdf.json");
+					downloadAnchorNode.setAttribute("download", (window.app.curTree.treeName || "tree") + "_json.json");
 					document.body.appendChild(downloadAnchorNode);
 					downloadAnchorNode.click();
 					downloadAnchorNode.remove();
-					
+
 					if (typeof Sound === 'function') Sound("ding");
-					alert("RDF JSON file saved successfully!");
+					this.showToast("JSON file saved successfully!");
 				}
 			});
 
@@ -948,10 +1004,10 @@ class TreeApp {
 					}
 
 					this.RenderNodes(); this.RenderEdges();
-					
+
 					// after the person has been added to the tree and placed, call the reset layout function
 					this.ResetLayout();
-					
+
 					this.SelectNodeAndShowEditor(newPid);
 
 				}
@@ -1054,11 +1110,48 @@ class TreeApp {
 		}
 	}
 
+	showToast(message, duration = 2500) {
+		let $toast = $('#verite-toast-notification');
+		if ($toast.length === 0) {
+			$toast = $(`
+				<div id="verite-toast-notification" style="
+					position: fixed;
+					bottom: 24px;
+					right: 24px;
+					background: #26215C;
+					color: #ffffff;
+					padding: 10px 20px;
+					border-radius: 8px;
+					font-size: 14px;
+					font-weight: 500;
+					box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+					z-index: 10000;
+					display: flex;
+					align-items: center;
+					gap: 8px;
+					transition: opacity 0.3s ease, transform 0.3s ease;
+					opacity: 0;
+					transform: translateY(12px);
+					pointer-events: none;
+				"></div>
+			`).appendTo('body');
+		}
+
+		$toast.html(`<i class="ti ti-check" style="font-size:16px; color:#4ade80;"></i> ${message}`);
+		$toast.css({ opacity: 1, transform: 'translateY(0)' });
+
+		if (this._toastTimer) clearTimeout(this._toastTimer);
+		this._toastTimer = setTimeout(() => {
+			$toast.css({ opacity: 0, transform: 'translateY(12px)' });
+		}, duration);
+	}
+
 	SaveState()																		// SAVE STATE TO UNDO STACK
 	{
 
 		// Deep copy using JSON (safe since our data is simple JS objects)
-		this.undoStack.push(JSON.parse(JSON.stringify(this.state)));
+		const safeReplacer = (k, v) => (k && k.startsWith('_cached') ? undefined : v);
+		this.undoStack.push(JSON.parse(JSON.stringify(this.state, safeReplacer)));
 		this.redoStack = [];															// Clear redo stack on new action
 		this.UpdateUndoRedoMenu();
 	}
@@ -1067,7 +1160,8 @@ class TreeApp {
 	{
 
 		if (this.undoStack.length > 0) {
-			this.redoStack.push(JSON.parse(JSON.stringify(this.state)));
+			const safeReplacer = (k, v) => (k && k.startsWith('_cached') ? undefined : v);
+			this.redoStack.push(JSON.parse(JSON.stringify(this.state, safeReplacer)));
 			this.state = this.undoStack.pop();
 			this.UpdateUndoRedoMenu();
 			if (document.getElementById("notepad-text")) document.getElementById("notepad-text").value = this.state.notepad || "";
@@ -1079,7 +1173,8 @@ class TreeApp {
 	{
 
 		if (this.redoStack.length > 0) {
-			this.undoStack.push(JSON.parse(JSON.stringify(this.state)));
+			const safeReplacer = (k, v) => (k && k.startsWith('_cached') ? undefined : v);
+			this.undoStack.push(JSON.parse(JSON.stringify(this.state, safeReplacer)));
 			this.state = this.redoStack.pop();
 			this.UpdateUndoRedoMenu();
 			if (document.getElementById("notepad-text")) document.getElementById("notepad-text").value = this.state.notepad || "";
@@ -1548,7 +1643,7 @@ class TreeApp {
 			.attr("d", d => this.GetGenderPath(d.gender, d.isEnslaver))
 			.attr("fill", d => d.isEnslaver ? "#ffe0b2" : (d.color || d.fillColor || d.interiorColor || "#ffe0b2"));
 
-		nodeUpdate.each(function(d) {
+		nodeUpdate.each(function (d) {
 			const group = d3.select(this);
 			let chain = group.select(".enslaver-chain");
 			const nodeColor = d.isEnslaver ? "#ffe0b2" : (d.color || d.fillColor || d.interiorColor || "#ffe0b2");
@@ -1640,7 +1735,7 @@ class TreeApp {
 			.attr("stroke-width", 3);
 	}
 
-	FitToScreen(duration = 500)																		// FIT VIEWPORT TO TREE BOUNDING BOX
+	FitToScreen(duration = 0, centerOnParents = false)																		// FIT VIEWPORT TO TREE BOUNDING BOX
 	{
 
 		const visibleSet = this.GetVisibleNodes();
@@ -1673,12 +1768,12 @@ class TreeApp {
 		const scale = Math.min(
 			containerWidth / bboxWidth,
 			containerHeight / bboxHeight,
-			4																	// Cap at max this.zoom scale (4)
+			1.5
 		);
 
 		const finalScale = Math.max(scale, 0.1);
 
-		// Center the bounding box in the container
+		// Center the bounding box vertically and horizontally in the container
 		const centerX = minX + (maxX - minX) / 2;
 		const centerY = minY + (maxY - minY) / 2;
 
@@ -1699,7 +1794,7 @@ class TreeApp {
 		this.ApplyLayout(true);
 		this.RenderNodes();
 		this.RenderEdges();
-		this.FitToScreen();
+		this.FitToScreen(300, true);
 	}
 
 	ApplyLayout(forceReset = false)																		// APPLY HIERARCHICAL LAYOUT
@@ -1841,59 +1936,143 @@ class TreeApp {
 		const xSpacing = 220;
 		const ySpacing = 250;
 
-		Object.keys(nodesByDepth).sort((a, b) => parseInt(a) - parseInt(b)).forEach((dStr, rowIdx) => {
-			const d = parseInt(dStr);
-			const pids = nodesByDepth[d];
+		const depthKeys = Object.keys(nodesByDepth).map(Number).sort((a, b) => a - b);
 
-			let currentX = startX;
+		depthKeys.forEach(d => {
+			const pids = nodesByDepth[d];
+			if (!pids || pids.length === 0) return;
+
 			const placed = new Set();
 
-			pids.forEach(pid => {
-				if (placed.has(pid)) return;
-				const node = this.GetNode(pid);
-				if (forceReset || !node.moved) {
-					node.x = currentX;
-					node.y = startY + d * ySpacing;
-					if (forceReset) node.moved = false;
-				} else {
-					// Optionally handle currentX if we want alignment to respect moved nodes later
-					// For now just skip overwriting coordinates
-				}
-				placed.add(pid);
-				currentX += xSpacing;
-
-				spousesOf[pid].forEach(spid => {
-					if (!placed.has(spid) && depths[spid] === d) {
-						const snode = this.GetNode(spid);
-						if (snode) {
-							currentX -= xSpacing;									// Undo standard gap
-							currentX += this.nodeWidth + 20;							// Snug 20px physical gap between spouses
-							if (forceReset || !snode.moved) {
-								snode.x = currentX;
-								snode.y = startY + d * ySpacing;
-								if (forceReset) snode.moved = false;
+			if (d < 0) {
+				// Depth < 0: Center enslaver nodes above their enslaved family members
+				let currentX = startX;
+				pids.forEach(pid => {
+					if (placed.has(pid)) return;
+					const node = this.GetNode(pid);
+					if (node) {
+						const enslavedPids = [];
+						vTriplets.forEach(t => {
+							if ((t.predicate === 'isEnslaverOf' && t.subject === pid) ||
+								(t.predicate === 'wasEnslavedBy' && t.object === pid) ||
+								(t.predicate === 'enslaves' && t.subject === pid)) {
+								const targetId = t.predicate === 'wasEnslavedBy' ? t.subject : t.object;
+								enslavedPids.push(targetId);
 							}
-							placed.add(spid);
-							currentX += xSpacing;									// Resume standard spacing
+						});
+						const enslavedNodes = enslavedPids.map(id => this.GetNode(id)).filter(Boolean);
+						if (enslavedNodes.length > 0) {
+							const minEX = Math.min(...enslavedNodes.map(p => p.x));
+							const maxEX = Math.max(...enslavedNodes.map(p => p.x + this.nodeWidth));
+							const centerEX = minEX + (maxEX - minEX) / 2;
+							node.x = centerEX - this.nodeWidth / 2;
+						} else {
+							node.x = currentX;
 						}
+						node.y = startY + d * ySpacing;
+						if (forceReset) node.moved = false;
+						placed.add(pid);
+						currentX += xSpacing;
 					}
 				});
+			} else if (d === 0) {
+				// Depth 0: Root parents
+				let currentX = startX;
+				pids.forEach(pid => {
+					if (placed.has(pid)) return;
+					const node = this.GetNode(pid);
+					if (node) {
+						if (forceReset || !node.moved) {
+							node.x = currentX;
+							node.y = startY + d * ySpacing;
+							if (forceReset) node.moved = false;
+						} else {
+							node.y = startY + d * ySpacing;
+						}
+						placed.add(pid);
+						currentX += xSpacing;
 
-				cousinsOf[pid].forEach(cid => {
-					if (!placed.has(cid) && depths[cid] === d) {
+						// Place spouse adjacent
+						spousesOf[pid].forEach(spid => {
+							if (!placed.has(spid) && depths[spid] === d) {
+								const snode = this.GetNode(spid);
+								if (snode) {
+									currentX -= xSpacing;
+									currentX += this.nodeWidth + 20;
+									if (forceReset || !snode.moved) {
+										snode.x = currentX;
+										snode.y = startY + d * ySpacing;
+										if (forceReset) snode.moved = false;
+									} else {
+										snode.y = startY + d * ySpacing;
+									}
+									placed.add(spid);
+									currentX += xSpacing;
+								}
+							}
+						});
+					}
+				});
+			} else {
+				// Depth > 0: Center children under their parent(s)
+				const parentToChildren = {};
+				pids.forEach(pid => {
+					const pList = Array.from(parentsOf[pid] || []).sort().join(',');
+					const groupKey = pList || 'unparented';
+					if (!parentToChildren[groupKey]) parentToChildren[groupKey] = [];
+					parentToChildren[groupKey].push(pid);
+				});
+
+				let currentX = startX;
+
+				Object.keys(parentToChildren).forEach(groupKey => {
+					const childrenPids = parentToChildren[groupKey];
+					if (groupKey !== 'unparented') {
+						const parentPids = groupKey.split(',');
+						const parentNodes = parentPids.map(id => this.GetNode(id)).filter(Boolean);
+						if (parentNodes.length > 0) {
+							const minPx = Math.min(...parentNodes.map(p => p.x));
+							const maxPx = Math.max(...parentNodes.map(p => p.x + this.nodeWidth));
+							const parentCenterX = minPx + (maxPx - minPx) / 2;
+
+							const numC = childrenPids.length;
+							const cGap = 220;
+							const span = (numC - 1) * cGap + this.nodeWidth;
+							let childX = parentCenterX - span / 2;
+
+							// Only clamp childX if previous family groups have already been placed on this row
+							if (placed.size > 0 && childX < currentX) childX = currentX;
+
+							childrenPids.forEach(cid => {
+								if (placed.has(cid)) return;
+								const cnode = this.GetNode(cid);
+								if (cnode) {
+									cnode.x = childX;
+									cnode.y = startY + d * ySpacing;
+									if (forceReset) cnode.moved = false;
+									placed.add(cid);
+									childX += cGap;
+								}
+							});
+							currentX = Math.max(currentX, childX);
+							return;
+						}
+					}
+
+					// Unparented children at depth d
+					childrenPids.forEach(cid => {
+						if (placed.has(cid)) return;
 						const cnode = this.GetNode(cid);
 						if (cnode) {
-							if (forceReset || !cnode.moved) {
-								cnode.x = currentX;
-								cnode.y = startY + d * ySpacing;
-								if (forceReset) cnode.moved = false;
-							}
+							cnode.x = currentX;
+							cnode.y = startY + d * ySpacing;
+							if (forceReset) cnode.moved = false;
 							placed.add(cid);
 							currentX += xSpacing;
 						}
-					}
+					});
 				});
-			});
+			}
 		});
 
 	}
@@ -2081,58 +2260,51 @@ class TreeApp {
 			.attr("stroke-width", 1)
 			.attr("d", d => this.DrawSmartCurve(d.source, d.target));
 
-		// Family Pedigree (parent→child lines)
+		// Helper to get midpoint (junction dot) for a family pedigree unit
+		const getPedigreeJunction = (d) => {
+			let jx, jy;
+			if (d.parents.length === 1) {
+				const p = d.parents[0];
+				jx = p.x + this.nodeWidth / 2;
+				jy = p.y + this.nodeHeight;
+			} else {
+				const p1 = d.parents[0];
+				const p2 = d.parents[1];
+				jx = (p1.x + p2.x) / 2 + this.nodeWidth / 2;
+				jy = (p1.y + p2.y) / 2 + 81;
+			}
+			return { x: jx, y: jy };
+		};
+
+		// Family Pedigree (parent→child curved lines)
 		edgeGroups.filter(d => d.type === 'FamilyPedigree')
 			.append("path")
 			.attr("class", "parent-child-line")
 			.attr("fill", "none")
 			.attr("stroke", "#666666")
-			.attr("stroke-width", 1)
+			.attr("stroke-width", 1.5)
 			.attr("stroke-linejoin", "round")
 			.attr("d", d => {
-				let parentX, parentY;
-				if (d.parents.length === 1) {
-					const p = d.parents[0];
-					const avgChildX = d.children.reduce((sum, c) => sum + c.x, 0) / d.children.length;
-					if (avgChildX > p.x) {
-						parentX = this.GetAnchors(p).right.x;
-					} else {
-						parentX = this.GetAnchors(p).left.x;
-					}
-					parentY = this.GetAnchors(p).right.y;
-				} else {
-					const minPx = Math.min(...d.parents.map(p => p.x));
-					const maxPx = Math.max(...d.parents.map(p => p.x));
-					parentX = minPx + (maxPx - minPx) / 2 + this.nodeWidth / 2;
-					parentY = Math.max(...d.parents.map(p => this.GetAnchors(p).right.y));
-				}
+				if (!d.children || d.children.length === 0) return "";
+				const j = getPedigreeJunction(d);
+				const parentX = j.x;
+				const parentY = j.y;
 
 				let pathStr = "";
 				d.children.forEach(c => {
-					const isRight = c.x > parentX;
-					const anchors = this.GetAnchors(c);
-					const cx = isRight ? anchors.left.x : anchors.right.x;
-					const cy = anchors.left.y;
+					const childX = c.x + this.nodeWidth / 2;
+					const childY = c.y + 38; // Center of head icon
+					const midY = parentY + (childY - parentY) / 2;
 
-					if (d.parents.length > 1) {
-						// Start with a vertical drop, swing gracefully into a horizontal entry (sigmoid S-curve)
-						const dx = Math.abs(cx - parentX);
-						const cp2X = isRight ? cx - dx / 2 : cx + dx / 2;
-						const midY = parentY + (cy - parentY) / 2;
-						pathStr += `M ${parentX} ${parentY} C ${parentX} ${midY}, ${cp2X} ${cy}, ${cx} ${cy} `;
-					} else {
-						// Horizontal to horizontal sigmoid S-curve
-						const dx = cx - parentX;
-						const cp1X = parentX + dx / 2;
-						const cp2X = cx - dx / 2;
-						pathStr += `M ${parentX} ${parentY} C ${cp1X} ${parentY}, ${cp2X} ${cy}, ${cx} ${cy} `;
-					}
+					// Smooth Cubic Bezier S-curve from spouse junction dot to center of child head icon
+					pathStr += `M ${parentX} ${parentY} C ${parentX} ${midY}, ${childX} ${midY}, ${childX} ${childY} `;
 				});
+
 				return pathStr;
 			});
 
 		// Family Pedigree (Junction Circle)
-		const familyJunctions = edgeGroups.filter(d => d.type === 'FamilyPedigree' && d.parents.length > 1);
+		const familyJunctions = edgeGroups.filter(d => d.type === 'FamilyPedigree');
 
 		familyJunctions.append("circle")
 			.attr("class", "family-junction-outer")
@@ -2140,23 +2312,15 @@ class TreeApp {
 			.attr("fill", "none")
 			.attr("stroke", "#666666")
 			.attr("stroke-width", 1)
-			.attr("cx", d => {
-				const minPx = Math.min(...d.parents.map(p => p.x));
-				const maxPx = Math.max(...d.parents.map(p => p.x));
-				return minPx + (maxPx - minPx) / 2 + this.nodeWidth / 2;
-			})
-			.attr("cy", d => Math.max(...d.parents.map(p => this.GetAnchors(p).right.y)));
+			.attr("cx", d => getPedigreeJunction(d).x)
+			.attr("cy", d => getPedigreeJunction(d).y);
 
 		familyJunctions.append("circle")
 			.attr("class", "family-junction")
-			.attr("r", 1.5)
+			.attr("r", 2)
 			.attr("fill", "#666666")
-			.attr("cx", d => {
-				const minPx = Math.min(...d.parents.map(p => p.x));
-				const maxPx = Math.max(...d.parents.map(p => p.x));
-				return minPx + (maxPx - minPx) / 2 + this.nodeWidth / 2;
-			})
-			.attr("cy", d => Math.max(...d.parents.map(p => this.GetAnchors(p).right.y)));
+			.attr("cx", d => getPedigreeJunction(d).x)
+			.attr("cy", d => getPedigreeJunction(d).y);
 
 		// Sibling
 		edgeGroups.filter(d => d.type === 'isSiblingOf')

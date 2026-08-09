@@ -134,8 +134,10 @@ html_content = """<!DOCTYPE html>
         <li><strong>File Menu</strong>:
             <ul>
                 <li><strong>New</strong>: Reset canvas and start a blank tree workspace.</li>
+                <li><strong>Load demo</strong>: Load a pre-populated sample family tree workspace.</li>
+                <li><strong>Import &gt; JSON</strong>: Import a tree structure from a saved JSON file.</li>
                 <li><strong>Export &gt; GEDCOM</strong>: Export the current tree structure to the industry-standard GEDCOM format for import into other family tree applications.</li>
-                <li><strong>Export &gt; RDF</strong>: Export the tree as graph database Resource Description Framework (RDF) triples.</li>
+                <li><strong>Export &gt; JSON</strong>: Export the tree as graph database Resource Description Framework (JSON) triples.</li>
             </ul>
         </li>
         <li><strong>Edit Menu</strong>:

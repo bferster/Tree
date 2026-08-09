@@ -297,8 +297,73 @@ class MentionsEditor {
 		const pid = 'P' + Date.now();
 		const mid = this.currentMentionId;
 		const anchorPid = (this.targetPerson && this.targetPerson.person_id) || window.treeApp.state.selectedPid;
-		const relation = (window.app && window.app.curRelation) ? window.app.curRelation : 'isRelativeOf';
 		
+		let relation = (window.app && window.app.curRelation) ? window.app.curRelation : null;
+
+		// 1. Check birth year gap first if both birth years are present
+		if (!relation && this.targetPerson) {
+			const targetBirth = parseInt((this.targetPerson.birth_year || '').split(':')[0], 10);
+			const mentionBirth = parseInt((mention.birth_year || '').split(':')[0], 10);
+			if (!isNaN(targetBirth) && !isNaN(mentionBirth)) {
+				if (mentionBirth - targetBirth >= 10) {
+					relation = 'isChildOf';
+				} else if (targetBirth - mentionBirth >= 10) {
+					relation = 'isParentOf';
+				}
+			}
+		}
+
+		// 2. Look up relationship assertion from expand view if relation not resolved by birth years
+		if (!relation && this.targetPerson && this.targetPerson.mentions && window.app && window.app.expand) {
+			for (const tmid of this.targetPerson.mentions) {
+				const view = window.app.expand.viewFor(tmid);
+				if (view && view.results) {
+					const match = view.results.find(r => r.mention_id === mid);
+					if (match && match.predicate) {
+						relation = match.predicate;
+						break;
+					}
+				}
+			}
+		}
+
+		if (!relation) {
+			relation = 'isChildOf';
+		}
+
+		// Reset transient curRelation after use
+		if (window.app) {
+			window.app.curRelation = null;
+		}
+		
+		let initX = 200, initY = 200;
+		if (anchorPid && window.treeApp) {
+			const sourceNode = window.treeApp.GetNode(anchorPid);
+			if (sourceNode) {
+				if (relation === 'isChildOf') {
+					initY = sourceNode.y + 250;
+					const spouses = window.treeApp.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === anchorPid || t.object === anchorPid));
+					if (spouses.length > 0) {
+						const spouseId = spouses[0].subject === anchorPid ? spouses[0].object : spouses[0].subject;
+						const spouseNode = window.treeApp.GetNode(spouseId);
+						if (spouseNode) {
+							initX = (sourceNode.x + spouseNode.x) / 2;
+						} else {
+							initX = sourceNode.x;
+						}
+					} else {
+						initX = sourceNode.x;
+					}
+				} else if (relation === 'isParentOf') {
+					initY = Math.max(0, sourceNode.y - 250);
+					initX = sourceNode.x;
+				} else {
+					initY = sourceNode.y;
+					initX = sourceNode.x + 220;
+				}
+			}
+		}
+
 		const fmt = (val) => val ? `${val}:${mid}` : null;
 		const getVal = (key) => {
 			return mention[key];
@@ -316,8 +381,9 @@ class MentionsEditor {
 			gender: fmt(getVal('gender')),
 			race: fmt(getVal('race')),
 			anchor: anchorPid ? `${relation}:${anchorPid}` : null,
-			x: 200,
-			y: 200,
+			x: initX,
+			y: initY,
+			moved: false,
 			verity: 2
 		};
 
@@ -328,6 +394,10 @@ class MentionsEditor {
 		
 		window.app.rebuildAllRelationships();
 		
+		if (typeof window.treeApp.ApplyLayout === 'function') {
+			window.treeApp.ApplyLayout(true);
+		}
+
 		window.treeApp.RenderNodes();
 		window.treeApp.RenderEdges();
 

@@ -138,17 +138,45 @@ class SearchMentions {
 		const maxResults = search_criteria.max_results || DEFAULT_MAX_RESULTS;
 
 		// --- Step 1: source filter ---
-		let candidates = this.mentions.filter((m) => m.source === search_criteria.source);
+		const sourceMatch = (src1, src2) => {
+			if (!src1 || !src2) return true;
+			const s1 = String(src1).toUpperCase().replace(/[^A-Z0-9]/g, "");
+			const s2 = String(src2).toUpperCase().replace(/[^A-Z0-9]/g, "");
+			return s1.includes(s2) || s2.includes(s1) || s1.endsWith(s2) || s2.endsWith(s1);
+		};
+
+		let candidates = this.mentions.filter((m) => sourceMatch(m.source, search_criteria.source));
 
 		// --- Step 2: hard-block fields (norm_race, gender) ---
+		const normalizeVal = (val) => {
+			if (!val) return "";
+			const s = String(val).split(':')[0].trim().toUpperCase();
+			if (s === 'MALE' || s === 'M') return 'M';
+			if (s === 'FEMALE' || s === 'F') return 'F';
+			if (s === 'BLACK' || s === 'B') return 'B';
+			if (s === 'WHITE' || s === 'W') return 'W';
+			if (s === 'MULATTO' || s === 'MUL') return 'M';
+			return s;
+		};
+
 		const raceField = fieldByTerm(fields, "norm_race");
 		if (raceField && isPresent(raceField.value) && raceField.match !== "Ignore" && raceField.value !== "Ignore") {
-			candidates = candidates.filter((m) => !isPresent(m.norm_race) || m.norm_race === raceField.value);
+			const targetRace = normalizeVal(raceField.value);
+			candidates = candidates.filter((m) => {
+				if (!isPresent(m.norm_race)) return true;
+				const candRace = normalizeVal(m.norm_race);
+				return !candRace || candRace === targetRace;
+			});
 		}
 
 		const genderField = fieldByTerm(fields, "gender");
 		if (genderField && isPresent(genderField.value) && genderField.match !== "Ignore" && genderField.value !== "Ignore") {
-			candidates = candidates.filter((m) => !isPresent(m.gender) || m.gender === genderField.value);
+			const targetGender = normalizeVal(genderField.value);
+			candidates = candidates.filter((m) => {
+				if (!isPresent(m.gender)) return true;
+				const candGender = normalizeVal(m.gender);
+				return !candGender || candGender === targetGender;
+			});
 		}
 
 		// --- Step 3: birth_year hard window (knockout beyond the chosen tolerance) ---
@@ -327,39 +355,62 @@ class SearchMentions {
 
 	_scoreFirstName(mention, field, nameFreq) {
 		const cfg = this.config;
-		const candValue = isPresent(mention.norm_first_name) ? mention.norm_first_name : mention.first_name;
-		if (!isPresent(candValue)) return 0;
+		if (!isPresent(field.value)) return 0;
 
 		const searchNorm = normUpper(field.value);
-		const candNorm = normUpper(candValue);
+		const searchCanonical = normUpper(NormalizeClass ? NormalizeClass.getNickname(field.value) : field.value);
 
-		let base;
+		const firstNorm = isPresent(mention.first_name) ? normUpper(mention.first_name) : "";
+		const normNorm = isPresent(mention.norm_first_name) ? normUpper(mention.norm_first_name) : "";
+		const candCanonical = (normNorm && NormalizeClass && NormalizeClass.getNickname(normNorm))
+			|| (firstNorm && NormalizeClass ? normUpper(NormalizeClass.getNickname(firstNorm)) : normNorm);
+
+		if (!firstNorm && !normNorm && !candCanonical) return 0;
+
+		const isPrefixOrStem = (a, b) => a && b && a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a));
+
+		let base = 0.0;
 		switch (field.match) {
-			case "Exact":
-				base = searchNorm === candNorm ? 1.0 : 0.0;
-				break;
-			case "Fuzzy": {
-				const jw = cfg.jaroWinkler(searchNorm, candNorm);
-				base = jw >= cfg.jwFuzzyPassThreshold ? jw : 0.0;
-				break;
-			}
-			case "Nickname": {
-				// mention.norm_first_name is already nickname-normalized at ingest
-				// (normalize.js). Normalize the typed search value the same way.
-				const searchCanonical = normUpper(NormalizeClass ? NormalizeClass.getNickname(field.value) : field.value);
-				const candCanonical = isPresent(mention.norm_first_name)
-					? normUpper(mention.norm_first_name)
-					: normUpper(NormalizeClass ? NormalizeClass.getNickname(candValue) : candValue);
-				if (searchCanonical === candCanonical) {
+			case "Exact": {
+				if (searchNorm === firstNorm || searchNorm === normNorm || (searchCanonical && searchCanonical === candCanonical)) {
 					base = 1.0;
-				} else {
-					const jw = cfg.jaroWinkler(searchCanonical, candCanonical);
-					base = jw >= cfg.jwFuzzyPassThreshold ? jw * 0.9 : 0.0; // slightly below a direct nickname hit
+				} else if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = 0.95;
 				}
 				break;
 			}
-			default:
-				base = 0;
+			case "Fuzzy": {
+				const jw1 = firstNorm ? cfg.jaroWinkler(searchNorm, firstNorm) : 0;
+				const jw2 = normNorm ? cfg.jaroWinkler(searchNorm, normNorm) : 0;
+				const jw3 = (searchCanonical && candCanonical) ? cfg.jaroWinkler(searchCanonical, candCanonical) : 0;
+				const maxJw = Math.max(jw1, jw2, jw3);
+				if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = Math.max(maxJw, 0.95);
+				} else {
+					base = maxJw >= cfg.jwFuzzyPassThreshold ? maxJw : 0.0;
+				}
+				break;
+			}
+			case "Nickname": {
+				if (searchCanonical && candCanonical && searchCanonical === candCanonical) {
+					base = 1.0;
+				} else if (searchNorm === firstNorm || searchNorm === normNorm) {
+					base = 1.0;
+				} else if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = 0.95;
+				} else {
+					const jw = cfg.jaroWinkler(searchCanonical, candCanonical);
+					base = jw >= cfg.jwFuzzyPassThreshold ? jw * 0.9 : 0.0;
+				}
+				break;
+			}
+			default: {
+				if (searchNorm === firstNorm || searchNorm === normNorm || (searchCanonical && searchCanonical === candCanonical)) {
+					base = 1.0;
+				} else if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = 0.95;
+				}
+			}
 		}
 
 		if (field.rare && base > 0) {
@@ -374,37 +425,49 @@ class SearchMentions {
 		if (!isPresent(mention.last_name) && !isPresent(mention.full_name)) return 0;
 
 		const searchNorm = normUpper(field.value);
-		const candNorm = normUpper(mention.last_name);
+		const candLast = normUpper(mention.last_name || '');
+		const candFull = normUpper(mention.full_name || '');
+		const candNorm = candLast || candFull;
 
-		let base;
+		const isPrefixOrStem = (a, b) => a && b && a.length >= 2 && b.length >= 2 && (a.startsWith(b) || b.startsWith(a));
+
+		let base = 0.0;
 		switch (field.match) {
-			case "Exact":
-				base = searchNorm === candNorm ? 1.0 : 0.0;
+			case "Exact": {
+				if (searchNorm === candLast || searchNorm === candNorm || candFull.includes(searchNorm)) {
+					base = 1.0;
+				} else if (isPrefixOrStem(searchNorm, candLast) || isPrefixOrStem(searchNorm, candNorm)) {
+					base = 0.95;
+				} else {
+					base = 0.0;
+				}
 				break;
+			}
 			case "Fuzzy": {
-				const jw = cfg.jaroWinkler(searchNorm, candNorm);
-				base = jw >= cfg.jwFuzzyPassThreshold ? jw : 0.0;
+				const jw1 = candLast ? cfg.jaroWinkler(searchNorm, candLast) : 0;
+				const jw2 = candFull ? cfg.jaroWinkler(searchNorm, candFull) : 0;
+				const jw = Math.max(jw1, jw2);
+				if (isPrefixOrStem(searchNorm, candLast) || candFull.includes(searchNorm)) {
+					base = Math.max(jw, 0.95);
+				} else {
+					base = jw >= cfg.jwFuzzyPassThreshold ? jw : 0.0;
+				}
 				break;
 			}
 			case "NYSIIS": {
-				// mention.nysiis_last_name is precomputed at ingest (normalize.js).
-				// Encode the typed search value the same way and compare directly.
 				if (isPresent(mention.nysiis_last_name)) {
 					const searchCode = NormalizeClass ? NormalizeClass.getNYSIIS(field.value) : normUpper(field.value);
 					base = searchCode === mention.nysiis_last_name ? 0.85 : 0.0;
 				} else {
-					base = searchNorm === candNorm ? 0.85 : 0.0;
+					base = (searchNorm === candLast || candFull.includes(searchNorm)) ? 0.85 : 0.0;
 				}
 				break;
 			}
 			case "Metaphone": {
-				// mention.metaphone_last_name is precomputed at ingest (normalize.js)
-				// as "PRIMARY:SECONDARY". Encode the typed search value the same
-				// way, then compare using doubleMetaphoneMatchScore.
 				if (isPresent(mention.metaphone_last_name)) {
-					base = NormalizeClass ? NormalizeClass.doubleMetaphoneMatchScore(field.value, mention.metaphone_last_name) : (searchNorm === candNorm ? 1.0 : 0.0);
+					base = NormalizeClass ? NormalizeClass.doubleMetaphoneMatchScore(field.value, mention.metaphone_last_name) : ((searchNorm === candLast || candFull.includes(searchNorm)) ? 1.0 : 0.0);
 				} else {
-					base = searchNorm === candNorm ? 1.0 : 0.0;
+					base = (searchNorm === candLast || candFull.includes(searchNorm)) ? 1.0 : 0.0;
 				}
 				break;
 			}

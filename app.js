@@ -75,9 +75,88 @@ class App {
 	}
 
 
+	sanitizeRelationships() {
+		if (!this.curTree || !this.curTree.relationships || !this.curTree.persons) return;
+
+		const persons = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons);
+		const personMap = new Map(persons.map(p => [p.person_id, p]));
+
+		const cleaned = [];
+		const seenKeys = new Set();
+
+		this.curTree.relationships.forEach(r => {
+			let sub = r.subject_id;
+			let pred = r.predicate;
+			let obj = r.object_id;
+
+			if (!sub || !obj || sub === obj) return;
+
+			// Convert isParentOf to isChildOf
+			if (pred === 'isParentOf') {
+				pred = 'isChildOf';
+				const temp = sub;
+				sub = obj;
+				obj = temp;
+			}
+
+			if (pred === 'isChildOf') {
+				const childP = personMap.get(sub);
+				const parentP = personMap.get(obj);
+				if (childP && parentP) {
+					const childBirth = parseInt((childP.birth_year || '').split(':')[0], 10);
+					const parentBirth = parseInt((parentP.birth_year || '').split(':')[0], 10);
+					if (!isNaN(childBirth) && !isNaN(parentBirth)) {
+						if (childBirth < parentBirth - 5) {
+							// Birth year proves child is older than parent => reverse!
+							const temp = sub;
+							sub = obj;
+							obj = temp;
+						}
+					}
+				}
+			}
+
+			const key = `${sub}|${pred}|${obj}`;
+			if (!seenKeys.has(key)) {
+				seenKeys.add(key);
+				cleaned.push({ subject_id: sub, predicate: pred, object_id: obj });
+			}
+		});
+
+		// Filter out duplicate reverse parent-child pairs
+		const childParentPairs = new Set();
+		cleaned.forEach(r => {
+			if (r.predicate === 'isChildOf') {
+				childParentPairs.add(`${r.subject_id}|${r.object_id}`);
+			}
+		});
+
+		const finalRels = [];
+		cleaned.forEach(r => {
+			if (r.predicate === 'isChildOf') {
+				const revKey = `${r.object_id}|${r.subject_id}`;
+				if (childParentPairs.has(revKey)) {
+					const childP = personMap.get(r.subject_id);
+					const parentP = personMap.get(r.object_id);
+					if (childP && parentP) {
+						const childBirth = parseInt((childP.birth_year || '').split(':')[0], 10);
+						const parentBirth = parseInt((parentP.birth_year || '').split(':')[0], 10);
+						if (!isNaN(childBirth) && !isNaN(parentBirth) && childBirth < parentBirth) {
+							return; // Drop inverted relationship where older person is child
+						}
+					}
+				}
+			}
+			finalRels.push(r);
+		});
+
+		this.curTree.relationships = finalRels;
+	}
+
 	rebuildAllRelationships()                                  // REBUILD FROM ExpandAssertions
 	{
 		this.processLoadedPersons();
+		this.sanitizeRelationships();
 		const mentionToPerson = new Map();
 		const persons = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons);
 
@@ -90,7 +169,7 @@ class App {
 		const newRelationships = [];
 		const added = new Set();
 
-		// Preserve existing relationships in curTree.relationships
+		// Preserve existing sanitized relationships in curTree.relationships
 		if (Array.isArray(this.curTree.relationships)) {
 			this.curTree.relationships.forEach(r => {
 				const key = `${r.subject_id}|${r.predicate}|${r.object_id}`;
@@ -135,13 +214,26 @@ class App {
 							if (targetPid && targetPid !== p.person_id) {
 								const pred = res.predicate;
 								if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf', 'isEnslaverOf', 'wasEnslavedBy', 'enslaves'].includes(pred)) {
-									const key = `${p.person_id}|${pred}|${targetPid}`;
+									let sub = p.person_id;
+									let obj = targetPid;
+									let normalizedPred = pred;
+
+									if (pred === 'isChildOf') {
+										sub = targetPid;
+										obj = p.person_id;
+									} else if (pred === 'isParentOf') {
+										sub = p.person_id;
+										obj = targetPid;
+										normalizedPred = 'isChildOf';
+									}
+
+									const key = `${sub}|${normalizedPred}|${obj}`;
 									if (!added.has(key)) {
 										added.add(key);
 										newRelationships.push({
-											subject_id: p.person_id,
-											predicate: pred,
-											object_id: targetPid
+											subject_id: sub,
+											predicate: normalizedPred,
+											object_id: obj
 										});
 									}
 								}
@@ -152,7 +244,69 @@ class App {
 			});
 		}
 
-		this.curTree.relationships = newRelationships;
+		// Ensure children of one parent inherit isChildOf to the parent's spouse
+		const spousePairs = newRelationships.filter(r => r.predicate === 'isSpouseOf');
+		const childRels = newRelationships.filter(r => r.predicate === 'isChildOf');
+		childRels.forEach(cr => {
+			const childPid = cr.subject_id;
+			const parentPid = cr.object_id;
+			spousePairs.forEach(sr => {
+				let spousePid = null;
+				if (sr.subject_id === parentPid) spousePid = sr.object_id;
+				else if (sr.object_id === parentPid) spousePid = sr.subject_id;
+
+				if (spousePid && spousePid !== parentPid && spousePid !== childPid) {
+					const key = `${childPid}|isChildOf|${spousePid}`;
+					if (!added.has(key)) {
+						added.add(key);
+						newRelationships.push({
+							subject_id: childPid,
+							predicate: 'isChildOf',
+							object_id: spousePid
+						});
+					}
+				}
+			});
+		});
+
+		// Fail-safe birth year check on all isChildOf relationships: child (subject_id) must be younger than parent (object_id)
+		const personMap = new Map(persons.map(p => [p.person_id, p]));
+		newRelationships.forEach(r => {
+			if (r.predicate === 'isChildOf') {
+				const childP = personMap.get(r.subject_id);
+				const parentP = personMap.get(r.object_id);
+				if (childP && parentP) {
+					const childBirth = parseInt((childP.birth_year || '').split(':')[0], 10);
+					const parentBirth = parseInt((parentP.birth_year || '').split(':')[0], 10);
+					if (!isNaN(childBirth) && !isNaN(parentBirth) && childBirth < parentBirth - 10) {
+						const temp = r.subject_id;
+						r.subject_id = r.object_id;
+						r.object_id = temp;
+					}
+				}
+			}
+		});
+
+		// Remove conflicting relationships between parents and children (e.g. child cannot be sibling/cousin to parent)
+		const parentChildPairs = new Set();
+		newRelationships.forEach(r => {
+			if (r.predicate === 'isChildOf') {
+				parentChildPairs.add(`${r.subject_id}|${r.object_id}`);
+				parentChildPairs.add(`${r.object_id}|${r.subject_id}`);
+			}
+		});
+
+		const filteredRelationships = newRelationships.filter(r => {
+			if (r.predicate === 'isSiblingOf' || r.predicate === 'isCousinOf' || r.predicate === 'isUncleOf' || r.predicate === 'isAuntOf' || r.predicate === 'isNiblingOf') {
+				if (parentChildPairs.has(`${r.subject_id}|${r.object_id}`)) {
+					return false;
+				}
+			}
+			return true;
+		});
+
+		this.curTree.relationships = filteredRelationships;
+		this.sanitizeRelationships();
 
 		// Sync to treeApp
 		if (window.treeApp && window.treeApp.state) {
@@ -806,6 +960,8 @@ class App {
 		const isTest = window.location.search.toLowerCase().includes('test');
 		this.county = urlParams.get('c') || 'AUG';
 		const lastSavedTreeName = localStorage.getItem('verite_last_tree_name');
+		let hasLoadedSavedTree = false;
+
 		if (lastSavedTreeName) {
 			const saved = localStorage.getItem('verite_tree_' + lastSavedTreeName);
 			if (saved) {
@@ -817,12 +973,35 @@ class App {
 						this.curTree = parsed;
 						this.county = treeCounty;
 						this.processLoadedPersons();
+						hasLoadedSavedTree = true;
 					}
 				} catch (e) {
 					console.error('Failed to parse last saved tree on startup:', e);
 				}
 			}
 		}
+
+		if (!hasLoadedSavedTree) {
+			const filename = `${this.county}-demo.json`;
+			const pathsToTry = [`img/${filename}`, filename, `img/${this.county}demo.json`, `${this.county}demo.json`];
+			for (const path of pathsToTry) {
+				try {
+					const response = await fetch(path);
+					if (response.ok) {
+						const parsed = await response.json();
+						this.curTree = JSON.parse(JSON.stringify(parsed));
+						this.curTree.county = this.county;
+						this.processLoadedPersons();
+						hasLoadedSavedTree = true;
+						console.log(`Loaded startup demo tree from ${path}`);
+						break;
+					}
+				} catch (e) {
+					// continue trying
+				}
+			}
+		}
+
 		const countyPrefix = this.county + '-';
 		if (!this.curTree.county) {
 			this.curTree.county = this.county;
@@ -941,16 +1120,15 @@ class App {
 		if (!name) return;
 		this.curTree.treeName = name;
 		this.curTree.county = this.county;
-		localStorage.setItem('verite_tree_' + name, JSON.stringify(this.curTree));
+		const safeReplacer = (k, v) => (k && k.startsWith('_cached') ? undefined : v);
+		localStorage.setItem('verite_tree_' + name, JSON.stringify(this.curTree, safeReplacer));
 		localStorage.setItem('verite_last_tree_name', name);
 		console.log('Saved tree:', name);
 	}
 
-	async loadTree(name) {
-		const saved = localStorage.getItem('verite_tree_' + name);
-		if (!saved) return false;
+	async loadTreeData(parsed) {
+		if (!parsed || typeof parsed !== 'object') return false;
 		try {
-			const parsed = JSON.parse(saved);
 			const targetCounty = parsed.county || "AUG";
 			if (this.county !== targetCounty) {
 				this.county = targetCounty;
@@ -978,16 +1156,19 @@ class App {
 				setTimeout(() => this.hideProgress(), 1500);
 			}
 
-			this.curTree = parsed;
-			this.curTree.treeName = name;
+			this.curTree = JSON.parse(JSON.stringify(parsed));
+			if (!this.curTree.treeName) this.curTree.treeName = "Imported Tree";
 			this.curTree.county = this.county;
 			this.processLoadedPersons();
-			localStorage.setItem('verite_last_tree_name', name);
+			const safeReplacer = (k, v) => (k && k.startsWith('_cached') ? undefined : v);
+			localStorage.setItem('verite_tree_' + this.curTree.treeName, JSON.stringify(this.curTree, safeReplacer));
+			localStorage.setItem('verite_last_tree_name', this.curTree.treeName);
 
 			if (window.treeApp) {
 				window.treeApp.ClearAll();
 				let maxPid = 1;
-				Object.values(this.curTree.persons).forEach(p => {
+				const persons = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons || {});
+				persons.forEach(p => {
 					if (!window.treeApp.GetNode(p.person_id)) {
 						window.treeApp.AddNode(p, false);
 					}
@@ -1011,6 +1192,54 @@ class App {
 				}
 			}
 			return true;
+		} catch (e) {
+			console.error('Failed to load tree data:', e);
+			return false;
+		}
+	}
+
+	async loadDemo() {
+		const county = this.county || "AUG";
+		const filename = `${county}-demo.json`;
+		const pathsToTry = [`img/${filename}`, filename, `img/${county}demo.json`, `${county}demo.json`];
+
+		for (const path of pathsToTry) {
+			try {
+				const response = await fetch(path);
+				if (response.ok) {
+					const data = await response.json();
+					console.log(`Loaded demo tree from ${path}`);
+					return await this.loadTreeData(data);
+				}
+			} catch (e) {
+				// Continue trying next path
+			}
+		}
+
+		console.warn(`Could not fetch demo file for ${county}, falling back to default demo tree.`);
+		const fallbackDemoTree = {
+			treeName: "Demo Family",
+			county: county,
+			owner: "Bill",
+			persons: [
+				{ person_id: "P001", mentions: ["AUG-CN-1880-257"], anchor: null, first_name: "William:AUG-CN-1880-257", middle_name: null, last_name: "Spears:AUG-CN-1880-257", suffix: null, birth_year: "1840:AUG-CN-1880-257", death_year: "1910:Added", gender: "M:AUG-CN-1880-257", race: "B:AUG-CN-1880-257", x: 200, y: 200, verity: 2, isEnslaver: false },
+				{ person_id: "P002", mentions: ["AUG-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeanna:AUG-CN-1880-258", middle_name: null, last_name: "Spears:AUG-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F:AUG-CN-1880-258", race: "B:AUG-CN-1880-258", x: 500, y: 200, verity: 2, isEnslaver: false },
+				{ person_id: "P003", mentions: ["AUG-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:AUG-CN-1880-259", middle_name: "M:AUG-CN-1880-259", last_name: "Spears:AUG-CN-1880-259", suffix: null, birth_year: "1875:AUG-CN-1880-259", death_year: null, gender: "M", race: "B:AUG-CN-1880-259", x: 200, y: 450, verity: 2, isEnslaver: false },
+				{ person_id: "P004", mentions: ["AUG-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:AUG-CN-1880-260", middle_name: null, last_name: "Spears:AUG-CN-1880-260", suffix: null, birth_year: "1880:AUG-CN-1880-260", death_year: null, gender: "M", race: "B:AUG-CN-1880-260", x: 200, y: 450, verity: 2, isEnslaver: false },
+				{ person_id: "P005", mentions: ["AUG-CN-1880-22721"], anchor: "isEnslaverOf:P002", first_name: "Dabney:AUG-CN-1880-22721", middle_name: null, last_name: "Johnson:AUG-CN-1880-22721", suffix: null, birth_year: "1832:AUG-CN-1870-1688", death_year: "", gender: "M:AUG-CN-1880-22721", race: "B:AUG-CN-1880-22721", x: 200, y: 200, verity: 2, isEnslaver: true }
+			],
+			relationships: []
+		};
+		return await this.loadTreeData(fallbackDemoTree);
+	}
+
+	async loadTree(name) {
+		const saved = localStorage.getItem('verite_tree_' + name);
+		if (!saved) return false;
+		try {
+			const parsed = JSON.parse(saved);
+			parsed.treeName = name;
+			return await this.loadTreeData(parsed);
 		} catch (e) {
 			console.error('Failed to load tree:', name, e);
 			return false;

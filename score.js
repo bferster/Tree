@@ -378,8 +378,9 @@ class Score {
 		}
 
 		// 1. Get anchor person's family roster
+		const mentionsHash = (anchorPerson.mentions || []).map(m => (typeof m === 'object' ? m.mention_id : m)).join(',');
 		let anchorRoster = anchorPerson._cachedFamilyRoster;
-		if (!anchorRoster || anchorPerson._cachedFamilyPerson !== anchorPerson) {
+		if (!anchorRoster || anchorPerson._cachedMentionsHash !== mentionsHash) {
 			const anchorMentions = (anchorPerson.mentions || []).map(mid => {
 				if (typeof mid === 'object') return mid;
 				return globalApp.mentions.find(m => m.mention_id === mid);
@@ -393,8 +394,18 @@ class Score {
 			const key = anchorM.source + '|F|' + anchorM.family_id;
 			const fullGroup = familyIndex.get(key) || [];
 			anchorRoster = fullGroup.filter(m => m.mention_id !== anchorM.mention_id);
-			anchorPerson._cachedFamilyRoster = anchorRoster;
-			anchorPerson._cachedFamilyPerson = anchorPerson;
+			Object.defineProperty(anchorPerson, '_cachedFamilyRoster', {
+				value: anchorRoster,
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
+			Object.defineProperty(anchorPerson, '_cachedMentionsHash', {
+				value: mentionsHash,
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
 		}
 
 		if (!anchorRoster || anchorRoster.length === 0) return null;

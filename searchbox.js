@@ -77,14 +77,14 @@ class SearchBox {
 		dialog.innerHTML = `
 			<!-- Header -->
 			<div class="vpe-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem; border-bottom:0.5px solid #f0f0f0; padding-bottom:10px;">
-				<div class="vpe-target-summary" style="font-size:17px; font-weight:600; color:#333; margin:2px 0 0;">Search Mentions</div>
+				<div class="vpe-target-summary" style="font-size:20px; font-weight:600; color:#333; margin:2px 0 0;">Search Mentions</div>
 				<div style="display:flex; align-items:center; gap:10px;">
 					<div class="vpe-sources-wrap" style="display:flex; align-items:center; gap:6px;">
-						<span style="font-size:12px; font-weight:500; color:#757575;">Source:</span>
-						<select id="sb-source-select" class="vpe-sources-btn" style="display:flex; align-items:center; background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:6px 24px 6px 10px; font-size:12px; font-weight:500; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23757575%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat:no-repeat; background-position:right 8px top 50%; background-size:8px auto;">
+						<span style="font-size:14px; font-weight:500; color:#757575;">Source:</span>
+						<select id="sb-source-select" class="vpe-sources-btn" style="display:flex; align-items:center; background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:6px 24px 6px 10px; font-size:14px; font-weight:500; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23757575%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E'); background-repeat:no-repeat; background-position:right 8px top 50%; background-size:8px auto;">
 						</select>
 					</div>
-					<span id="sb-close-x" class="vpe-close" style="font-size:22px; color:#757575; cursor:pointer; line-height:1; padding:0 4px;">&times;</span>
+					<span id="sb-close-x" class="vpe-close" style="font-size:24px; color:#757575; cursor:pointer; line-height:1; padding:0 4px;">&times;</span>
 				</div>
 			</div>
 
@@ -92,50 +92,50 @@ class SearchBox {
 				<div style="display:flex; flex-direction:column; gap:4px;">
 
 					<!-- First name -->
-					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
-						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">First name</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#EEEDFE; color:#26215C; border-radius:999px; padding:2px 10px; min-height:26px;">
-							<input type="text" id="sb-first-name-val" placeholder="Value..." style="width:100%; border:none; background:transparent; font-size:12px; color:#26215C; font-weight:500; outline:none;">
+					<div class="vpe-row" style="display:grid; grid-template-columns:125px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:15px; font-weight:500; color:#333;">First name</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#EEEDFE; color:#26215C; border-radius:999px; padding:2px 10px; min-height:28px;">
+							<input type="text" id="sb-first-name-val" placeholder="Value..." style="width:100%; border:none; background:transparent; font-size:14px; color:#26215C; font-weight:500; outline:none;">
 						</div>
-						<select id="sb-first-name-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
+						<select id="sb-first-name-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:14px; cursor:pointer;">
 							<option value="Ignore">Ignore</option>
 							<option value="Exact" selected>Exact</option>
 							<option value="Fuzzy">Fuzzy</option>
 							<option value="Nickname">Nickname</option>
 						</select>
-						<label style="display:flex; align-items:center; gap:4px; font-size:12px; color:#555; cursor:pointer;">
+						<label style="display:flex; align-items:center; gap:4px; font-size:14px; color:#555; cursor:pointer;">
 							<input type="checkbox" id="sb-first-name-rare" style="cursor:pointer;"> Rare
 						</label>
 					</div>
 
 					<!-- Last name -->
-					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
-						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Last name</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#E1F5EE; color:#04342C; border-radius:999px; padding:2px 10px; min-height:26px;">
-							<input type="text" id="sb-last-name-val" placeholder="Value..." style="width:100%; border:none; background:transparent; font-size:12px; color:#04342C; font-weight:500; outline:none;">
+					<div class="vpe-row" style="display:grid; grid-template-columns:125px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:15px; font-weight:500; color:#333;">Last name</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#E1F5EE; color:#04342C; border-radius:999px; padding:2px 10px; min-height:28px;">
+							<input type="text" id="sb-last-name-val" placeholder="Value..." style="width:100%; border:none; background:transparent; font-size:14px; color:#04342C; font-weight:500; outline:none;">
 						</div>
-						<select id="sb-last-name-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
+						<select id="sb-last-name-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:14px; cursor:pointer;">
 							<option value="Ignore">Ignore</option>
 							<option value="Exact" selected>Exact</option>
 							<option value="Fuzzy">Fuzzy</option>
 							<option value="NYSIIS">NYSIIS</option>
 							<option value="Metaphone">Metaphone</option>
 						</select>
-						<label style="display:flex; align-items:center; gap:4px; font-size:12px; color:#555; cursor:pointer;">
+						<label style="display:flex; align-items:center; gap:4px; font-size:14px; color:#555; cursor:pointer;">
 							<input type="checkbox" id="sb-last-name-rare" style="cursor:pointer;"> Rare
 						</label>
 					</div>
 
 					<!-- Race -->
-					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
-						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Race</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#EFEBE9; color:#3E2723; border-radius:999px; padding:2px 10px; min-height:26px;">
-							<select id="sb-race-val" style="width:100%; border:none; background:transparent; font-size:12px; color:#3E2723; font-weight:500; outline:none; cursor:pointer;">
+					<div class="vpe-row" style="display:grid; grid-template-columns:125px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:15px; font-weight:500; color:#333;">Race</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#EFEBE9; color:#3E2723; border-radius:999px; padding:2px 10px; min-height:28px;">
+							<select id="sb-race-val" style="width:100%; border:none; background:transparent; font-size:14px; color:#3E2723; font-weight:500; outline:none; cursor:pointer;">
 								<option value="B" selected>B (Black)</option>
 								<option value="W">W (White)</option>
 							</select>
 						</div>
-						<select id="sb-race-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
+						<select id="sb-race-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:14px; cursor:pointer;">
 							<option value="Exact" selected>Exact</option>
 							<option value="Ignore">Ignore</option>
 						</select>
@@ -143,15 +143,15 @@ class SearchBox {
 					</div>
 
 					<!-- Gender -->
-					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
-						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Gender</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#E0F7FA; color:#006064; border-radius:999px; padding:2px 10px; min-height:26px;">
-							<select id="sb-gender-val" style="width:100%; border:none; background:transparent; font-size:12px; color:#006064; font-weight:500; outline:none; cursor:pointer;">
+					<div class="vpe-row" style="display:grid; grid-template-columns:125px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:15px; font-weight:500; color:#333;">Gender</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#E0F7FA; color:#006064; border-radius:999px; padding:2px 10px; min-height:28px;">
+							<select id="sb-gender-val" style="width:100%; border:none; background:transparent; font-size:14px; color:#006064; font-weight:500; outline:none; cursor:pointer;">
 								<option value="M" selected>M (Male)</option>
 								<option value="F">F (Female)</option>
 							</select>
 						</div>
-						<select id="sb-gender-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
+						<select id="sb-gender-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:14px; cursor:pointer;">
 							<option value="Exact" selected>Exact</option>
 							<option value="Ignore">Ignore</option>
 						</select>
@@ -159,12 +159,12 @@ class SearchBox {
 					</div>
 
 					<!-- Birth year -->
-					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
-						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Birth year</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#E6F1FB; color:#042C53; border-radius:999px; padding:2px 10px; min-height:26px;">
-							<input type="text" id="sb-birth-year-val" placeholder="Year..." style="width:100%; border:none; background:transparent; font-size:12px; color:#042C53; font-weight:500; outline:none;">
+					<div class="vpe-row" style="display:grid; grid-template-columns:125px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:15px; font-weight:500; color:#333;">Birth year</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#E6F1FB; color:#042C53; border-radius:999px; padding:2px 10px; min-height:28px;">
+							<input type="text" id="sb-birth-year-val" placeholder="Year..." style="width:100%; border:none; background:transparent; font-size:14px; color:#042C53; font-weight:500; outline:none;">
 						</div>
-						<select id="sb-birth-year-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
+						<select id="sb-birth-year-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:14px; cursor:pointer;">
 							<option value="Ignore">Ignore</option>
 							<option value="Exact" selected>Exact</option>
 							<option value="±1">±1</option>
@@ -177,12 +177,12 @@ class SearchBox {
 					</div>
 
 					<!-- Death year -->
-					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
-						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Death year</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#FCE8E6; color:#5C1D18; border-radius:999px; padding:2px 10px; min-height:26px;">
-							<input type="text" id="sb-death-year-val" placeholder="Year..." style="width:100%; border:none; background:transparent; font-size:12px; color:#5C1D18; font-weight:500; outline:none;">
+					<div class="vpe-row" style="display:grid; grid-template-columns:125px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:15px; font-weight:500; color:#333;">Death year</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#FCE8E6; color:#5C1D18; border-radius:999px; padding:2px 10px; min-height:28px;">
+							<input type="text" id="sb-death-year-val" placeholder="Year..." style="width:100%; border:none; background:transparent; font-size:14px; color:#5C1D18; font-weight:500; outline:none;">
 						</div>
-						<select id="sb-death-year-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
+						<select id="sb-death-year-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:14px; cursor:pointer;">
 							<option value="Ignore">Ignore</option>
 							<option value="Exact" selected>Exact</option>
 							<option value="±1">±1</option>
@@ -195,15 +195,15 @@ class SearchBox {
 					</div>
 
 					<!-- Family boost -->
-					<div class="vpe-row" style="display:grid; grid-template-columns:105px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
-						<span class="vpe-field-label" style="font-size:13px; font-weight:500; color:#333;">Family boost</span>
-						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#FEF9D7; border-radius:999px; padding:2px 6px; min-height:26px;">
+					<div class="vpe-row" style="display:grid; grid-template-columns:125px 1fr 115px 55px; gap:8px 12px; align-items:center; padding:5px 8px; border-top:0.5px solid #f0f0f0;">
+						<span class="vpe-field-label" style="font-size:15px; font-weight:500; color:#333;">Family boost</span>
+						<div class="vpe-value-pill" style="display:flex; align-items:center; background:#FEF9D7; border-radius:999px; padding:2px 6px; min-height:28px;">
 							<div style="background:#ffffff; border:1px solid #d0d0d0; border-radius:999px; padding:2px 10px; display:flex; align-items:center;">
-								<span id="sb-family-boost-pill-text" style="font-size:12px; font-weight:500; color:#333;">Use</span>
+								<span id="sb-family-boost-pill-text" style="font-size:14px; font-weight:500; color:#333;">Boost</span>
 							</div>
 						</div>
-						<select id="sb-family-boost-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:12px; cursor:pointer;">
-							<option value="Use" selected>Use</option>
+						<select id="sb-family-boost-match" class="vpe-sources-btn" style="background:#fff; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:14px; cursor:pointer;">
+							<option value="Boost" selected>Boost</option>
 							<option value="Ignore">Ignore</option>
 						</select>
 						<div></div>
@@ -213,8 +213,8 @@ class SearchBox {
 
 				<!-- Footer -->
 				<div class="vpe-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:1.25rem; padding-top:0.75rem; border-top:0.5px solid #f0f0f0;">
-					<button type="button" id="sb-cancel-btn" style="background:transparent; border:0.5px solid #d0d0d0; border-radius:6px; padding:7px 16px; font-size:12px; font-weight:500; cursor:pointer; color:#555;">CANCEL</button>
-					<button type="submit" id="sb-submit-btn" class="vpe-search-btn" style="background:#eaf2fb; border:1px solid #b5d4f4; border-radius:6px; padding:7px 18px; color:#185fa5; text-transform:uppercase; letter-spacing:.04em; font-size:12px; font-weight:600; cursor:pointer;"><i class="ti ti-search"></i>SEARCH</button>
+					<button type="button" id="sb-cancel-btn" style="background:transparent; border:0.5px solid #d0d0d0; border-radius:6px; padding:8px 18px; font-size:14px; font-weight:500; cursor:pointer; color:#555;">CANCEL</button>
+					<button type="submit" id="sb-submit-btn" class="vpe-search-btn" style="background:#eaf2fb; border:1px solid #b5d4f4; border-radius:6px; padding:8px 20px; color:#185fa5; text-transform:uppercase; letter-spacing:.04em; font-size:14px; font-weight:600; cursor:pointer;"><i class="ti ti-search"></i>SEARCH</button>
 				</div>
 			</form>
 		`;
@@ -303,7 +303,7 @@ class SearchBox {
 
 		$('#sb-birth-year-match').val(initialValues.birth_year_match || 'Exact');
 		$('#sb-death-year-match').val(initialValues.death_year_match || 'Exact');
-		const fbVal = initialValues.family_boost_match || initialValues.family_boost || SearchBox.lastFamilyBoostMatch || 'Use';
+		const fbVal = initialValues.family_boost_match || initialValues.family_boost || SearchBox.lastFamilyBoostMatch || 'Boost';
 		$('#sb-family-boost-match').val(fbVal);
 		$('#sb-family-boost-pill-text').text(fbVal);
 		$('#sb-family-boost-match').off('change.fb').on('change.fb', function() {
@@ -394,7 +394,7 @@ class SearchBox {
 		});
 
 		// family_boost
-		const familyBoostMatch = $('#sb-family-boost-match').val() || 'Use';
+		const familyBoostMatch = $('#sb-family-boost-match').val() || 'Boost';
 		SearchBox.lastFamilyBoostMatch = familyBoostMatch;
 		fields.push({
 			term: 'family_boost',
