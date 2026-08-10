@@ -33,7 +33,9 @@ const server = http.createServer((req, res) => {
 
 
 	if (req.url === '/sources.csv') {
-		const csvPath = path.resolve(ROOT_DIR, 'sources.csv');
+		const localCsvPath = path.resolve(ROOT_DIR, 'sources.csv');
+		const ingestCsvPath = 'C:/Bill/CC/js/AI/ingest/sources.csv';
+		const csvPath = fs.existsSync(localCsvPath) ? localCsvPath : ingestCsvPath;
 		fs.readFile(csvPath, 'utf8', (err, data) => {
 			if (err) {
 				res.statusCode = 404;

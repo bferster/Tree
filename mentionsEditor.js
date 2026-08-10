@@ -219,7 +219,17 @@ class MentionsEditor {
 				});
 			}
 		}
-		results.sort((a, b) => b.score - a.score);
+		// Group-match results (see Score.SearchGroupMatch) flag a holding the tree
+		// already links via a known enslaver relationship — keep it pinned first
+		// regardless of its probabilistic score, since it's not a candidate to rank,
+		// it's already-established evidence to surface. No-op for regular results,
+		// which never set _knownLink.
+		results.sort((a, b) => {
+			const aKnown = Boolean(a.mention._knownLink);
+			const bKnown = Boolean(b.mention._knownLink);
+			if (aKnown !== bKnown) return aKnown ? -1 : 1;
+			return b.score - a.score;
+		});
 
 		// When showing search results with active factors, filter out non-matching mentions (score <= 0 means no factor matched)
 		if (this.isSearchResult && this.factors && this.factors.length > 0) {
@@ -437,11 +447,24 @@ class MentionsEditor {
 
 		const matchesToRender = this.matches.slice(0, 80);
 
+		// 1850/1860 slave schedules record the enslaved but not who held them by name
+		// in the row itself — the enslaver is only recoverable via Score's lookup
+		// (wasEnslavedBy assertion, or same-household head='t' row). Surface it in the
+		// result row so it doesn't require opening the detail panel.
+		const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+		const isSlaveScheduleSource = (src) => {
+			if (globalApp && globalApp.score && typeof globalApp.score.isSlaveScheduleSource === 'function') {
+				return globalApp.score.isSlaveScheduleSource(src);
+			}
+			const norm = String(src || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+			return norm.includes('SS1850') || norm.includes('SS1860');
+		};
+
 		this.listEl.innerHTML = matchesToRender.map(match => {
 			const m = match.mention;
 			const active = m.mention_id === this.currentMentionId;
 			const sourceLabel = `${m.source_type || ''}`;
-			
+
 			// Build the display name cleanly
 			let displayFirst = m.norm_first_name || m.first_name || '';
 			let displayMid = m.middle_name || '';
@@ -449,6 +472,14 @@ class MentionsEditor {
 			let matchName = [displayFirst, displayMid, displayLast].filter(Boolean).join(' ');
 			if (!matchName && m.full_name) {
 				matchName = m.full_name;
+			}
+
+			let enslaverRow = '';
+			if (isSlaveScheduleSource(m.source) && globalApp && globalApp.score && typeof globalApp.score._getEnslaverName === 'function') {
+				const enslaverName = globalApp.score._getEnslaverName(m);
+				if (enslaverName) {
+					enslaverRow = `<p class="me-match-enslaver">Enslaver: <span class="me-enslaver-name">${MentionsEditor._esc(toTitleCase(enslaverName))}</span></p>`;
+				}
 			}
 
 			return `
@@ -460,6 +491,7 @@ class MentionsEditor {
             <span class="me-source-badge">${MentionsEditor._esc(sourceLabel)}</span>
           </div>
           <p class="me-match-years">${m.death_year ? `${m.birth_year ?? '?'} &ndash; ${m.death_year}` : (m.birth_year ?? '?')}</p>
+          ${enslaverRow}
           <p class="me-match-narrative">${MentionsEditor._esc(m.narrative || '')}</p>
         </div>
       `;
@@ -646,12 +678,14 @@ class MentionsEditor {
 		};
 
 		let familyHtml = '';
-		if (match.factors && match.factors.householdContinuity && match.factors.householdContinuity.matches) {
-			const familyMatches = match.factors.householdContinuity.matches;
+		const groupFactor = match.factors && (match.factors.householdContinuity || match.factors.familyBoost);
+		if (groupFactor && groupFactor.matches) {
+			const familyMatches = groupFactor.matches;
 			if (familyMatches.length > 0) {
 				const famRows = familyMatches.map((f, i) => {
 					let fullName = f.name || 'Relative';
 					let byear = '?', dyear = '?';
+					let enslaverName = f.enslaver_name || f.enslaver || '';
 					const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
 					if (globalApp && globalApp.mentions) {
 						const fMention = globalApp.mentions.find(m => m.mention_id === f.mention_id);
@@ -665,6 +699,9 @@ class MentionsEditor {
 							}
 							if (fMention.birth_year) byear = String(fMention.birth_year).split(':')[0];
 							if (fMention.death_year) dyear = String(fMention.death_year).split(':')[0];
+							if (!enslaverName && globalApp.score && typeof globalApp.score._getEnslaverName === 'function') {
+								enslaverName = globalApp.score._getEnslaverName(fMention);
+							}
 						}
 					}
 					fullName = toTitleCase(fullName.trim() || 'Relative');
@@ -672,10 +709,14 @@ class MentionsEditor {
 					if (byear !== '?') {
 						dateStr = ` (b. ${MentionsEditor._esc(byear)})`;
 					}
+					let enslaverStr = '';
+					if (enslaverName) {
+						enslaverStr = ` <span class="me-enslaver-name" style="color: #856404; background-color: #fff3cd; border: 1px solid #ffeeba; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin-left: 6px; font-weight: 500;">Enslaver: ${MentionsEditor._esc(toTitleCase(enslaverName))}</span>`;
+					}
 					const borderStyle = i < familyMatches.length - 1 ? 'border-bottom: 1px solid rgba(0,0,0,0.05);' : '';
 					return `
-						<div class="me-family-row" data-id="${MentionsEditor._esc(f.mention_id)}" style="display: flex; justify-content: space-between; padding: 4px 6px; ${borderStyle} font-size: 13px; cursor: pointer; border-radius: 4px; transition: background-color 0.15s;">
-							<span>${MentionsEditor._esc(fullName)}${dateStr}</span>
+						<div class="me-family-row" data-id="${MentionsEditor._esc(f.mention_id)}" style="display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; ${borderStyle} font-size: 13px; cursor: pointer; border-radius: 4px; transition: background-color 0.15s;">
+							<span>${MentionsEditor._esc(fullName)}${dateStr}${enslaverStr}</span>
 							<span style="color: #666; font-family: monospace; text-align: right;">${MentionsEditor._esc(f.mention_id)}</span>
 						</div>
 					`;
@@ -683,7 +724,7 @@ class MentionsEditor {
 
 				familyHtml = `
 					<div style="margin-top: 16px;">
-						<p class="me-raw-label" style="font-weight: 600; font-size: 11px; color: #666; margin-top: 0; margin-bottom: 8px;">FAMILY MEMBERS</p>
+						<p class="me-raw-label" style="font-weight: 600; font-size: 11px; color: #666; margin-top: 0; margin-bottom: 8px;">FAMILY / GROUP MEMBERS</p>
 						<div class="me-family-block" style="border: 1px solid #e0e0e0; border-radius: 6px; background-color: #f4f7fa; padding: 8px 6px;">
 							<div>${famRows}</div>
 						</div>
@@ -692,6 +733,10 @@ class MentionsEditor {
 			}
 		}
 
+		// Group Match panel (see Score.SearchGroupMatch / GroupMatch.md) — shows the
+		// GroupMatcher audit trail (component scores + which household members were
+		// assigned to which) for a slave-schedule holding matched against the target
+		// person's 1870 family group, instead of the regular per-field factor pills.
 		let groupMatchHtml = '';
 		if (match.mention.groupMatch) {
 			const gm = match.mention.groupMatch;
@@ -722,21 +767,43 @@ class MentionsEditor {
 				`;
 			}).join('');
 
+			const excusalRows = (gm.excusals || []).filter(e => e.weight > 0).map((e, idx, arr) => {
+				const borderStyle = idx < arr.length - 1 ? 'border-bottom: 1px solid rgba(0,0,0,0.05);' : '';
+				return `
+					<div style="display: flex; justify-content: space-between; padding: 4px; ${borderStyle} font-size: 12px;">
+						<span>${MentionsEditor._esc(e.person)}</span>
+						<span style="color: #999;">${MentionsEditor._esc(e.code)} (${e.weight})</span>
+					</div>
+				`;
+			}).join('');
+
+			const knownBanner = match.mention._knownLink
+				? `<div style="background:#e6f4ea; border:1px solid #b7dfc0; color:#1e5c2e; border-radius:6px; padding:8px 10px; font-size:12px; margin-bottom:12px;">
+					Already linked to this person in the family tree. The group-match probability below reflects demographic evidence only — it may be low even for a confirmed relationship (e.g. the enslaved person's own age wasn't recorded in this holding).
+				</div>`
+				: '';
+
 			groupMatchHtml = `
 				<div class="me-gm-block" style="margin-top: 16px; border-top: 1px solid var(--me-border); padding-top: 12px;">
 					<div class="me-gm-header" style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px; user-select: none;">
-						<p class="me-raw-label" style="margin: 0; font-weight: 600; font-size: 11px; text-transform: uppercase; color: #666;">Group Match</p>
+						<p class="me-raw-label" style="margin: 0; font-weight: 600; font-size: 11px; text-transform: uppercase; color: #666;">Group Match${match.mention._knownLink ? ' — Known Link' : ''}</p>
 						<span class="me-gm-toggle-icon" style="font-size: 10px; color: #999; margin-left: 6px; transition: transform 0.2s; display: inline-block;">▶</span>
 					</div>
 					<div class="me-gm-content" style="display: none;">
+						${knownBanner}
 						<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
 							<div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #1e293b;">Match Components</div>
 							<div>${compRows}</div>
 						</div>
 
-						<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+						<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-bottom: 12px;">
 							<div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #1e293b;">Roster Assignments (${gm.assignments ? gm.assignments.length : 0})</div>
 							<div>${assignRows || '<div style="font-size: 12px; color: #666; font-style: italic;">No assignments</div>'}</div>
+						</div>
+
+						<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+							<div style="font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #1e293b;">Excusals (penalized absences)</div>
+							<div>${excusalRows || '<div style="font-size: 12px; color: #666; font-style: italic;">None</div>'}</div>
 						</div>
 					</div>
 				</div>
@@ -814,6 +881,7 @@ class MentionsEditor {
 				}
 			});
 		}
+
 	}
 
 	_handleAdd() {
@@ -954,6 +1022,16 @@ class MentionsEditor {
         white-space: nowrap;
       }
       .me-match-years { font-size: 12px; color: var(--me-text-secondary); margin: 2px 0 4px; }
+      .me-match-enslaver { font-size: 12px; color: var(--me-text-secondary); margin: 0 0 4px; }
+      .me-match-enslaver .me-enslaver-name {
+        color: #856404;
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 500;
+      }
       .me-match-narrative {
         font-size: 12px;
         color: var(--me-text-tertiary);

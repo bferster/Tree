@@ -2,7 +2,7 @@
  * searchbox.js
  * ------------
  * Implements the Search tool dialog styled like Person Editor (vpe-* style).
- * Produces search_criteria object and runs SearchMentions to query mentions.
+ * Produces search_criteria object and runs it through Score.Search() to query mentions.
  */
 
 class SearchBox {
@@ -413,11 +413,11 @@ class SearchBox {
 	handleFormSubmit() {
 		const search_criteria = this.buildSearchCriteria();
 		this.closeDialog();
-		console.log('Search:', search_criteria.fields);
+		console.trace('SearchBox - Searching terms:', search_criteria);
 		const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
+		if (window.app && !window.app.score && window.Score) new window.Score();
 
-		const searcher = new SearchMentions(mentionsArray);
-		const results = searcher.Search(search_criteria);
+		const results = window.app.score.Search(mentionsArray, search_criteria);
 
 		// Render results in Mentions Editor
 		if (window.app && window.app.mentionsEditor) {

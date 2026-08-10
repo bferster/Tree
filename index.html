@@ -5,7 +5,7 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Verité editor</title>
-	<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="img/favicon-16x16.png">
 	<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 	<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
 	<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
@@ -16,15 +16,14 @@
 		const scripts = [
 			'app.js',
 			'normalize.js',
+			'groupMatcher.js',
 			'score.js',
 			'personEditor.js',
 			'mentionsEditor.js',
 			'tree.js',
 			'expandAssertions.js',
 			'contextSearch.js',
-			'searchMentions.js',
-			'searchbox.js',
-			'groupMatcher.js'
+			'searchbox.js'
 		];
 		const version = new Date().getTime();
 		scripts.forEach(src => {

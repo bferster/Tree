@@ -37,7 +37,7 @@ class TreeApp {
 						<div class="dropdown-item has-submenu">
 							Export
 							<div class="submenu">
-								<div class="dropdown-item" id="menu-export-gedcom">GEDCOM</div>
+								<div class="dropdown-item" id="menu-export-gedcom" style="color:#aaa; cursor:default;" title="GEDCOM export isn't implemented yet">GEDCOM (coming soon)</div>
 								<div class="dropdown-item" id="menu-export-json">JSON</div>
 							</div>
 						</div>
@@ -83,7 +83,7 @@ class TreeApp {
 			<div class="main-workspace">
 				<!-- Main Canvas Area -->
 				<div class="canvas-container" style="width: 66%; position: relative;">
-					<img src="Vlogo.png" style="position: absolute; bottom: 20px; left: 20px; width: 4vw;opacity: 0.5; pointer-events: none;">
+					<img src="img/Vlogo.png" style="position: absolute; bottom: 20px; left: 20px; width: 4vw;opacity: 0.5; pointer-events: none;">
 				</div>
 		
 				<!-- Vertical Divider Splitter -->
@@ -736,7 +736,11 @@ class TreeApp {
 				$('.menu-top-level').removeClass('active');
 				const np = document.getElementById('notepad-container');
 				if (np) {
-					np.style.display = np.style.display === 'none' ? 'flex' : 'none';
+					if (np.style.display === 'none' || !np.style.display) {
+						this.OpenNotepad();
+					} else {
+						np.style.display = 'none';
+					}
 				}
 			});
 
@@ -797,14 +801,30 @@ class TreeApp {
 			}
 
 			// Notepad Event Syncing
-			const npText = document.getElementById('notepad-text');
-			if (npText) {
-				npText.addEventListener('input', function (e) {
-					this.state.notepad = e.target.value;
-					this.isDirty = true;
+			const $npText = $('#notepad-text');
+			if ($npText.length > 0) {
+				const self = this;
+				$npText.off('input.notepad blur.notepad');
+				$npText.on('input.notepad', function (e) {
+					const val = $(this).val();
+					if (self && self.state) {
+						self.state.notepad = val;
+						self.isDirty = true;
+					}
+					if (window.app && window.app.curTree) {
+						window.app.curTree.notepad = val;
+					}
 				});
-				npText.addEventListener('blur', function () {
-					this.SaveState();														// push notepad change to undo history so it is saved natively in tree history
+				$npText.on('blur.notepad', function () {
+					if (self && typeof self.SaveState === 'function') {
+						self.SaveState();
+					}
+					if (window.app && window.app.curTree) {
+						window.app.curTree.notepad = (self && self.state && self.state.notepad !== undefined) ? self.state.notepad : ($(this).val() || "");
+						if (window.app.curTree.treeName && typeof window.app.saveTree === 'function') {
+							window.app.saveTree(window.app.curTree.treeName);
+						}
+					}
 				});
 			}
 
@@ -826,6 +846,11 @@ class TreeApp {
 				let newGender = "", newBirth = "";
 
 				if (sourcePid && relation) {
+					// One snapshot for the whole "add person" action (new node + every relationship
+					// triplet it creates) so a single Ctrl+Z reverts it atomically, instead of only
+					// undoing the last triplet and leaving the node half-connected.
+					this.SaveState();
+
 					const sourceNode = this.GetNode(sourcePid);
 					const newPid = this.GeneratePid();
 					let newX = sourceNode ? sourceNode.x : 0;
@@ -943,14 +968,14 @@ class TreeApp {
 							});
 						}
 					}
-					const newNode = this.AddNode(newNodeInfo, false);
+					const newNode = this.AddNode(newNodeInfo, false, true);
 
 					if (relation === 'isChildOf') {
-						this.AddTriplet(newPid, 'isChildOf', sourcePid);
+						this.AddTriplet(newPid, 'isChildOf', sourcePid, true);
 						const spouses = this.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === sourcePid || t.object === sourcePid));
 						spouses.forEach(t => {
 							const spousePid = t.subject === sourcePid ? t.object : t.subject;
-							this.AddTriplet(newPid, 'isChildOf', spousePid);
+							this.AddTriplet(newPid, 'isChildOf', spousePid, true);
 						});
 
 						// Connect to existing siblings
@@ -958,12 +983,12 @@ class TreeApp {
 							.filter(t => t.predicate === 'isChildOf' && t.object === sourcePid && t.subject !== newPid)
 							.map(t => t.subject);
 						siblings.forEach(siblingPid => {
-							this.AddTriplet(newPid, 'isSiblingOf', siblingPid);
+							this.AddTriplet(newPid, 'isSiblingOf', siblingPid, true);
 						});
 					} else if (relation === 'isParentOf') {
-						this.AddTriplet(sourcePid, 'isChildOf', newPid);
+						this.AddTriplet(sourcePid, 'isChildOf', newPid, true);
 					} else if (relation === 'isSiblingOf') {
-						this.AddTriplet(newPid, 'isSiblingOf', sourcePid);
+						this.AddTriplet(newPid, 'isSiblingOf', sourcePid, true);
 
 						// Connect the new sibling to all known parents of the source node
 						const parents = new Set();
@@ -976,14 +1001,14 @@ class TreeApp {
 							}
 						});
 						parents.forEach(parentPid => {
-							this.AddTriplet(newPid, 'isChildOf', parentPid);
+							this.AddTriplet(newPid, 'isChildOf', parentPid, true);
 						});
 					} else if (relation === 'isSpouseOf') {
-						this.AddTriplet(newPid, 'isSpouseOf', sourcePid);
+						this.AddTriplet(newPid, 'isSpouseOf', sourcePid, true);
 					} else if (relation === 'isCousinOf') {
-						this.AddTriplet(newPid, 'isCousinOf', sourcePid);
+						this.AddTriplet(newPid, 'isCousinOf', sourcePid, true);
 					} else if (relation === 'isEnslaverOf') {
-						this.AddTriplet(newPid, 'isEnslaverOf', sourcePid);
+						this.AddTriplet(newPid, 'isEnslaverOf', sourcePid, true);
 					}
 
 					if (window.app && window.app.curTree) {
@@ -1077,6 +1102,20 @@ class TreeApp {
 
 	}
 
+	OpenNotepad()																		// OPEN NOTEPAD & SYNC FROM CURTREE
+	{
+		const np = document.getElementById('notepad-container');
+		if (np) {
+			if (window.app && window.app.curTree && window.app.curTree.notepad !== undefined) {
+				const content = window.app.curTree.notepad || "";
+				this.state.notepad = content;
+				const npText = document.getElementById("notepad-text");
+				if (npText) npText.value = content;
+			}
+			np.style.display = 'flex';
+		}
+	}
+
 	RestoreNotepadSizeAndPosition()																		// RESTORE NOTEPAD SIZE AND POSITION
 	{
 
@@ -1165,6 +1204,7 @@ class TreeApp {
 			this.state = this.undoStack.pop();
 			this.UpdateUndoRedoMenu();
 			if (document.getElementById("notepad-text")) document.getElementById("notepad-text").value = this.state.notepad || "";
+			if (window.app && window.app.curTree) window.app.curTree.notepad = this.state.notepad || "";
 			this.isDirty = true;
 		}
 	}
@@ -1178,6 +1218,7 @@ class TreeApp {
 			this.state = this.redoStack.pop();
 			this.UpdateUndoRedoMenu();
 			if (document.getElementById("notepad-text")) document.getElementById("notepad-text").value = this.state.notepad || "";
+			if (window.app && window.app.curTree) window.app.curTree.notepad = this.state.notepad || "";
 			this.isDirty = true;
 		}
 	}
@@ -1276,10 +1317,10 @@ class TreeApp {
 		this.isDirty = true;
 	}
 
-	AddNode(fields, resetLayout = true)																		// ADD PERSON NODE TO STATE
+	AddNode(fields, resetLayout = true, skipSave = false)																		// ADD PERSON NODE TO STATE
 	{
 
-		this.SaveState();
+		if (!skipSave) this.SaveState();
 		const pid = fields.person_id || this.GeneratePid();
 		const newNode = {
 			person_id: pid,
@@ -1361,9 +1402,9 @@ class TreeApp {
 		}
 	}
 
-	AddTriplet(subject, predicate, object)																		// ADD RELATIONSHIP TRIPLET
+	AddTriplet(subject, predicate, object, skipSave = false)																		// ADD RELATIONSHIP TRIPLET
 	{
-		this.SaveState();
+		if (!skipSave) this.SaveState();
 		if (!this.state.triplets.some(t => t.subject === subject && t.predicate === predicate && t.object === object)) {
 			this.state.triplets.push({ subject, predicate, object });
 		}

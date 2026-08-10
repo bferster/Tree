@@ -747,6 +747,13 @@ class PersonEditor {
 	/* re-render the whole factors table when a row changes */
 	static bindChanged($row, person, cfg, state) {
 		$row.on('vpe:changed', function () {
+			// Person-field edits mutate curTree.persons/treeApp nodes directly (below) rather
+			// than going through treeApp's own mutators, so capture undo state here — otherwise
+			// these edits are invisible to Ctrl+Z.
+			if (window.treeApp && typeof window.treeApp.SaveState === 'function') {
+				window.treeApp.SaveState();
+			}
+
 			const fstate = state.fields[cfg.key];
 			let selectedValue = null;
 			if (fstate && fstate.selected >= 0 && fstate.options[fstate.selected]) {
@@ -786,6 +793,7 @@ class PersonEditor {
 					if (fy !== undefined) node.fy = fy;
 					if (vx !== undefined) node.vx = vx;
 					if (vy !== undefined) node.vy = vy;
+					window.treeApp.isDirty = true;
 					window.treeApp.RenderNodes();
 				}
 			}
@@ -852,11 +860,23 @@ class PersonEditor {
 		const $searchBtn = $(`<button type="button" class="vpe-search-btn"><i class="ti ti-search"></i>Search</button>`);
 		$searchBtn.on('click', function () {
 			const search_criteria = PersonEditor.buildSearchCriteriaFromState(person, state);
-			console.log('Search criteria:', search_criteria);
 			const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
+			if (window.app && !window.app.score && window.Score) new window.Score();
 
-			const searcher = new SearchMentions(mentionsArray);
-			const results = searcher.Search(search_criteria);
+			// 1850/1860 slave schedules can't be matched person-by-person — the
+			// enslaved carry no name at all, only age/sex/race, so field scoring
+			// buries the correct household under name-mismatch penalties. Use the
+			// GroupMatcher family-vs-holding algorithm instead (see GroupMatch.md)
+			// when we have a real tree person to build an 1870 family group from.
+			const scoreObj = window.app.score;
+			const isSlaveSchedule = scoreObj && typeof scoreObj.isSlaveScheduleSource === 'function' && scoreObj.isSlaveScheduleSource(search_criteria.source);
+			let results;
+			if (isSlaveSchedule && person && person.person_id !== -1 && typeof scoreObj.SearchGroupMatch === 'function') {
+				const sourceTag = String(search_criteria.source).toUpperCase().includes('1850') ? 'SS-1850' : 'SS-1860';
+				results = scoreObj.SearchGroupMatch(mentionsArray, person, sourceTag);
+			} else {
+				results = scoreObj.Search(mentionsArray, search_criteria);
+			}
 
 			if (window.app && window.app.mentionsEditor) {
 				window.app.mentionsEditor.load(
@@ -900,6 +920,7 @@ class PersonEditor {
 				<option value="ALB">Albemarle</option>
 				<option value="AUG">Augusta</option>
 				<option value="FAQ">Fauquier</option>
+				<option value="ORF">Orange FL</option>
 			</select>
 		`);
 		if (window.app && window.app.county) {
@@ -939,6 +960,7 @@ class PersonEditor {
 			{ label: 'Church Records', value: 'CH' },
 			{ label: 'Free Black Register', value: 'FBR' },
 			{ label: 'Freemans Records', value: 'FL' },
+			{ label: 'Orange FL', value: 'Orange FL' },
 			{ label: 'Slave Births', value: 'SB' },
 			{ label: 'Cohabitation Children', value: 'CC' },
 			{ label: 'Cohabitation Families', value: 'CF' }
@@ -966,11 +988,12 @@ class PersonEditor {
 
 		const sourceOptions = allSourceOptions.filter(opt => {
 			if (opt.value === 'ALL') return true;
+			if (opt.value === 'Orange FL') return true;
 			if (knownSources.size === 0) return true;
 
 			for (let src of knownSources) {
 				let sParts = src.split('-');
-				let core = sParts.length > 1 && (sParts[0] === 'ALB' || sParts[0] === 'AUG' || sParts[0] === 'FAQ')
+				let core = sParts.length > 1 && (sParts[0] === 'ALB' || sParts[0] === 'AUG' || sParts[0] === 'FAQ' || sParts[0] === 'ORF')
 					? sParts.slice(1).join('-')
 					: src;
 
@@ -1028,6 +1051,20 @@ class PersonEditor {
 
 		$select.on('change', function () {
 			const newSel = $(this).val();
+
+			if (newSel === 'Orange FL') {
+				if (window.app) {
+					if (window.app.county !== 'ORF') {
+						window.app.county = 'ORF';
+						window.app.source = 'Orange FL';
+						const urlParams = new URLSearchParams(window.location.search);
+						urlParams.set('c', 'ORF');
+						window.location.search = urlParams.toString();
+						return;
+					}
+				}
+			}
+
 			if (window.app) window.app.source = newSel;
 
 			// Clear existing checked
@@ -1053,66 +1090,6 @@ class PersonEditor {
 		});
 
 		$wrap.append($select);
-	}
-
-
-	static collectCriteria(person, state) {
-		const useSmartName = false;
-		const criteria = { person_id: person.person_id, factors: [], sources: [], useSmartName };
-		// Track name parts AND whether they have an active (non-ignore) compare mode
-		let nameParts = { first_name: '', middle_name: '', last_name: '', suffix: '' };
-		let namePartActive = { first_name: false, middle_name: false, last_name: false, suffix: false };
-
-		Object.keys(state.fields).forEach(key => {
-			const f = state.fields[key];
-			const sel = f.selected;
-			const val = (sel === -1 || sel == null) ? null : f.options[sel].value;
-			const cfg = PersonEditor.FIELD_CONFIG.find(c => c.key === key);
-			const matchVal = f.match || (cfg ? cfg.defaultMatch : 'Exact');
-			const isRare = f.rare !== undefined ? f.rare : false;
-
-			if (val || ['race', 'gender'].includes(key)) {
-				const splitVal = val ? String(val).split(':')[0].trim() : null;
-
-				if (nameParts[key] !== undefined) {
-					nameParts[key] = splitVal;
-					namePartActive[key] = (matchVal !== 'Ignore');
-				}
-
-				criteria.factors.push({
-					field: key,
-					value: matchVal === 'Ignore' ? null : splitVal,
-					compare: [matchVal],
-					match: matchVal,
-					rare: isRare,
-					score: 0
-				});
-			}
-		});
-
-		// Build full_name only from name parts that have an active (non-ignore) compare
-		const fullNameParts = [];
-		if (nameParts.first_name && namePartActive.first_name) fullNameParts.push(nameParts.first_name);
-		if (nameParts.middle_name && namePartActive.middle_name) fullNameParts.push(nameParts.middle_name);
-		if (nameParts.last_name && namePartActive.last_name) fullNameParts.push(nameParts.last_name);
-		if (nameParts.suffix && namePartActive.suffix) fullNameParts.push(nameParts.suffix);
-
-		const fullName = fullNameParts.join(' ').trim();
-		if (fullName) {
-			criteria.factors.push({
-				field: 'full_name',
-				value: fullName,
-				impact: 1.0,
-				compare: ['exact'],
-				rare: false,
-				score: 0
-			});
-		}
-
-		Object.keys(state.sources).forEach(id => {
-			if (state.sources[id].checked) criteria.sources.push(id);
-		});
-		return criteria;
 	}
 
 	static buildSearchCriteriaFromState(person, state) {

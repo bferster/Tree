@@ -302,7 +302,6 @@ class GroupMatcher {
 			}, r);
 		});
 		results.sort((a, b) => b.probability - a.probability);
-		console.log(results);
 		results.forEach((r, i) => {
 			r.rank = i + 1;
 			r.marginOverNext = i + 1 < results.length
@@ -355,6 +354,9 @@ class GroupMatcher {
 						(enslaverRow.full_name || enslaverRow.fullName || '')
 							.trim().split(/\s+/).pop() || '',
 				} : null,
+				// Raw mention row for the enslaver, when the ingest data included one —
+				// lets a caller show/link the actual source record, not just a name.
+				enslaverRow: enslaverRow || null,
 				// County code is the source prefix before the tag, e.g. "ALB".
 				county: source.split('-')[0] || undefined,
 				members: enslaved,

@@ -159,6 +159,45 @@ class Normalize {
 		return Normalize.doubleMetaphone(name);
 	}
 
+	// Canonical Jaro-Winkler implementation. Score (score.js) delegates here so a
+	// threshold/correctness fix only needs to happen once.
+	static jaroWinkler(s1, s2, p = 0.1) {
+		s1 = (s1 || "").toLowerCase();
+		s2 = (s2 || "").toLowerCase();
+		if (s1 === s2) return 1.0;
+		const len1 = s1.length, len2 = s2.length;
+		if (len1 === 0 || len2 === 0) return 0.0;
+		const matchDistance = Math.floor(Math.max(len1, len2) / 2) - 1;
+		const s1Matches = new Array(len1).fill(false);
+		const s2Matches = new Array(len2).fill(false);
+		let matches = 0, trans = 0;
+		for (let i = 0; i < len1; i++) {
+			const start = Math.max(0, i - matchDistance);
+			const end = Math.min(i + matchDistance + 1, len2);
+			for (let j = start; j < end; j++) {
+				if (s2Matches[j]) continue;
+				if (s1[i] !== s2[j]) continue;
+				s1Matches[i] = true;
+				s2Matches[j] = true;
+				matches++;
+				break;
+			}
+		}
+		if (matches === 0) return 0.0;
+		let k = 0;
+		for (let i = 0; i < len1; i++) {
+			if (!s1Matches[i]) continue;
+			while (!s2Matches[k]) k++;
+			if (s1[i] !== s2[k]) trans++;
+			k++;
+		}
+		const m = matches;
+		const jaro = (m / len1 + m / len2 + (m - trans / 2) / m) / 3;
+		let l = 0;
+		while (l < 4 && s1[l] && s1[l] === s2[l]) l++;
+		return jaro + l * p * (1 - jaro);
+	}
+
 	static buildNameFrequencies(dataset) {
 		const firstNameFreq = new Map();
 		const lastNameFreq = new Map();

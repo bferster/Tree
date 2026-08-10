@@ -519,6 +519,7 @@ function handleContextSearch() {
 	if (term !== currentSearchTerm) {
 		currentSearchTerm = term;
 		currentSearchIndex = -1;
+		console.trace('ContextSearch - Searching term:', term);
 	}
 
 	const terms = term.split(/\s+/).filter(Boolean);

@@ -223,7 +223,8 @@ class ExpandAssertions {
 
 				if (isCensus || isSlaveSchedule) {
 					const famId = String(m.family_id || '').trim();
-					const houseId = String(m.household_id || '').trim();
+					const rawHouse = (m.household_id !== null && m.household_id !== undefined && String(m.household_id).trim() !== '' && String(m.household_id).trim().toLowerCase() !== 'null') ? m.household_id : m.family_id;
+					const houseId = String(rawHouse || '').trim();
 					const hasFam = famId && famId.toLowerCase() !== 'null' && famId.toLowerCase() !== 'undefined';
 					const hasHouse = houseId && houseId.toLowerCase() !== 'null' && houseId.toLowerCase() !== 'undefined';
 

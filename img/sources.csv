@@ -32,3 +32,9 @@ FAQ-FBR,1800,"https://docs.google.com/spreadsheets/d/1IiH40lhT6hm2xMr1g6Qb84LuQO
 FAQ-SS-1850,1850,"https://docs.google.com/spreadsheets/d/1yTWVzj_f9P9FERIv5gAHy7WpmRcvrNJ3zlhBBzn9Zws/export?format=csv","SlaveScheduleFormat.md","FAQ","VA"
 FAQ-SS-1860,1860,"https://docs.google.com/spreadsheets/d/1VodM4OJJpltIL5DunebkkOKSjN75WqosA5VKMxwXxHI/export?format=csv","SlaveScheduleFormat.md","FAQ","VA"
 FAQ-CH,1851,"/export?format=csv","ChurchFormat.md","FAQ","VA"
+
+ORF-CN-1860,1860,"https://docs.google.com/spreadsheets/d/1AptRmf8Y6IOVE_hSJ0SHsWY5yqRivIQ1TVLV9HIoKow/export?format=csv","1860CensusFormat.md","ORF","VA"
+ORF-CN-1870,1870,"https://docs.google.com/spreadsheets/d/1iEJVqC_ABb4j8RJxF3FTzv4d4cGBDVB3tDHbuQ_9vAo/export?format=csv","1870CensusFormat.md","ORF","VA"
+ORF-CN-1880,1880,"https://docs.google.com/spreadsheets/d/1IZtRr76Sit83zncPJXT1jc3LLJkkd78fhIcZcSjX44Y/export?format=csv","1880CensusFormat.md","ORF","VA"
+ORF-CN-1900,1900,"https://docs.google.com/spreadsheets/d/1bPdwGVh_9UY7khwPszemlL2-hbnuDP5MmtEiF4o0bCM/export?format=csv","1900CensusFormat.md","ORF","VA"
+ORF,1865,"/export?format=csv","FreedmansListFormat.md","ORF","VA"
