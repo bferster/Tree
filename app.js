@@ -163,18 +163,9 @@ class App {
 		const newRelationships = [];
 		const added = new Set();
 
-		// Preserve existing sanitized relationships in curTree.relationships
-		if (Array.isArray(this.curTree.relationships)) {
-			this.curTree.relationships.forEach(r => {
-				const key = `${r.subject_id}|${r.predicate}|${r.object_id}`;
-				if (!added.has(key)) {
-					added.add(key);
-					newRelationships.push(r);
-				}
-			});
-		}
-
-		// Preserve relationships defined in person anchors (e.g. isEnslaverOf:P003)
+		// Process relationships defined in person anchors (e.g. isEnslaverOf:P003, isCousinOf:P002) first.
+		// These anchor definitions are authoritative for person-to-target relationships.
+		const anchoredPairs = new Set();
 		persons.forEach(p => {
 			if (p.anchor && p.anchor.includes(':')) {
 				const parts = p.anchor.split(':');
@@ -182,6 +173,11 @@ class App {
 				const targetPid = parts[1];
 				if (pred && targetPid && targetPid !== p.person_id) {
 					const key = `${p.person_id}|${pred}|${targetPid}`;
+					const pairKey = `${p.person_id}|${targetPid}`;
+					const revPairKey = `${targetPid}|${p.person_id}`;
+					anchoredPairs.add(pairKey);
+					anchoredPairs.add(revPairKey);
+
 					if (!added.has(key)) {
 						added.add(key);
 						newRelationships.push({
@@ -193,6 +189,22 @@ class App {
 				}
 			}
 		});
+
+		// Preserve existing relationships in curTree.relationships ONLY if they don't conflict with explicit anchors
+		if (Array.isArray(this.curTree.relationships)) {
+			this.curTree.relationships.forEach(r => {
+				const pairKey = `${r.subject_id}|${r.object_id}`;
+				const revPairKey = `${r.object_id}|${r.subject_id}`;
+				if (anchoredPairs.has(pairKey) || anchoredPairs.has(revPairKey)) {
+					return; // Skip stale relationship for pairs that have an explicit anchor override
+				}
+				const key = `${r.subject_id}|${r.predicate}|${r.object_id}`;
+				if (!added.has(key)) {
+					added.add(key);
+					newRelationships.push(r);
+				}
+			});
+		}
 
 		// Pull in ExpandAssertions relationships for existing persons in tree
 		if (this.expand) {
@@ -207,7 +219,7 @@ class App {
 
 							if (targetPid && targetPid !== p.person_id) {
 								const pred = res.predicate;
-								if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf', 'isEnslaverOf', 'wasEnslavedBy', 'enslaves'].includes(pred)) {
+								if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf', 'isCousinOf', 'isEnslaverOf', 'wasEnslavedBy', 'enslaves'].includes(pred)) {
 									let sub = p.person_id;
 									let obj = targetPid;
 									let normalizedPred = pred;
@@ -261,24 +273,6 @@ class App {
 					}
 				}
 			});
-		});
-
-		// Fail-safe birth year check on all isChildOf relationships: child (subject_id) must be younger than parent (object_id)
-		const personMap = new Map(persons.map(p => [p.person_id, p]));
-		newRelationships.forEach(r => {
-			if (r.predicate === 'isChildOf') {
-				const childP = personMap.get(r.subject_id);
-				const parentP = personMap.get(r.object_id);
-				if (childP && parentP) {
-					const childBirth = parseInt((childP.birth_year || '').split(':')[0], 10);
-					const parentBirth = parseInt((parentP.birth_year || '').split(':')[0], 10);
-					if (!isNaN(childBirth) && !isNaN(parentBirth) && childBirth < parentBirth - 10) {
-						const temp = r.subject_id;
-						r.subject_id = r.object_id;
-						r.object_id = temp;
-					}
-				}
-			}
 		});
 
 		// Remove conflicting relationships between parents and children (e.g. child cannot be sibling/cousin to parent)
@@ -638,9 +632,15 @@ class App {
 		const mention = this.mentions.find(m => equivalents.has(String(m.mention_id).trim()));
 		if (!mention) return;
 
+		let targetPerson = null;
+		if (window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid && this.curTree && this.curTree.persons) {
+			const pList = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons);
+			targetPerson = pList.find(p => p.person_id === window.treeApp.state.selectedPid) || null;
+		}
+
 		// Switch to Mentions tab and load this mention directly
 		$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
-		this.mentionsEditor.load(null, [], [mention]);
+		this.mentionsEditor.load(targetPerson, [], [mention]);
 	}
 
 	sourceMatches(mentionSource, targetSources) {
@@ -771,8 +771,32 @@ class App {
 			]);
 			this.assertions = assertions;
 			this.mentions = mentions;
+		}
 
-
+		const currentPersons = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons || {});
+		if (currentPersons.length === 0 && this.mentions && this.mentions.length > 0) {
+			const firstM = this.mentions[0];
+			const pid = 'P001';
+			const mId = firstM.mention_id;
+			const seedPerson = {
+				person_id: pid,
+				mentions: [mId],
+				anchor: null,
+				first_name: `${firstM.first_name || ''}:${mId}`,
+				middle_name: `${firstM.middle_name || ''}:${mId}`,
+				last_name: `${firstM.last_name || ''}:${mId}`,
+				suffix: null,
+				birth_year: `${firstM.birth_year || ''}:${mId}`,
+				death_year: `${firstM.death_year || ''}:${mId}`,
+				gender: `${firstM.gender || ''}:${mId}`,
+				race: `${firstM.race || ''}:${mId}`,
+				x: 200,
+				y: 200,
+				verity: 3,
+				isEnslaver: false
+			};
+			this.curTree.persons = [seedPerson];
+			this.processLoadedPersons();
 		}
 
 		try {
@@ -782,13 +806,19 @@ class App {
 			if (lines.length > 0) {
 				const headers = lines[0].split(',').map(h => h.trim());
 				const displayIdx = headers.indexOf('display_name');
+				const titleIdx = headers.indexOf('title');
 				if (displayIdx !== -1) {
 					for (let i = 1; i < lines.length; i++) {
-						// Split by comma, respecting quotes is tricky but display_name has no commas in our data
 						const parts = lines[i].split(',');
 						if (parts.length > displayIdx && parts[displayIdx]) {
-							const name = parts[displayIdx].trim();
-							if (name) window.GlobalSources[name] = true;
+							const name = parts[displayIdx].trim().replace(/^"|"$/g, '');
+							let title = '';
+							if (titleIdx !== -1 && parts.length > titleIdx && parts[titleIdx]) {
+								title = parts[titleIdx].trim().replace(/^"|"$/g, '');
+							}
+							if (name) {
+								window.GlobalSources[name] = { display_name: name, title: title };
+							}
 						}
 					}
 				}
@@ -836,8 +866,10 @@ class App {
 		if (window.treeApp && window.treeApp.state && window.treeApp.state.notepad !== undefined) {
 			this.curTree.notepad = window.treeApp.state.notepad;
 		}
+		const treeToSave = JSON.parse(JSON.stringify(this.curTree));
+		treeToSave.relationships = [];
 		const safeReplacer = (k, v) => (k && k.startsWith('_cached') ? undefined : v);
-		localStorage.setItem('verite_tree_' + name, JSON.stringify(this.curTree, safeReplacer));
+		localStorage.setItem('verite_tree_' + name, JSON.stringify(treeToSave, safeReplacer));
 		localStorage.setItem('verite_last_tree_name', name);
 		console.log('Saved tree:', name);
 	}
@@ -876,8 +908,10 @@ class App {
 			if (this.curTree.notepad === undefined) this.curTree.notepad = "";
 			this.curTree.county = this.county;
 			this.processLoadedPersons();
+			const treeToSave = JSON.parse(JSON.stringify(this.curTree));
+			treeToSave.relationships = [];
 			const safeReplacer = (k, v) => (k && k.startsWith('_cached') ? undefined : v);
-			localStorage.setItem('verite_tree_' + this.curTree.treeName, JSON.stringify(this.curTree, safeReplacer));
+			localStorage.setItem('verite_tree_' + this.curTree.treeName, JSON.stringify(treeToSave, safeReplacer));
 			localStorage.setItem('verite_last_tree_name', this.curTree.treeName);
 
 			if (window.treeApp) {
@@ -930,7 +964,6 @@ class App {
 				const response = await fetch(path);
 				if (response.ok) {
 					const data = await response.json();
-					console.log(`Loaded demo tree from ${path}`);
 					return await this.loadTreeData(data);
 				}
 			} catch (e) {
@@ -943,13 +976,7 @@ class App {
 			treeName: "Demo Family",
 			county: county,
 			owner: "Bill",
-			persons: [
-				{ person_id: "P001", mentions: ["AUG-CN-1880-257"], anchor: null, first_name: "William:AUG-CN-1880-257", middle_name: null, last_name: "Spears:AUG-CN-1880-257", suffix: null, birth_year: "1840:AUG-CN-1880-257", death_year: "1910:Added", gender: "M:AUG-CN-1880-257", race: "B:AUG-CN-1880-257", x: 200, y: 200, verity: 2, isEnslaver: false },
-				{ person_id: "P002", mentions: ["AUG-CN-1880-258"], anchor: "isSpouseOf:P001", first_name: "Georgeanna:AUG-CN-1880-258", middle_name: null, last_name: "Spears:AUG-CN-1880-258", suffix: null, birth_year: "1848:Added", death_year: "1910:Added", gender: "F:AUG-CN-1880-258", race: "B:AUG-CN-1880-258", x: 500, y: 200, verity: 2, isEnslaver: false },
-				{ person_id: "P003", mentions: ["AUG-CN-1880-259"], anchor: "isChildOf:P001", first_name: "James:AUG-CN-1880-259", middle_name: "M:AUG-CN-1880-259", last_name: "Spears:AUG-CN-1880-259", suffix: null, birth_year: "1875:AUG-CN-1880-259", death_year: null, gender: "M", race: "B:AUG-CN-1880-259", x: 200, y: 450, verity: 2, isEnslaver: false },
-				{ person_id: "P004", mentions: ["AUG-CN-1880-260"], anchor: "isChildOf:P001", first_name: "Joseph:AUG-CN-1880-260", middle_name: null, last_name: "Spears:AUG-CN-1880-260", suffix: null, birth_year: "1880:AUG-CN-1880-260", death_year: null, gender: "M", race: "B:AUG-CN-1880-260", x: 200, y: 450, verity: 2, isEnslaver: false },
-				{ person_id: "P005", mentions: ["AUG-CN-1880-22721"], anchor: "isEnslaverOf:P002", first_name: "Dabney:AUG-CN-1880-22721", middle_name: null, last_name: "Johnson:AUG-CN-1880-22721", suffix: null, birth_year: "1832:AUG-CN-1870-1688", death_year: "", gender: "M:AUG-CN-1880-22721", race: "B:AUG-CN-1880-22721", x: 200, y: 200, verity: 2, isEnslaver: true }
-			],
+			persons: [],
 			relationships: []
 		};
 		return await this.loadTreeData(fallbackDemoTree);

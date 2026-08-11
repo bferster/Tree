@@ -308,28 +308,64 @@ class MentionsEditor {
 		const mid = this.currentMentionId;
 		const anchorPid = (this.targetPerson && this.targetPerson.person_id) || window.treeApp.state.selectedPid;
 		
+		let targetPerson = this.targetPerson;
+		if (!targetPerson && anchorPid && window.app && window.app.curTree && window.app.curTree.persons) {
+			const pList = Array.isArray(window.app.curTree.persons) ? window.app.curTree.persons : Object.values(window.app.curTree.persons);
+			targetPerson = pList.find(p => p.person_id === anchorPid) || null;
+		}
+
 		let relation = (window.app && window.app.curRelation) ? window.app.curRelation : null;
 
-		// 1. Check birth year gap first if both birth years are present
-		if (!relation && this.targetPerson) {
-			const targetBirth = parseInt((this.targetPerson.birth_year || '').split(':')[0], 10);
-			const mentionBirth = parseInt((mention.birth_year || '').split(':')[0], 10);
-			if (!isNaN(targetBirth) && !isNaN(mentionBirth)) {
-				if (mentionBirth - targetBirth >= 10) {
-					relation = 'isChildOf';
-				} else if (targetBirth - mentionBirth >= 10) {
-					relation = 'isParentOf';
+		// 1. Robust birth year extraction for target person and mention
+		let targetBirth = NaN;
+		if (targetPerson) {
+			targetBirth = parseInt(String(targetPerson.birth_year || '').split(':')[0], 10);
+			if (isNaN(targetBirth) && targetPerson.mentions && window.app && window.app.expand) {
+				for (const tmid of targetPerson.mentions) {
+					const tm = window.app.expand.mentionsMap.get(tmid);
+					if (tm) {
+						let tb = parseInt(String(tm.birth_year || tm.birthYear || '').split(':')[0], 10);
+						if (isNaN(tb) && tm.original_data) tb = parseInt(String(tm.original_data.birth_year || tm.original_data.birthYear || '').split(':')[0], 10);
+						if (isNaN(tb) && tm.original_data && tm.original_data.age && tm.source && typeof window.app.expand._getCensusYear === 'function') {
+							const age = parseInt(tm.original_data.age, 10);
+							const cYear = parseInt(window.app.expand._getCensusYear(tm.source), 10);
+							if (!isNaN(age) && !isNaN(cYear)) tb = cYear - age;
+						}
+						if (!isNaN(tb)) { targetBirth = tb; break; }
+					}
 				}
 			}
 		}
 
-		// 2. Look up relationship assertion from expand view if relation not resolved by birth years
+		let mentionBirth = parseInt(String(mention.birth_year || mention.birthYear || '').split(':')[0], 10);
+		if (isNaN(mentionBirth) && mention.original_data) {
+			mentionBirth = parseInt(String(mention.original_data.birth_year || mention.original_data.birthYear || '').split(':')[0], 10);
+		}
+		if (isNaN(mentionBirth) && mention.original_data && mention.original_data.age && mention.source && window.app && window.app.expand && typeof window.app.expand._getCensusYear === 'function') {
+			const age = parseInt(mention.original_data.age, 10);
+			const cYear = parseInt(window.app.expand._getCensusYear(mention.source), 10);
+			if (!isNaN(age) && !isNaN(cYear)) mentionBirth = cYear - age;
+		}
+
+		// 2. Calculate relation via 12-year birth year gap rules
+		if ((!relation || relation === 'inFamilyOf' || relation === 'inHouseholdOf') && !isNaN(targetBirth) && !isNaN(mentionBirth)) {
+			const diff = mentionBirth - targetBirth;
+			if (diff >= 12) {
+				relation = 'isChildOf';
+			} else if (diff <= -12) {
+				relation = 'isParentOf';
+			} else {
+				relation = 'isSpouseOf';
+			}
+		}
+
+		// 3. Look up relationship assertion from expand view if relation not resolved by birth years
 		if (!relation && this.targetPerson && this.targetPerson.mentions && window.app && window.app.expand) {
 			for (const tmid of this.targetPerson.mentions) {
 				const view = window.app.expand.viewFor(tmid);
 				if (view && view.results) {
 					const match = view.results.find(r => r.mention_id === mid);
-					if (match && match.predicate) {
+					if (match && match.predicate && match.predicate !== 'inFamilyOf' && match.predicate !== 'inHouseholdOf') {
 						relation = match.predicate;
 						break;
 					}
@@ -337,8 +373,15 @@ class MentionsEditor {
 			}
 		}
 
-		if (!relation) {
-			relation = 'isChildOf';
+		if (!relation || relation === 'inFamilyOf' || relation === 'inHouseholdOf') {
+			const relRaw = mention.original_data ? (mention.original_data.relation || mention.original_data.Relation) : mention.relation;
+			const rStr = String(relRaw || '').trim().toLowerCase().replace(/[-\s]+/g, '');
+			const mappedPred = (window.ExpandAssertions && window.ExpandAssertions.CENSUS_RELATION_MAP) ? window.ExpandAssertions.CENSUS_RELATION_MAP[rStr] : null;
+			if (mappedPred) {
+				relation = mappedPred;
+			} else {
+				relation = 'isChildOf';
+			}
 		}
 
 		// Reset transient curRelation after use

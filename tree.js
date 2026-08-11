@@ -581,7 +581,9 @@ class TreeApp {
 				e.stopPropagation();
 				$('.menu-top-level').removeClass('active');
 				if (window.app && window.app.curTree) {
-					const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(window.app.curTree, null, 4));
+					const treeToExport = JSON.parse(JSON.stringify(window.app.curTree));
+					treeToExport.relationships = [];
+					const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(treeToExport, null, 4));
 					const downloadAnchorNode = document.createElement('a');
 					downloadAnchorNode.setAttribute("href", dataStr);
 					downloadAnchorNode.setAttribute("download", (window.app.curTree.treeName || "tree") + "_json.json");
@@ -1962,6 +1964,24 @@ class TreeApp {
 				});
 
 				depths[enslaverPid] = minDepth - 1;
+			}
+		});
+
+		// Enforce parent-child depth hierarchy: children MUST be at least 1 depth level below their parents
+		vTriplets.forEach(t => {
+			let pId = null, cId = null;
+			if (t.predicate === 'isChildOf') {
+				cId = t.subject;
+				pId = t.object;
+			} else if (t.predicate === 'isParentOf') {
+				pId = t.subject;
+				cId = t.object;
+			}
+			if (pId && cId) {
+				const parentDepth = depths[pId] !== undefined ? depths[pId] : 0;
+				if (depths[cId] === undefined || depths[cId] <= parentDepth) {
+					depths[cId] = parentDepth + 1;
+				}
 			}
 		});
 

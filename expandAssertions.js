@@ -19,7 +19,10 @@ class ExpandAssertions {
 		isParentOf: { inverse: 'isChildOf', yields: null, symmetric: false },
 		isSiblingOf: { inverse: 'isSiblingOf', yields: null, symmetric: true },
 		isSpouseOf: { inverse: 'isSpouseOf', yields: null, symmetric: true },
-		wasEnslavedBy: { inverse: 'enslaves', yields: 'inHouseOf', symmetric: false },
+		isCousinOf: { inverse: 'isCousinOf', yields: null, symmetric: true },
+		isEnslaverOf: { inverse: 'wasEnslavedBy', yields: null, symmetric: false },
+		enslaves: { inverse: 'wasEnslavedBy', yields: null, symmetric: false },
+		wasEnslavedBy: { inverse: 'isEnslaverOf', yields: 'inHouseholdOf', symmetric: false },
 		isSameAs: { inverse: 'isSameAs', yields: null, symmetric: true },
 		isNotSameAs: { inverse: 'isNotSameAs', yields: null, symmetric: true },
 		inFamilyOf: { inverse: 'inFamilyOf', yields: null, symmetric: true },
@@ -60,7 +63,7 @@ class ExpandAssertions {
 				if (!this.mentionsBySource.has(src)) this.mentionsBySource.set(src, []);
 				this.mentionsBySource.get(src).push(m);
 
-				const famId = String(m.family_id || m.familyId || m.household_id || m.householdId || '').trim();
+				const famId = String(m.family_id || m.familyId || '').trim();
 				if (famId && famId.toLowerCase() !== 'null' && famId.toLowerCase() !== 'undefined') {
 					const famKey = `${src}|${famId}`;
 					if (!this.mentionsByFamily.has(famKey)) this.mentionsByFamily.set(famKey, []);
@@ -90,7 +93,7 @@ class ExpandAssertions {
 
 		const allAssertions = [...assertions];
 		for (const [famKey, members] of this.mentionsByFamily.entries()) {
-			if (famKey.includes('CN-1880') || famKey.includes('CN-1870') || famKey.includes('CN-1860')) {
+			if (famKey.includes('CN-')) {
 				let head = members.find(m => m.head === true || String(m.head || '').trim().toLowerCase() === 't' || String(m.head || '').trim().toLowerCase() === 'y' || (m.original_data && String(m.original_data.head || '').trim().toLowerCase() === 'y'));
 				if (!head) head = members.find(m => {
 					const rel = m.original_data ? (m.original_data.relation || m.original_data.Relation) : m.relation;
@@ -180,6 +183,27 @@ class ExpandAssertions {
 		// Helper to check if a result already exists to avoid duplicate rows
 		const seen = new Set();
 		const addResult = (row) => {
+			const targetM = this.mentionsMap.get(row.mention_id);
+			if (targetM && targetM.source && targetM.source.includes('CN-')) {
+				for (const eqId of equivalents) {
+					const eqM = this.mentionsMap.get(eqId);
+					if (eqM && eqM.source && eqM.source === targetM.source) {
+						const f1 = String(eqM.family_id || eqM.familyId || '').trim();
+						const f2 = String(targetM.family_id || targetM.familyId || '').trim();
+						if (f1 && f2 && f1.toLowerCase() !== 'null' && f2.toLowerCase() !== 'null' && f1 !== f2) {
+							return; // Skip: different family_id within the same census
+						}
+						if (row.predicate === 'inFamilyOf') {
+							const ln1 = (eqM.last_name || '').split(':')[0].trim().toLowerCase();
+							const ln2 = (targetM.last_name || '').split(':')[0].trim().toLowerCase();
+							if (ln1 && ln2 && ln1 !== ln2) {
+								return; // Skip: different surname within large census family block
+							}
+						}
+					}
+				}
+			}
+
 			const key = `${row.mention_id}|${row.predicate}|${row.direction}`;
 			if (!seen.has(key)) {
 				seen.add(key);
@@ -218,66 +242,32 @@ class ExpandAssertions {
 			if (m && m.source) {
 				const source = String(m.source).trim();
 				const year = this._getCensusYear(source);
-				const isCensus = source.includes('CN-1860') || source.includes('CN-1870') || source.includes('CN-1880');
-				const isSlaveSchedule = source.includes('SS-1850') || source.includes('SS-1860');
+				const isCensus = source.includes('CN-');
 
-				if (isCensus || isSlaveSchedule) {
+				if (isCensus) {
 					const famId = String(m.family_id || '').trim();
-					const rawHouse = (m.household_id !== null && m.household_id !== undefined && String(m.household_id).trim() !== '' && String(m.household_id).trim().toLowerCase() !== 'null') ? m.household_id : m.family_id;
-					const houseId = String(rawHouse || '').trim();
 					const hasFam = famId && famId.toLowerCase() !== 'null' && famId.toLowerCase() !== 'undefined';
-					const hasHouse = houseId && houseId.toLowerCase() !== 'null' && houseId.toLowerCase() !== 'undefined';
 
-					// 1. inFamilyOf (CN-1860, CN-1870, CN-1880)
-					if (isCensus && hasFam) {
+					// 1. inFamilyOf (CN census sources - strictly same family_id and matching surname)
+					if (hasFam) {
 						const famKey = `${source}|${famId}`;
 						const members = this.mentionsByFamily.get(famKey) || [];
+						const myLastName = (m.last_name || '').split(':')[0].trim().toLowerCase();
 						for (const member of members) {
 							if (member.mention_id !== id) {
-								const virtualAssertion = { subject_id: id, predicate: 'inFamilyOf', object_id: member.mention_id, start_year: year, end_year: '' };
-								addResult(this._row(member.mention_id, 'inFamilyOf', 1.0, 'stored', virtualAssertion, null));
-							}
-						}
-					}
-
-					// 2. inHouseholdOf:
-					// - 1860 / 1870: same household_id
-					// - 1880: same family_id
-					// - 1850/1860 slave schedule: same household_id
-					if ((source.includes('CN-1870') || source.includes('CN-1860')) && hasHouse) {
-						const houseKey = `${source}|${houseId}`;
-						const members = this.mentionsByHousehold.get(houseKey) || [];
-						for (const member of members) {
-							if (member.mention_id !== id) {
-								const virtualAssertion = { subject_id: id, predicate: 'inHouseholdOf', object_id: member.mention_id, start_year: year, end_year: '' };
-								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
-							}
-						}
-					} else if (source.includes('CN-1880') && hasFam) {
-						const famKey = `${source}|${famId}`;
-						const members = this.mentionsByFamily.get(famKey) || [];
-						for (const member of members) {
-							if (member.mention_id !== id) {
-								const virtualAssertion = { subject_id: id, predicate: 'inHouseholdOf', object_id: member.mention_id, start_year: year, end_year: '' };
-								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
-							}
-						}
-					} else if (isSlaveSchedule && hasHouse) {
-						const houseKey = `${source}|${houseId}`;
-						const members = this.mentionsByHousehold.get(houseKey) || [];
-						for (const member of members) {
-							if (member.mention_id !== id) {
-								const virtualAssertion = { subject_id: id, predicate: 'inHouseholdOf', object_id: member.mention_id, start_year: year, end_year: '' };
-								addResult(this._row(member.mention_id, 'inHouseholdOf', 1.0, 'stored', virtualAssertion, null));
+								const memberLastName = (member.last_name || '').split(':')[0].trim().toLowerCase();
+								if (!myLastName || !memberLastName || myLastName === memberLastName) {
+									const virtualAssertion = { subject_id: id, predicate: 'inFamilyOf', object_id: member.mention_id, start_year: year, end_year: '' };
+									addResult(this._row(member.mention_id, 'inFamilyOf', 1.0, 'stored', virtualAssertion, null));
+								}
 							}
 						}
 					}
 
 					// 3. isNeighborOf (CN-1870, CN-1880)
-					if (isCensus) {
-						const sorted = this._getSortedMentions(source);
-						const famKey = famId ? `${source}|${famId}` : null;
-						const familyMembers = famKey ? (this.mentionsByFamily.get(famKey) || []) : [m];
+					const sorted = this._getSortedMentions(source);
+					const famKey = hasFam ? `${source}|${famId}` : null;
+					const familyMembers = famKey ? (this.mentionsByFamily.get(famKey) || []) : [m];
 
 						// Find head
 						let head = familyMembers.find(member => String(member.head || '').trim().toLowerCase() === 't');
@@ -313,7 +303,6 @@ class ExpandAssertions {
 					}
 				}
 			}
-		}
 
 		// 4. Compositions. Merge parent edges across all equivalents.
 		const parentEdges = [];
@@ -475,7 +464,7 @@ class ExpandAssertions {
 
 	_getCensusYear(source) {
 		if (!source) return null;
-		const m = source.match(/-(18\d{2})/);
+		const m = source.match(/-((?:18|19)\d{2})/);
 		return m ? m[1] : null;
 	}
 
@@ -504,10 +493,12 @@ class ExpandAssertions {
 		if (!by && m.original_data) by = m.original_data.birth_year;
 		if (!by && m.original_data) {
 			const age = parseInt(m.original_data.age, 10);
-			if (!isNaN(age)) by = 1880 - age;
+			if (!isNaN(age)) {
+				const cYear = parseInt(this._getCensusYear(m.source), 10) || 1880;
+				by = cYear - age;
+			}
 		}
 		const parsed = parseInt(by, 10);
 		return isNaN(parsed) ? null : parsed;
 	}
 }
-

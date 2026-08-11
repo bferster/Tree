@@ -22,6 +22,7 @@ class PersonEditor {
 		gender: 'c-cyan',
 		birth_year: 'c-blue',
 		death_year: 'c-red',
+		relationship: 'c-blue',
 		family_boost: 'c-yellow',
 		linked_persons: 'c-green'
 	};
@@ -91,6 +92,7 @@ class PersonEditor {
 			key: 'family_boost', label: 'Family boost', editKind: 'free',
 			compareOptions: ['Boost', 'Ignore'], defaultMatch: 'Boost', hasRare: false
 		},
+		{ key: 'relationship', label: 'Relationship', editKind: 'relationship' },
 		{ key: 'linked_persons', label: 'Linked people', editKind: 'linked' }
 	];
 
@@ -292,7 +294,7 @@ class PersonEditor {
 
 		const fields = {};
 		PersonEditor.FIELD_CONFIG.forEach(cfg => {
-			if (cfg.editKind === 'linked') return;
+			if (cfg.editKind === 'linked' || cfg.editKind === 'relationship') return;
 
 			const options = PersonEditor.buildOptions(person, cfg.key);
 			let selectedIdx = (cfg.key === 'suffix') ? -1 : 0;
@@ -431,6 +433,10 @@ class PersonEditor {
 		PersonEditor.FIELD_CONFIG.forEach(cfg => {
 			if (cfg.editKind === 'linked') {
 				$factors.append(PersonEditor.renderLinkedRow(person, cfg));
+				return;
+			}
+			if (cfg.editKind === 'relationship') {
+				$factors.append(PersonEditor.renderRelationshipRow(person, cfg, state));
 				return;
 			}
 			$factors.append(PersonEditor.renderFieldRow(person, cfg, state));
@@ -670,13 +676,25 @@ class PersonEditor {
 				const view = window.app.expand.viewFor(mid);
 				if (view && view.results) {
 					view.results.forEach(res => {
-						if (res.predicate === 'isNeighborOf' || res.predicate === 'inFamilyOf' || res.predicate === 'inHouseholdOf') return;
+						if (res.predicate === 'isNeighborOf') return;
+						if (res.direction === 'composed') return; // Exclude indirect composed multi-hop inferences
 						if (person.mentions.includes(res.mention_id)) return; // Don't list as a relative if already merged into this person
-						const key = `${res.predicate}|${res.mention_id}`;
-						uniqueRelsMap.set(key, {
-							predicate: res.predicate,
-							target_mention: res.mention_id
-						});
+
+						const existing = uniqueRelsMap.get(res.mention_id);
+						// Priority order for predicates: specific kinship > inFamilyOf > inHouseholdOf
+						const priority = (pred) => {
+							if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf', 'isCousinOf', 'isEnslaverOf', 'wasEnslavedBy', 'enslaves'].includes(pred)) return 3;
+							if (pred === 'inFamilyOf') return 2;
+							if (pred === 'inHouseholdOf') return 1;
+							return 0;
+						};
+
+						if (!existing || priority(res.predicate) > priority(existing.predicate)) {
+							uniqueRelsMap.set(res.mention_id, {
+								predicate: res.predicate,
+								target_mention: res.mention_id
+							});
+						}
 					});
 				}
 			});
@@ -694,6 +712,7 @@ class PersonEditor {
 		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"><option value="" selected disabled>Select to jump...</option></select>`);
 		rels.forEach((r, i) => {
 			let linkedName = `Mention ${r.target_mention}`;
+			let birthYearStr = '';
 			if (window.app && window.app.expand && window.app.expand.mentionsMap) {
 				const m = window.app.expand.mentionsMap.get(r.target_mention);
 				if (m) {
@@ -701,6 +720,15 @@ class PersonEditor {
 					const mn = (m.middle_name || '').split(':')[0];
 					const ln = (m.last_name || '').split(':')[0];
 					linkedName = [fn, mn, ln].filter(Boolean).join(' ').trim();
+
+					let by = (m.birth_year || '').split(':')[0].trim();
+					if (!by && m.original_data) by = String(m.original_data.birth_year || '').split(':')[0].trim();
+					if (!by && m.original_data && m.original_data.age && m.source && typeof window.app.expand._getCensusYear === 'function') {
+						const age = parseInt(m.original_data.age, 10);
+						const cYear = parseInt(window.app.expand._getCensusYear(m.source), 10);
+						if (!isNaN(age) && !isNaN(cYear)) by = String(cYear - age);
+					}
+					if (by) birthYearStr = ` (${by})`;
 				}
 			}
 			if (!linkedName) linkedName = r.target_mention;
@@ -711,7 +739,11 @@ class PersonEditor {
 				'isSiblingOf': 'SIBLING',
 				'isSpouseOf': 'SPOUSE',
 				'inHouseholdOf': 'HOUSEMATE',
-				'isCousinOf': 'COUSIN'
+				'inFamilyOf': 'FAMILY',
+				'isCousinOf': 'COUSIN',
+				'isEnslaverOf': 'ENSLAVER',
+				'wasEnslavedBy': 'ENSLAVED',
+				'enslaves': 'ENSLAVER'
 			};
 			let predRaw = predLabelMap[r.predicate];
 			if (!predRaw) {
@@ -720,7 +752,7 @@ class PersonEditor {
 
 			const toBoldMap = { 'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭' };
 			const pred = predRaw.split('').map(c => toBoldMap[c] || c).join('');
-			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)} - ${pred}</option>`);
+			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)}${PersonEditor.escapeHtml(birthYearStr)} - ${pred}</option>`);
 		});
 
 		$sel.on('change', function (e) {
@@ -738,6 +770,134 @@ class PersonEditor {
 		});
 
 		$chip.append($sel);
+		const $rightContainer = $(`<div style="flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
+		$val.append($rightContainer);
+		$row.append($val);
+		return $row;
+	}
+
+	/* ----- relationship row ----- */
+	static renderRelationshipRow(person, cfg, state) {
+		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS.relationship] || PersonEditor.RAMP['c-blue'];
+		const $row = $(`<div class="vpe-row vpe-row-relationship"></div>`);
+		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
+
+		// VALUE - colored pill background container with white chip inside
+		const $val = $(`<div class="vpe-value-pill" style="background:${ramp_[0]};"></div>`);
+
+		const options = [
+			{ label: 'Parent', value: 'isParentOf' },
+			{ label: 'Child', value: 'isChildOf' },
+			{ label: 'Sibling', value: 'isSiblingOf' },
+			{ label: 'Cousin', value: 'isCousinOf' },
+			{ label: 'Spouse', value: 'isSpouseOf' },
+			{ label: 'Enslaver', value: 'isEnslaverOf' },
+			{ label: 'Anchor', value: 'NULL' }
+		];
+
+		// Determine current predicate from person.anchor
+		let currentPred = 'NULL';
+		if (person.anchor) {
+			const pStr = String(person.anchor).split(':')[0];
+			if (options.some(o => o.value === pStr)) {
+				currentPred = pStr;
+			}
+		}
+
+		const currentOpt = options.find(o => o.value === currentPred) || options.find(o => o.value === 'NULL');
+
+		const $chip = $(`<span class="vpe-chip" style="position: relative; background:#FFFFFF; border:1px solid #d0d0d0; border-radius:999px; padding:2px 10px; color:#333; display:inline-flex; align-items:center;"></span>`);
+		const $chipText = $(`<span>${PersonEditor.escapeHtml(currentOpt.label)}</span>`);
+		$chip.append($chipText);
+
+		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"></select>`);
+		options.forEach(o => {
+			const isSel = (o.value === currentPred);
+			$sel.append(`<option value="${o.value}" ${isSel ? 'selected' : ''} style="color:${ramp_[1]}">${PersonEditor.escapeHtml(o.label)}</option>`);
+		});
+
+		$sel.on('change', function () {
+			const selVal = $(this).val();
+			const foundOpt = options.find(o => o.value === selVal);
+			if (foundOpt) {
+				$chipText.text(foundOpt.label);
+			}
+
+			// Update anchor property on person and app.curTree
+			let newAnchor = null;
+			if (selVal && selVal !== 'NULL') {
+				let targetPid = null;
+				if (person.anchor && person.anchor.includes(':')) {
+					targetPid = person.anchor.split(':')[1];
+				}
+				if (!targetPid && window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid && window.treeApp.state.selectedPid !== person.person_id) {
+					targetPid = window.treeApp.state.selectedPid;
+				}
+				if (!targetPid) {
+					const modalEl = document.getElementById('add-node-modal');
+					if (modalEl && modalEl.dataset && modalEl.dataset.sourcePid && modalEl.dataset.sourcePid !== person.person_id) {
+						targetPid = modalEl.dataset.sourcePid;
+					}
+				}
+				if (!targetPid && window.app && window.app.curTree && Array.isArray(window.app.curTree.relationships)) {
+					const rel = window.app.curTree.relationships.find(r => r.subject_id === person.person_id || r.object_id === person.person_id);
+					if (rel) {
+						targetPid = (rel.subject_id === person.person_id) ? rel.object_id : rel.subject_id;
+					}
+				}
+				if (!targetPid && window.app && window.app.curTree && window.app.curTree.persons) {
+					const pList = Array.isArray(window.app.curTree.persons) ? window.app.curTree.persons : Object.values(window.app.curTree.persons);
+					const otherP = pList.find(p => p.person_id !== person.person_id);
+					if (otherP) targetPid = otherP.person_id;
+				}
+				if (!targetPid) targetPid = 'P001';
+				newAnchor = `${selVal}:${targetPid}`;
+			}
+
+			person.anchor = newAnchor;
+
+			if (window.app && window.app.curTree && window.app.curTree.persons) {
+				const pList = window.app.curTree.persons;
+				let appPerson = Array.isArray(pList) ? pList.find(p => p.person_id === person.person_id) : pList[person.person_id];
+				if (appPerson) {
+					appPerson.anchor = newAnchor;
+					if (selVal === 'isEnslaverOf') {
+						appPerson.isEnslaver = true;
+					}
+				}
+			}
+
+			if (window.treeApp && typeof window.treeApp.SaveState === 'function') {
+				window.treeApp.SaveState();
+			}
+
+			if (window.treeApp) {
+				const node = window.treeApp.GetNode(person.person_id);
+				if (node) {
+					node.anchor = newAnchor;
+					if (selVal === 'isEnslaverOf') node.isEnslaver = true;
+				}
+				window.treeApp.isDirty = true;
+			}
+
+			// Re-build all relationships so new anchor edge is added to curTree.relationships & state.triplets
+			if (window.app && typeof window.app.rebuildAllRelationships === 'function') {
+				window.app.rebuildAllRelationships();
+			} else if (window.app && typeof window.app.processLoadedPersons === 'function') {
+				window.app.processLoadedPersons();
+			}
+
+			if (window.treeApp) {
+				if (typeof window.treeApp.ApplyLayout === 'function') window.treeApp.ApplyLayout(true);
+				if (typeof window.treeApp.RenderNodes === 'function') window.treeApp.RenderNodes();
+				if (typeof window.treeApp.RenderEdges === 'function') window.treeApp.RenderEdges();
+				if (typeof window.treeApp.FitToScreen === 'function') window.treeApp.FitToScreen(200, true);
+			}
+		});
+
+		$chip.append($sel);
+		$val.append($chip);
+
 		const $rightContainer = $(`<div style="flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
 		$val.append($rightContainer);
 		$row.append($val);
@@ -943,67 +1103,132 @@ class PersonEditor {
 		$footer.append($verity, $right);
 	}
 
+	static getSourceLabel(val, county = 'AUG') {
+		const currentCounty = (window.app && window.app.county) ? String(window.app.county).toUpperCase() : String(county).toUpperCase();
+		if (window.GlobalSources) {
+			const keys = Object.keys(window.GlobalSources);
+			for (let k of keys) {
+				const kUpper = k.toUpperCase();
+				if (kUpper.startsWith(currentCounty + '-') || kUpper.startsWith(currentCounty + '_')) {
+					let sParts = kUpper.split('-');
+					let core = sParts.length > 1 ? sParts.slice(1).join('-') : kUpper;
+					if (core === val || (core === 'VR' && val.startsWith('VR'))) {
+						const srcData = window.GlobalSources[k];
+						if (srcData && typeof srcData === 'object' && srcData.title) {
+							if (val === 'VRB') return 'Birth Records';
+							if (val === 'VRM') return 'Marriage Records';
+							if (val === 'VRD') return 'Death Records';
+							return srcData.title;
+						}
+					}
+				}
+			}
+		}
+
+		const labelMap = {
+			'CN-1880': '1880 Census',
+			'CN-1870': '1870 Census',
+			'CN-1860': '1860 Census',
+			'CN-1900': '1900 Census',
+			'SS-1860': '1860 Slave Schedule',
+			'SS-1850': '1850 Slave Schedule',
+			'FG': 'Find A Grave',
+			'VRB': 'Birth Records',
+			'VRM': 'Marriage Records',
+			'VRD': 'Death Records',
+			'VR': 'Vital Records',
+			'CH': 'Church Records',
+			'FBR': 'Free Black Register',
+			'FL': 'Freemans Records',
+			'SB': 'Slave Births',
+			'CC': 'Cohabitation Children',
+			'CF': 'Cohabitation Families'
+		};
+		if (labelMap[val]) return labelMap[val];
+		const cnMatch = String(val).match(/^CN-(\d{4})$/i);
+		if (cnMatch) return `${cnMatch[1]} Census`;
+		const ssMatch = String(val).match(/^SS-(\d{4})$/i);
+		if (ssMatch) return `${ssMatch[1]} Slave Schedule`;
+		return val;
+	}
+
 	static renderSourcesDropdown($wrap, state) {
 		$wrap.empty();
 
-		const allSourceOptions = [
-			{ label: '1880 Census', value: 'CN-1880' },
-			{ label: '1870 Census', value: 'CN-1870' },
-			{ label: '1860 Census', value: 'CN-1860' },
-			{ label: '1860 Slave Schedule', value: 'SS-1860' },
-			{ label: '1850 Slave Schedule', value: 'SS-1850' },
-			{ label: 'Find A Grave', value: 'FG' },
-			{ label: 'Birth Records', value: 'VRB' },
-			{ label: 'Marriage Records', value: 'VRM' },
-			{ label: 'Death Records', value: 'VRD' },
-			{ label: 'Vital Records', value: 'VR' },
-			{ label: 'Church Records', value: 'CH' },
-			{ label: 'Free Black Register', value: 'FBR' },
-			{ label: 'Freemans Records', value: 'FL' },
-			{ label: 'Orange FL', value: 'Orange FL' },
-			{ label: 'Slave Births', value: 'SB' },
-			{ label: 'Cohabitation Children', value: 'CC' },
-			{ label: 'Cohabitation Families', value: 'CF' }
-		];
-
 		const currentCounty = (window.app && window.app.county) ? String(window.app.county).toUpperCase() : 'AUG';
-		const knownSources = new Set();
+		const optionsMap = new Map();
 
 		if (window.GlobalSources) {
 			Object.keys(window.GlobalSources).forEach(k => {
+				const srcData = window.GlobalSources[k];
 				const kUpper = k.toUpperCase();
 				if (kUpper.startsWith(currentCounty + '-') || kUpper.startsWith(currentCounty + '_')) {
-					knownSources.add(kUpper);
+					let sParts = kUpper.split('-');
+					let core = sParts.length > 1 ? sParts.slice(1).join('-') : kUpper;
+					let title = (srcData && typeof srcData === 'object' && srcData.title) ? srcData.title : core;
+
+					if (core === 'VR') {
+						optionsMap.set('VRB', 'Birth Records');
+						optionsMap.set('VRM', 'Marriage Records');
+						optionsMap.set('VRD', 'Death Records');
+						optionsMap.set('VR', title || 'Vital Records');
+					} else {
+						optionsMap.set(core, title);
+					}
 				}
 			});
 		}
+
 		if (state && state.sources) {
 			Object.keys(state.sources).forEach(k => {
 				const kUpper = k.toUpperCase();
 				if (kUpper.startsWith(currentCounty + '-') || kUpper.startsWith(currentCounty + '_')) {
-					knownSources.add(kUpper);
+					let sParts = kUpper.split('-');
+					let core = sParts.length > 1 ? sParts.slice(1).join('-') : kUpper;
+					if (!optionsMap.has(core)) {
+						optionsMap.set(core, PersonEditor.getSourceLabel(core, currentCounty));
+					}
 				}
 			});
 		}
 
-		const sourceOptions = allSourceOptions.filter(opt => {
-			if (opt.value === 'ALL') return true;
-			if (opt.value === 'Orange FL') return true;
-			if (knownSources.size === 0) return true;
+		if (optionsMap.size === 0) {
+			const defaultFallbacks = [
+				{ value: 'CN-1880', label: '1880 Census' },
+				{ value: 'CN-1870', label: '1870 Census' },
+				{ value: 'CN-1860', label: '1860 Census' },
+				{ value: 'CN-1900', label: '1900 Census' },
+				{ value: 'SS-1860', label: '1860 Slave Schedule' },
+				{ value: 'SS-1850', label: '1850 Slave Schedule' },
+				{ value: 'FG', label: 'Find A Grave' },
+				{ value: 'VRB', label: 'Birth Records' },
+				{ value: 'VRM', label: 'Marriage Records' },
+				{ value: 'VRD', label: 'Death Records' },
+				{ value: 'VR', label: 'Vital Records' },
+				{ value: 'CH', label: 'Church Records' },
+				{ value: 'FBR', label: 'Free Black Register' },
+				{ value: 'FL', label: 'Freemans Records' },
+				{ value: 'SB', label: 'Slave Births' },
+				{ value: 'CC', label: 'Cohabitation Children' },
+				{ value: 'CF', label: 'Cohabitation Families' }
+			];
+			defaultFallbacks.forEach(opt => optionsMap.set(opt.value, opt.label));
+		}
 
-			for (let src of knownSources) {
-				let sParts = src.split('-');
-				let core = sParts.length > 1 && (sParts[0] === 'ALB' || sParts[0] === 'AUG' || sParts[0] === 'FAQ' || sParts[0] === 'ORF')
-					? sParts.slice(1).join('-')
-					: src;
-
-				if (core === opt.value) return true;
-				if (core.startsWith('VR') && (opt.value.startsWith('VR') || opt.value === 'VR')) return true;
-				if (opt.value.includes('-') && core.startsWith(opt.value)) return true;
-				if (!opt.value.includes('-') && (core === opt.value || core.startsWith(opt.value))) return true;
-			}
-			return false;
+		const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VRB', 'VRM', 'VRD', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
+		const sortedKeys = Array.from(optionsMap.keys()).sort((a, b) => {
+			let idxA = preferredOrder.indexOf(a);
+			let idxB = preferredOrder.indexOf(b);
+			if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+			if (idxA !== -1) return -1;
+			if (idxB !== -1) return 1;
+			return a.localeCompare(b);
 		});
+
+		const sourceOptions = sortedKeys.map(val => ({
+			value: val,
+			label: optionsMap.get(val)
+		}));
 
 		const ids = Object.keys(state.sources);
 		const allChecked = ids.length > 0 && ids.every(id => state.sources[id].checked);
@@ -1052,19 +1277,6 @@ class PersonEditor {
 		$select.on('change', function () {
 			const newSel = $(this).val();
 
-			if (newSel === 'Orange FL') {
-				if (window.app) {
-					if (window.app.county !== 'ORF') {
-						window.app.county = 'ORF';
-						window.app.source = 'Orange FL';
-						const urlParams = new URLSearchParams(window.location.search);
-						urlParams.set('c', 'ORF');
-						window.location.search = urlParams.toString();
-						return;
-					}
-				}
-			}
-
 			if (window.app) window.app.source = newSel;
 
 			// Clear existing checked
@@ -1105,7 +1317,7 @@ class PersonEditor {
 
 		const fields = [];
 		PersonEditor.FIELD_CONFIG.forEach(cfg => {
-			if (cfg.editKind === 'linked') return;
+			if (cfg.editKind === 'linked' || cfg.editKind === 'relationship') return;
 			const f = state.fields[cfg.key];
 			if (!f) return;
 			const sel = f.selected;
