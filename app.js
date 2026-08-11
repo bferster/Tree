@@ -275,6 +275,24 @@ class App {
 			});
 		});
 
+		// Fail-safe birth year check on all isChildOf relationships: child (subject_id) must be younger than parent (object_id)
+		const personMap = new Map(persons.map(p => [p.person_id, p]));
+		newRelationships.forEach(r => {
+			if (r.predicate === 'isChildOf') {
+				const childP = personMap.get(r.subject_id);
+				const parentP = personMap.get(r.object_id);
+				if (childP && parentP) {
+					const childBirth = parseInt((childP.birth_year || '').split(':')[0], 10);
+					const parentBirth = parseInt((parentP.birth_year || '').split(':')[0], 10);
+					if (!isNaN(childBirth) && !isNaN(parentBirth) && childBirth < parentBirth - 10) {
+						const temp = r.subject_id;
+						r.subject_id = r.object_id;
+						r.object_id = temp;
+					}
+				}
+			}
+		});
+
 		// Remove conflicting relationships between parents and children (e.g. child cannot be sibling/cousin to parent)
 		const parentChildPairs = new Set();
 		newRelationships.forEach(r => {
@@ -632,15 +650,9 @@ class App {
 		const mention = this.mentions.find(m => equivalents.has(String(m.mention_id).trim()));
 		if (!mention) return;
 
-		let targetPerson = null;
-		if (window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid && this.curTree && this.curTree.persons) {
-			const pList = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons);
-			targetPerson = pList.find(p => p.person_id === window.treeApp.state.selectedPid) || null;
-		}
-
 		// Switch to Mentions tab and load this mention directly
 		$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
-		this.mentionsEditor.load(targetPerson, [], [mention]);
+		this.mentionsEditor.load(null, [], [mention]);
 	}
 
 	sourceMatches(mentionSource, targetSources) {

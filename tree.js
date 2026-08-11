@@ -1967,24 +1967,6 @@ class TreeApp {
 			}
 		});
 
-		// Enforce parent-child depth hierarchy: children MUST be at least 1 depth level below their parents
-		vTriplets.forEach(t => {
-			let pId = null, cId = null;
-			if (t.predicate === 'isChildOf') {
-				cId = t.subject;
-				pId = t.object;
-			} else if (t.predicate === 'isParentOf') {
-				pId = t.subject;
-				cId = t.object;
-			}
-			if (pId && cId) {
-				const parentDepth = depths[pId] !== undefined ? depths[pId] : 0;
-				if (depths[cId] === undefined || depths[cId] <= parentDepth) {
-					depths[cId] = parentDepth + 1;
-				}
-			}
-		});
-
 		const nodesByDepth = {};
 		vNodes.forEach(n => {
 			let d = depths[n.person_id] || 0;

@@ -677,7 +677,6 @@ class PersonEditor {
 				if (view && view.results) {
 					view.results.forEach(res => {
 						if (res.predicate === 'isNeighborOf') return;
-						if (res.direction === 'composed') return; // Exclude indirect composed multi-hop inferences
 						if (person.mentions.includes(res.mention_id)) return; // Don't list as a relative if already merged into this person
 
 						const existing = uniqueRelsMap.get(res.mention_id);
@@ -712,7 +711,6 @@ class PersonEditor {
 		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"><option value="" selected disabled>Select to jump...</option></select>`);
 		rels.forEach((r, i) => {
 			let linkedName = `Mention ${r.target_mention}`;
-			let birthYearStr = '';
 			if (window.app && window.app.expand && window.app.expand.mentionsMap) {
 				const m = window.app.expand.mentionsMap.get(r.target_mention);
 				if (m) {
@@ -720,15 +718,6 @@ class PersonEditor {
 					const mn = (m.middle_name || '').split(':')[0];
 					const ln = (m.last_name || '').split(':')[0];
 					linkedName = [fn, mn, ln].filter(Boolean).join(' ').trim();
-
-					let by = (m.birth_year || '').split(':')[0].trim();
-					if (!by && m.original_data) by = String(m.original_data.birth_year || '').split(':')[0].trim();
-					if (!by && m.original_data && m.original_data.age && m.source && typeof window.app.expand._getCensusYear === 'function') {
-						const age = parseInt(m.original_data.age, 10);
-						const cYear = parseInt(window.app.expand._getCensusYear(m.source), 10);
-						if (!isNaN(age) && !isNaN(cYear)) by = String(cYear - age);
-					}
-					if (by) birthYearStr = ` (${by})`;
 				}
 			}
 			if (!linkedName) linkedName = r.target_mention;
@@ -752,7 +741,7 @@ class PersonEditor {
 
 			const toBoldMap = { 'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭' };
 			const pred = predRaw.split('').map(c => toBoldMap[c] || c).join('');
-			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)}${PersonEditor.escapeHtml(birthYearStr)} - ${pred}</option>`);
+			$sel.append(`<option value="rel_${i}" style="color:${ramp_[1]}">${PersonEditor.escapeHtml(linkedName)} - ${pred}</option>`);
 		});
 
 		$sel.on('change', function (e) {
