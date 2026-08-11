@@ -233,6 +233,22 @@ class ExpandAssertions {
 						const members = this.mentionsByFamily.get(famKey) || [];
 						for (const member of members) {
 							if (member.mention_id !== id) {
+								// For census sources without explicit relation strings (e.g. 1870/1860),
+								// ensure family members share the surname/soundex to avoid grouping unrelated households sharing a generic family_id
+								const mSur = (m.last_name || '').split(':')[0].trim().toLowerCase();
+								const memSur = (member.last_name || '').split(':')[0].trim().toLowerCase();
+								const mSx = (m.soundex_last_name || m.metaphone_last_name || '').split(':')[0].trim().toLowerCase();
+								const memSx = (member.soundex_last_name || member.metaphone_last_name || '').split(':')[0].trim().toLowerCase();
+
+								const hasExplicitRel = Boolean((member.original_data && (member.original_data.relation || member.original_data.Relation)) || member.relation);
+								if (!hasExplicitRel && mSur && memSur) {
+									const surMatch = (mSur === memSur);
+									const sxMatch = (mSx && memSx && mSx === memSx);
+									if (!surMatch && !sxMatch) {
+										continue; // Skip unrelated surname sharing a generic family_id
+									}
+								}
+
 								const virtualAssertion = { subject_id: id, predicate: 'inFamilyOf', object_id: member.mention_id, start_year: year, end_year: '' };
 								addResult(this._row(member.mention_id, 'inFamilyOf', 1.0, 'stored', virtualAssertion, null));
 							}

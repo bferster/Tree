@@ -595,7 +595,7 @@ class PersonEditor {
 
 			const $rightContainer = $(`<div style="flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
 			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
-			const $sourceText = $(`<span style="color:${isNull ? 'transparent' : ramp_[1]}; padding:0 4px; font-size:14px; font-weight:normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
+			const $sourceText = $(`<span style="color:${isNull ? 'transparent' : ramp_[1]}; padding:0 4px; font-size:13px; font-weight:normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
 
 			$sourceText.on('click', function () {
 				if (val2 && val2 !== 'Added') {
@@ -608,7 +608,7 @@ class PersonEditor {
 		} else {
 			$val.append($chip);
 			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
-			const $sourceText = $(`<span style="color:${ramp_[1]}; padding:0 4px; font-size:14px; font-weight:normal; margin-left:auto; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
+			const $sourceText = $(`<span style="color:${ramp_[1]}; padding:0 4px; font-size:13px; font-weight:normal; margin-left:auto; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
 			$sourceText.on('click', function () {
 				if (val2 && val2 !== 'Added') {
 					$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
@@ -622,7 +622,7 @@ class PersonEditor {
 		// COMPARE / MATCH
 		const $compareCol = $(`<div style="display:flex; align-items:center; gap:8px;"></div>`);
 		const compareOpts = cfg.compareOptions || ['Exact', 'Ignore'];
-		const $matchSel = $(`<select style="width:115px; min-width:115px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:3px 6px; font-size:14px; cursor:pointer; color:#333; box-sizing:border-box;"></select>`);
+		const $matchSel = $(`<select style="width:115px; min-width:115px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:3px 6px; font-size:13px; cursor:pointer; color:#333; box-sizing:border-box;"></select>`);
 
 		compareOpts.forEach(opt => {
 			const isSel = (fstate.match === opt);
@@ -646,7 +646,7 @@ class PersonEditor {
 
 		if (cfg.hasRare) {
 			const isRareChecked = fstate.rare !== undefined ? fstate.rare : false;
-			const $rareLabel = $(`<label style="display:flex; align-items:center; gap:3px; font-size:14px; color:#444; cursor:pointer; white-space:nowrap;"><input type="checkbox" ${isRareChecked ? 'checked' : ''} style="cursor:pointer;"> Rare</label>`);
+			const $rareLabel = $(`<label style="display:flex; align-items:center; gap:3px; font-size:13px; color:#444; cursor:pointer; white-space:nowrap;"><input type="checkbox" ${isRareChecked ? 'checked' : ''} style="cursor:pointer;"> Rare</label>`);
 			$rareLabel.find('input').on('change', function () {
 				const checked = $(this).is(':checked');
 				fstate.rare = checked;
@@ -752,6 +752,7 @@ class PersonEditor {
 				const rel = rels[idx];
 				if (rel && rel.target_mention && window.app && typeof window.app.editMention === 'function') {
 					window.app.curRelation = rel.predicate;
+					window.app.targetPerson = person;
 					window.app.editMention(rel.target_mention);
 				}
 				$(this).val(''); // Reset
@@ -1054,7 +1055,7 @@ class PersonEditor {
 				border: 0.5px solid #f0f0f0;
 				border-radius: 6px;
 				padding: 8px 24px 8px 12px;
-				font-size: 15px;
+				font-size: 14px;
 				font-weight: 500;
 				cursor: pointer;
 				appearance: none;
@@ -1246,7 +1247,7 @@ class PersonEditor {
 				border: 0.5px solid #f0f0f0;
 				border-radius: 6px;
 				padding: 8px 24px 8px 12px;
-				font-size: 15px;
+				font-size: 14px;
 				font-weight: 500;
 				cursor: pointer;
 				appearance: none;
@@ -1359,21 +1360,21 @@ class PersonEditor {
       .vpe-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.25rem; }
       .vpe-dialog { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         background:#fff; border-radius:12px; border:1px solid #e3ddd5; box-shadow:0 2px 8px rgba(0,0,0,0.06); width:100%; box-sizing:border-box; padding:0.5rem; overflow:hidden; }
-      .vpe-title { margin:0; font-size:17px; font-weight:600; }
-      .vpe-target-summary { font-size:20px; font-weight:600; color:#333; margin:2px 0 0; }
-      .vpe-close { font-size:22px; color:#757575; cursor:pointer; }
-      .vpe-section-label { font-size:15px; font-weight:500; letter-spacing:.05em; color:#9e9e9e; margin:0 0 .75rem; }
+      .vpe-title { margin:0; font-size:16px; font-weight:600; }
+      .vpe-target-summary { font-size:19px; font-weight:600; color:#333; margin:2px 0 0; }
+      .vpe-close { font-size:21px; color:#757575; cursor:pointer; }
+      .vpe-section-label { font-size:14px; font-weight:500; letter-spacing:.05em; color:#9e9e9e; margin:0 0 .75rem; }
       .vpe-row { display:grid; grid-template-columns:125px 255px 210px; gap:8px 12px; align-items:center;
         padding:4px 8px; border-top:0.5px solid #f0f0f0; }
-      .vpe-row-header { font-size:14px; font-weight:500; color:#9e9e9e; border-top:none; padding:4px 8px; }
+      .vpe-row-header { font-size:13px; font-weight:500; color:#9e9e9e; border-top:none; padding:4px 8px; }
       .vpe-row-linked { grid-template-columns:125px 1fr; }
-      .vpe-field-label { font-size:15px; font-weight:500; }
+      .vpe-field-label { font-size:14px; font-weight:500; }
       .vpe-value-pill { display:flex; align-items:center; flex-wrap:nowrap; gap:4px; width:100%; box-sizing:border-box;
         min-height:28px; border-radius:999px; padding:2px 8px; overflow:hidden; }
-      .vpe-chip { display:inline-flex; align-items:center; gap:4px; font-size:14px; padding:2px 10px;
+      .vpe-chip { display:inline-flex; align-items:center; gap:4px; font-size:13px; padding:2px 10px;
         border-radius:999px; white-space:nowrap; width:fit-content; max-width:100%; flex:0 0 auto; min-height:22px; background:#fff; box-sizing:border-box; }
       .vpe-value-pill select, .vpe-value-pill input[type=text] {
-        font-size:14px; height:24px; padding:0 2px; min-width:0; flex:1; width:100%; background:transparent;
+        font-size:13px; height:24px; padding:0 2px; min-width:0; flex:1; width:100%; background:transparent;
         border:none; }
       .vpe-star-row { display:flex; gap:3px; align-items:center; }
       .vpe-compare-row { display:flex; flex-wrap:wrap; gap:6px; }
@@ -1407,7 +1408,7 @@ class PersonEditor {
         align-items: center;
         gap: 4px;
         font-weight: normal;
-        font-size: 13px;
+        font-size: 12px;
         text-transform: none;
         cursor: pointer;
         color: #333;
@@ -1424,20 +1425,20 @@ class PersonEditor {
         background: #fbfaf8;
         margin-bottom: -11px;
       }
-      .vpe-pill { display:inline-flex; align-items:center; font-size:14px; padding:4px 12px; border-radius:999px;
+      .vpe-pill { display:inline-flex; align-items:center; font-size:13px; padding:4px 12px; border-radius:999px;
         white-space:nowrap; cursor:pointer; border:0.5px solid #f0f0f0; background:transparent; color:#757575; }
       .vpe-pill.active { background:#eaf2fb; color:#185fa5; border-color:#b5d4f4; }
       .vpe-footer { display:flex; justify-content:space-between; align-items:center; gap:8px;
         margin-top:1.5rem; padding-top:1rem; border-top:0.5px solid #f0f0f0; }
       .vpe-verity { display:flex; align-items:center; gap:6px; }
-      .vpe-verity-label { font-size:15px; font-weight:500; color:#757575; }
+      .vpe-verity-label { font-size:14px; font-weight:500; color:#757575; }
       .vpe-footer-right { display:flex; align-items:center; gap:8px; position:relative; }
       .vpe-sources-wrap { position:relative; }
       .vpe-sources-btn { display:flex; align-items:center; gap:6px; background:transparent; border:0.5px solid #f0f0f0;
-        border-radius:6px; padding:8px 12px; font-size:15px; font-weight:500; cursor:pointer; }
+        border-radius:6px; padding:8px 12px; font-size:14px; font-weight:500; cursor:pointer; }
       .vpe-search-btn { display:flex; align-items:center; gap:6px; background:#eaf2fb; border:1px solid #b5d4f4;
         border-radius:6px; padding:8px 16px; color:#185fa5; text-transform:uppercase; letter-spacing:.04em;
-        font-size:14px; font-weight:600; cursor:pointer; }
+        font-size:13px; font-weight:600; cursor:pointer; }
     `;
 		$('<style>').text(css).appendTo('head');
 	}

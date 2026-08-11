@@ -306,30 +306,37 @@ class MentionsEditor {
 
 		const pid = 'P' + Date.now();
 		const mid = this.currentMentionId;
-		const anchorPid = (this.targetPerson && this.targetPerson.person_id) || window.treeApp.state.selectedPid;
+		const targetP = this.targetPerson || (window.app && window.app.targetPerson);
+		const anchorPid = (targetP && targetP.person_id) || window.treeApp.state.selectedPid;
 		
 		let relation = (window.app && window.app.curRelation) ? window.app.curRelation : null;
+		if (relation === 'inFamilyOf' || relation === 'inHouseholdOf') {
+			relation = null;
+		}
 
-		// 1. Check birth year gap first if both birth years are present
-		if (!relation && this.targetPerson) {
-			const targetBirth = parseInt((this.targetPerson.birth_year || '').split(':')[0], 10);
-			const mentionBirth = parseInt((mention.birth_year || '').split(':')[0], 10);
+		// Compare birth years to determine predicate if not an explicit kinship relation
+		if (!relation && targetP) {
+			const targetBirth = parseInt(String(targetP.birth_year || '').split(':')[0], 10);
+			const mentionBirth = parseInt(String(mention.birth_year || '').split(':')[0], 10);
 			if (!isNaN(targetBirth) && !isNaN(mentionBirth)) {
-				if (mentionBirth - targetBirth >= 10) {
+				const diff = mentionBirth - targetBirth;
+				if (Math.abs(diff) <= 13) {
+					relation = 'isSpouseOf';
+				} else if (diff > 13) {
 					relation = 'isChildOf';
-				} else if (targetBirth - mentionBirth >= 10) {
+				} else if (diff < -13) {
 					relation = 'isParentOf';
 				}
 			}
 		}
 
-		// 2. Look up relationship assertion from expand view if relation not resolved by birth years
-		if (!relation && this.targetPerson && this.targetPerson.mentions && window.app && window.app.expand) {
-			for (const tmid of this.targetPerson.mentions) {
+		// Look up relationship assertion from expand view if relation not resolved by birth years
+		if (!relation && targetP && targetP.mentions && window.app && window.app.expand) {
+			for (const tmid of targetP.mentions) {
 				const view = window.app.expand.viewFor(tmid);
 				if (view && view.results) {
 					const match = view.results.find(r => r.mention_id === mid);
-					if (match && match.predicate) {
+					if (match && match.predicate && match.predicate !== 'inFamilyOf' && match.predicate !== 'inHouseholdOf') {
 						relation = match.predicate;
 						break;
 					}
@@ -341,9 +348,10 @@ class MentionsEditor {
 			relation = 'isChildOf';
 		}
 
-		// Reset transient curRelation after use
+		// Reset transient curRelation and targetPerson after use
 		if (window.app) {
 			window.app.curRelation = null;
+			window.app.targetPerson = null;
 		}
 		
 		let initX = 200, initY = 200;
