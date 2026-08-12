@@ -27,15 +27,64 @@ class SearchBox {
 		this.createDialogDOM();
 		this.populateValues(initialValues);
 
-		if (typeof this.dialogElement.showModal === 'function') {
+		const dialog = this.dialogElement;
+		if (typeof dialog.showModal === 'function') {
 			try {
-				this.dialogElement.showModal();
+				if (!dialog.open) dialog.showModal();
 			} catch (e) {
-				$(this.dialogElement).show();
+				$(dialog).show();
 			}
 		} else {
-			$(this.dialogElement).show();
+			$(dialog).show();
 		}
+		this.bindDraggable(dialog);
+	}
+
+	bindDraggable(dialog) {
+		const header = dialog.querySelector('.vpe-header');
+		if (!header || dialog._isDraggableBound) return;
+		dialog._isDraggableBound = true;
+
+		header.style.cursor = 'move';
+
+		let isDragging = false;
+		let startX = 0, startY = 0;
+		let startLeft = 0, startTop = 0;
+
+		header.addEventListener('mousedown', (e) => {
+			if (e.target.closest('.vpe-close') || e.target.closest('select') || e.target.closest('input') || e.target.closest('button')) {
+				return;
+			}
+
+			isDragging = true;
+			startX = e.clientX;
+			startY = e.clientY;
+
+			const rect = dialog.getBoundingClientRect();
+			startLeft = rect.left;
+			startTop = rect.top;
+
+			dialog.style.position = 'fixed';
+			dialog.style.margin = '0';
+			dialog.style.left = `${startLeft}px`;
+			dialog.style.top = `${startTop}px`;
+			dialog.style.right = 'auto';
+			dialog.style.bottom = 'auto';
+
+			e.preventDefault();
+		});
+
+		document.addEventListener('mousemove', (e) => {
+			if (!isDragging) return;
+			const dx = e.clientX - startX;
+			const dy = e.clientY - startY;
+			dialog.style.left = `${startLeft + dx}px`;
+			dialog.style.top = `${startTop + dy}px`;
+		});
+
+		document.addEventListener('mouseup', () => {
+			isDragging = false;
+		});
 	}
 
 	closeDialog() {
@@ -213,9 +262,14 @@ class SearchBox {
 				</div>
 
 				<!-- Footer -->
-				<div class="vpe-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:1.25rem; padding-top:0.75rem; border-top:0.5px solid #f0f0f0;">
-					<button type="button" id="sb-cancel-btn" style="background:transparent; border:0.5px solid #d0d0d0; border-radius:6px; padding:8px 18px; font-size:14px; font-weight:500; cursor:pointer; color:#555;">CANCEL</button>
-					<button type="submit" id="sb-submit-btn" class="vpe-search-btn" style="background:#eaf2fb; border:1px solid #b5d4f4; border-radius:6px; padding:8px 20px; color:#185fa5; text-transform:uppercase; letter-spacing:.04em; font-size:14px; font-weight:600; cursor:pointer;"><i class="ti ti-search"></i>SEARCH</button>
+				<div class="vpe-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:1.25rem; padding-top:0.75rem; border-top:0.5px solid #f0f0f0;">
+					<div>
+						<button type="button" id="sb-toggle-all-btn" style="background:#f5f5f5; border:0.5px solid #d0d0d0; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:500; cursor:pointer; color:#333;" title="Toggle all match options between Exact and Ignore">Toggle All</button>
+					</div>
+					<div style="display:flex; gap:10px;">
+						<button type="button" id="sb-cancel-btn" style="background:transparent; border:0.5px solid #d0d0d0; border-radius:6px; padding:8px 18px; font-size:14px; font-weight:500; cursor:pointer; color:#555;">CANCEL</button>
+						<button type="submit" id="sb-submit-btn" class="vpe-search-btn" style="background:#eaf2fb; border:1px solid #b5d4f4; border-radius:6px; padding:8px 20px; color:#185fa5; text-transform:uppercase; letter-spacing:.04em; font-size:14px; font-weight:600; cursor:pointer;"><i class="ti ti-search"></i>SEARCH</button>
+					</div>
 				</div>
 			</form>
 		`;
@@ -225,6 +279,23 @@ class SearchBox {
 
 		document.getElementById('sb-close-x').addEventListener('click', () => this.closeDialog());
 		document.getElementById('sb-cancel-btn').addEventListener('click', () => this.closeDialog());
+		document.getElementById('sb-toggle-all-btn').addEventListener('click', () => {
+			const matchSelects = [
+				'#sb-first-name-match',
+				'#sb-last-name-match',
+				'#sb-race-match',
+				'#sb-gender-match',
+				'#sb-birth-year-match',
+				'#sb-death-year-match'
+			];
+			const hasNonIgnore = matchSelects.some(sel => $(sel).val() !== 'Ignore');
+			const targetVal = hasNonIgnore ? 'Ignore' : 'Exact';
+			const targetFbVal = hasNonIgnore ? 'Ignore' : 'Boost';
+
+			matchSelects.forEach(sel => $(sel).val(targetVal).trigger('change'));
+			$('#sb-family-boost-match').val(targetFbVal).trigger('change');
+		});
+
 		document.getElementById('sb-dialog-form').addEventListener('submit', (e) => {
 			e.preventDefault();
 			this.handleFormSubmit();
@@ -413,7 +484,6 @@ class SearchBox {
 
 	handleFormSubmit() {
 		const search_criteria = this.buildSearchCriteria();
-		this.closeDialog();
 		console.trace('SearchBox - Searching terms:', search_criteria);
 		const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
 		if (window.app && !window.app.score && window.Score) new window.Score();
@@ -421,9 +491,7 @@ class SearchBox {
 		const results = window.app.score.Search(mentionsArray, search_criteria);
 
 		if (typeof this.onSearchCallback === 'function') {
-			const cb = this.onSearchCallback;
-			this.onSearchCallback = null;
-			cb(results, search_criteria);
+			this.onSearchCallback(results, search_criteria);
 			return results;
 		}
 

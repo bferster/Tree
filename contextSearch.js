@@ -748,9 +748,10 @@ function highlightMostLikelyMatch() {
 
 				const results = globalApp.score.Search(mentionsArray, criteria);
 				if (results && results.length > 0) {
-					const topMentionId = results[0].mention_id || results[0].id;
+					const firstRes = results[0];
+					const topMentionId = (firstRes.mention && firstRes.mention.mention_id) ? firstRes.mention.mention_id : (firstRes.mention_id || firstRes.id);
 					if (idColIndex !== -1 && topMentionId) {
-						bestIndex = currentGrid.data.findIndex(row => String(row[idColIndex]) === String(topMentionId));
+						bestIndex = currentGrid.data.findIndex(row => String(row[idColIndex]).trim() === String(topMentionId).trim());
 					}
 				}
 			}
@@ -781,6 +782,9 @@ function highlightMostLikelyMatch() {
 		currentGrid.setHighlightIndex(bestIndex);
 	}
 }
+
+let lastSearchCriteriaKey = null;
+let currentOccurrenceIndex = 0;
 
 function openContextSearchDialog() {
 	const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
@@ -819,48 +823,76 @@ function openContextSearchDialog() {
 
 	SearchBox.openDialog(initialValues, (results, search_criteria) => {
 		const targetSource = search_criteria ? search_criteria.source : null;
+		const searchKey = JSON.stringify(search_criteria);
 
-		const highlightTopResult = () => {
+		if (searchKey === lastSearchCriteriaKey) {
+			currentOccurrenceIndex++;
+		} else {
+			lastSearchCriteriaKey = searchKey;
+			currentOccurrenceIndex = 0;
+		}
+
+		// Collect all matching mention IDs from results
+		const matchingMentionIds = [];
+		if (results && results.length > 0) {
+			results.forEach(res => {
+				const mid = (res.mention && res.mention.mention_id) ? res.mention.mention_id : (res.mention_id || res.id);
+				if (mid && !matchingMentionIds.includes(mid)) {
+					matchingMentionIds.push(mid);
+				}
+			});
+		}
+
+		const highlightResultOccurrence = () => {
 			if (!currentGrid || !currentGrid.data) return;
 			const idColIndex = currentGrid.headers.indexOf('mention_id');
-			let bestIndex = -1;
 
-			if (results && results.length > 0) {
-				const topMentionId = results[0].mention_id || results[0].id;
-				if (idColIndex !== -1 && topMentionId) {
-					bestIndex = currentGrid.data.findIndex(row => String(row[idColIndex]) === String(topMentionId));
-				}
+			// Build list of matching grid row indices
+			const matchingGridIndices = [];
+
+			if (idColIndex !== -1 && matchingMentionIds.length > 0) {
+				matchingMentionIds.forEach(mid => {
+					const idx = currentGrid.data.findIndex(row => String(row[idColIndex]).trim() === String(mid).trim());
+					if (idx !== -1 && !matchingGridIndices.includes(idx)) {
+						matchingGridIndices.push(idx);
+					}
+				});
 			}
 
-			if (bestIndex === -1 && search_criteria && search_criteria.fields) {
-				const terms = search_criteria.fields.map(f => String(f.value || '').toLowerCase()).filter(Boolean);
+			// Fallback: match row text string against active search fields
+			if (matchingGridIndices.length === 0 && search_criteria && search_criteria.fields) {
+				const terms = search_criteria.fields
+					.filter(f => f && f.match !== 'Ignore' && f.value)
+					.map(f => String(f.value).toLowerCase().trim())
+					.filter(Boolean);
+
 				if (terms.length > 0) {
-					let highestScore = -1;
 					currentGrid.data.forEach((row, idx) => {
 						const rowStr = row.map(v => String(v).toLowerCase()).join(' ');
-						let score = 0;
-						terms.forEach(t => { if (rowStr.includes(t)) score += 1; });
-						if (score > highestScore && score > 0) {
-							highestScore = score;
-							bestIndex = idx;
+						if (terms.every(t => rowStr.includes(t))) {
+							matchingGridIndices.push(idx);
 						}
 					});
 				}
 			}
 
-			if (bestIndex !== -1) {
-				currentGrid.setHighlightIndex(bestIndex);
+			if (matchingGridIndices.length > 0) {
+				const targetIndex = matchingGridIndices[currentOccurrenceIndex % matchingGridIndices.length];
+				currentGrid.setHighlightIndex(targetIndex);
 			}
 		};
 
 		const sourceSelectEl = document.getElementById('cs-source-select');
 		const curSourceVal = sourceSelectEl ? sourceSelectEl.value : '';
 
-		if (targetSource && targetSource !== curSourceVal && typeof ShowSource === 'function') {
-			ShowSource(targetSource);
-			setTimeout(highlightTopResult, 200);
+		const needsSourceLoad = !currentGrid || !currentGrid.data || currentGrid.data.length === 0 || (targetSource && targetSource !== curSourceVal);
+
+		if (needsSourceLoad && typeof ShowSource === 'function') {
+			ShowSource(targetSource || (matchingMentionIds.length > 0 ? matchingMentionIds[0] : null));
+			setTimeout(highlightResultOccurrence, 100);
+			setTimeout(highlightResultOccurrence, 350);
 		} else {
-			highlightTopResult();
+			highlightResultOccurrence();
 		}
 	});
 }
