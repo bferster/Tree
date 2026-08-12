@@ -18,11 +18,12 @@ class SearchBox {
 		return window._searchBoxInstance;
 	}
 
-	static openDialog(initialValues = {}) {
-		SearchBox.getInstance().showDialog(initialValues);
+	static openDialog(initialValues = {}, callback = null) {
+		SearchBox.getInstance().showDialog(initialValues, callback);
 	}
 
-	showDialog(initialValues = {}) {
+	showDialog(initialValues = {}, callback = null) {
+		this.onSearchCallback = callback || (typeof initialValues === 'object' && initialValues.onSearch ? initialValues.onSearch : null);
 		this.createDialogDOM();
 		this.populateValues(initialValues);
 
@@ -418,6 +419,13 @@ class SearchBox {
 		if (window.app && !window.app.score && window.Score) new window.Score();
 
 		const results = window.app.score.Search(mentionsArray, search_criteria);
+
+		if (typeof this.onSearchCallback === 'function') {
+			const cb = this.onSearchCallback;
+			this.onSearchCallback = null;
+			cb(results, search_criteria);
+			return results;
+		}
 
 		// Render results in Mentions Editor
 		if (window.app && window.app.mentionsEditor) {

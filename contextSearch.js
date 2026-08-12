@@ -39,19 +39,11 @@ class VirtualGrid {
 
 		if (widths) {
 			this.columnWidths = widths;
-			this.renderHeader(false);
-			this.updateViewport();
 		} else {
-			// First render header to determine widths
-			this.renderHeader(true);
-
-			// Use timeout to allow browser to calculate widths
-			setTimeout(() => {
-				this.measureWidths();
-				this.renderHeader(false);
-				this.updateViewport();
-			}, 0);
+			this.measureWidths();
 		}
+		this.renderHeader(false);
+		this.updateViewport();
 	}
 
 	setColumnWidths(widths) {
@@ -68,8 +60,40 @@ class VirtualGrid {
 	}
 
 	measureWidths() {
-		const ths = this.header.querySelectorAll('th');
-		this.columnWidths = Array.from(ths).map(th => th.offsetWidth);
+		if (!this.headers || !this.headers.length) return;
+
+		if (!VirtualGrid.canvasCtx) {
+			const canvas = document.createElement('canvas');
+			VirtualGrid.canvasCtx = canvas.getContext('2d');
+		}
+		const ctx = VirtualGrid.canvasCtx;
+
+		const headerFont = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+		const cellFont = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+		this.columnWidths = this.headers.map((h, colIdx) => {
+			ctx.font = headerFont;
+			const headerText = String(h || '').replace(/_/g, ' ');
+			const headerPixelWidth = ctx.measureText(headerText).width + 36;
+
+			ctx.font = cellFont;
+			let maxCellWidth = 0;
+			const sampleLimit = Math.min(this.data.length, 500);
+			for (let r = 0; r < sampleLimit; r++) {
+				const row = this.data[r];
+				if (row && row[colIdx] != null) {
+					const cellText = String(row[colIdx]);
+					if (cellText) {
+						const w = ctx.measureText(cellText).width;
+						if (w > maxCellWidth) maxCellWidth = w;
+					}
+				}
+			}
+			const dataPixelWidth = maxCellWidth + 28;
+
+			const calculatedWidth = Math.ceil(Math.max(headerPixelWidth, dataPixelWidth));
+			return Math.max(65, Math.min(calculatedWidth, 500));
+		});
 	}
 
 	getColorForHeader(str) {
@@ -135,6 +159,7 @@ class VirtualGrid {
 			const resizer = document.createElement('div');
 			resizer.className = 'resizer';
 			resizer.addEventListener('mousedown', (e) => this.initResize(e, th, i));
+			resizer.addEventListener('touchstart', (e) => this.initResize(e, th, i), { passive: false });
 			th.appendChild(resizer);
 
 			th.onclick = (e) => {
@@ -158,25 +183,33 @@ class VirtualGrid {
 	}
 
 	initResize(e, th, index) {
-		e.preventDefault();
-		const startX = e.pageX;
+		if (e.cancelable) e.preventDefault();
+		const getX = (evt) => (evt.touches && evt.touches.length > 0) ? evt.touches[0].pageX : (evt.pageX || evt.clientX);
+		const startX = getX(e);
 		const startWidth = th.offsetWidth;
 
-		const onMouseMove = (moveEvent) => {
-			const newWidth = startWidth + (moveEvent.pageX - startX);
+		const onMove = (moveEvent) => {
+			const currentX = getX(moveEvent);
+			const newWidth = Math.max(30, startWidth + (currentX - startX));
 			this.columnWidths[index] = newWidth;
 			th.style.width = `${newWidth}px`;
 			th.style.minWidth = `${newWidth}px`;
 			this.renderBody();
 		};
 
-		const onMouseUp = () => {
-			document.removeEventListener('mousemove', onMouseMove);
-			document.removeEventListener('mouseup', onMouseUp);
+		const onEnd = () => {
+			document.removeEventListener('mousemove', onMove);
+			document.removeEventListener('mouseup', onEnd);
+			document.removeEventListener('touchmove', onMove);
+			document.removeEventListener('touchend', onEnd);
+			document.removeEventListener('touchcancel', onEnd);
 		};
 
-		document.addEventListener('mousemove', onMouseMove);
-		document.addEventListener('mouseup', onMouseUp);
+		document.addEventListener('mousemove', onMove);
+		document.addEventListener('mouseup', onEnd);
+		document.addEventListener('touchmove', onMove, { passive: false });
+		document.addEventListener('touchend', onEnd);
+		document.addEventListener('touchcancel', onEnd);
 	}
 
 	updateViewport() {
@@ -333,6 +366,8 @@ async function ShowSource(mention_id) {
 .btn-search { background: #eaf2fb; color: #185fa5; border-color: #b5d4f4; }
 .btn-search:hover { transform: translateY(-1px); background-color: #dcedfc; }
 #results-display-pane { flex-grow: 1; background-color: #fff; overflow: auto; position: relative; width: 100%; box-sizing: border-box; }
+.cs-spinner { width: 32px; height: 32px; border: 3px solid rgba(0, 120, 215, 0.2); border-radius: 50%; border-top-color: #0078d7; animation: cs-spin 0.7s linear infinite; }
+@keyframes cs-spin { to { transform: rotate(360deg); } }
 `;
 		document.head.appendChild(style);
 	}
@@ -343,13 +378,22 @@ async function ShowSource(mention_id) {
 			<div style="display: flex; flex-direction: column; height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5;">
 				<div id="search-pane">
 					<div class="pane-label" id="cs-pane-label">Source Data</div>
-					<div class="search-grid">
-						<div class="search-actions">
-							<button id="cs-search-btn" class="btn btn-search"><i class="ti ti-search"></i>Search</button>
+					<div class="search-grid" style="display:flex; align-items:center; gap:12px; flex-grow:1;">
+						<div style="display:flex; align-items:center; gap:6px;">
+							<label for="cs-source-select" style="font-weight:500; font-size:0.8rem; color:#555; white-space:nowrap;">Source:</label>
+							<select id="cs-source-select" class="vpe-sources-btn" style="background:#fff; border:1px solid #d0d0d0; border-radius:999px; padding:4px 14px; font-size:13px; cursor:pointer; font-weight:500; min-width:160px; max-width:320px; color:#333; outline:none;"></select>
+						</div>
+						<div class="search-actions" style="margin-left:auto; display:flex; gap:8px;">
+							<button id="cs-search-btn" class="btn btn-search"><i class="ti ti-target"></i>Search</button>
+							<button id="cs-find-all-btn" class="btn btn-search" style="background:#f1f5f9; color:#475569; border-color:#cbd5e1;"><i class="ti ti-search"></i>Find All</button>
 						</div>
 					</div>
 				</div>
 				<div id="results-display-pane">
+					<div id="cs-loading-overlay" style="position: absolute; top:0; left:0; right:0; bottom:0; background: rgba(255, 255, 255, 0.8); display: none; justify-content: center; align-items: center; z-index: 500; flex-direction: column; gap: 8px;">
+						<div class="cs-spinner"></div>
+						<span style="font-size: 13px; font-weight: 500; color: #0078d7;">Loading source data...</span>
+					</div>
 					<div id="source-grid-container" style="height:100%; overflow:auto;">
 						<table class="data-grid">
 							<thead id="sg-header"></thead>
@@ -360,11 +404,25 @@ async function ShowSource(mention_id) {
 			</div>
 		`;
 
-		document.getElementById('cs-search-btn').addEventListener('click', () => {
+		document.getElementById('cs-search-btn')?.addEventListener('click', () => {
+			openContextSearchDialog();
+		});
+
+		document.getElementById('cs-find-all-btn')?.addEventListener('click', () => {
 			if (typeof SearchBox !== 'undefined') {
 				SearchBox.openDialog();
 			} else {
 				handleContextSearch();
+			}
+		});
+
+		document.getElementById('cs-source-select')?.addEventListener('change', (e) => {
+			const selSrc = e.target.value;
+			if (selSrc && typeof ShowSource === 'function') {
+				showContextLoading();
+				setTimeout(() => {
+					ShowSource(selSrc);
+				}, 20);
 			}
 		});
 	}
@@ -376,16 +434,87 @@ async function ShowSource(mention_id) {
 		$('#person-editor-container, #mentions-editor-container, #sources-editor-container, #chat-editor-container').hide();
 		$('#sources-editor-container').show();
 
+		showContextLoading();
 		setTimeout(() => {
 			renderSourceGrid(sourceData, targetMention.source, mention_id);
+			populateContextSourceDropdown(targetMention.source);
+			setTimeout(() => hideContextLoading(), 150);
 		}, 50);
 	}
+}
+
+function showContextLoading() {
+	const overlay = document.getElementById('cs-loading-overlay');
+	if (overlay) overlay.style.display = 'flex';
+}
+
+function hideContextLoading() {
+	const overlay = document.getElementById('cs-loading-overlay');
+	if (overlay) overlay.style.display = 'none';
+}
+
+function populateContextSourceDropdown(activeSource) {
+	const selectEl = document.getElementById('cs-source-select');
+	if (!selectEl) return;
+
+	const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+	if (!globalApp || !globalApp.mentions) return;
+
+	const currentCounty = globalApp.county ? String(globalApp.county).toUpperCase() : 'AUG';
+
+	// Collect unique sources from mentions
+	const allMentionSources = Array.from(new Set(globalApp.mentions.map(m => m.source).filter(Boolean)));
+
+	if (window.GlobalSources) {
+		Object.keys(window.GlobalSources).forEach(src => {
+			if (!allMentionSources.includes(src)) {
+				allMentionSources.push(src);
+			}
+		});
+	}
+
+	let matchingSources = allMentionSources.filter(src => {
+		const sUpper = src.toUpperCase();
+		return sUpper.startsWith(currentCounty + '-') || sUpper.startsWith(currentCounty + '_');
+	});
+	if (matchingSources.length === 0) {
+		matchingSources = allMentionSources;
+	} else if (activeSource && !matchingSources.includes(activeSource)) {
+		matchingSources.push(activeSource);
+	}
+
+	const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VRB', 'VRM', 'VRD', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
+	matchingSources.sort((a, b) => {
+		const getCore = (s) => s.includes('-') ? s.substring(s.indexOf('-') + 1) : s;
+		const coreA = getCore(a);
+		const coreB = getCore(b);
+		let idxA = preferredOrder.indexOf(coreA);
+		let idxB = preferredOrder.indexOf(coreB);
+		if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+		if (idxA !== -1) return -1;
+		if (idxB !== -1) return 1;
+		return a.localeCompare(b);
+	});
+
+	const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	selectEl.innerHTML = '';
+	matchingSources.forEach(src => {
+		let core = src.includes('-') ? src.substring(src.indexOf('-') + 1) : src;
+		let label = src;
+		if (typeof PersonEditor !== 'undefined' && PersonEditor.getSourceLabel) {
+			label = PersonEditor.getSourceLabel(core, currentCounty);
+		}
+		const display = label && label !== src ? `${label} (${src})` : src;
+		const isSelected = src === activeSource;
+		selectEl.insertAdjacentHTML('beforeend', `<option value="${esc(src)}" ${isSelected ? 'selected' : ''}>${esc(display)}</option>`);
+	});
 }
 
 function renderSourceGrid(mentionsList, sourceLabel, highlightMentionId) {
 	const excludeFields = [
 		'score', 'factors', 'confidence', 'nysiis_last_name', 'soundex_last_name',
-		'last_name', 'middle_name', 'first_name', 'norm_first_name', 'norm_occupation', 'narrative', 'norm_race', 'source', 'source_year', 'created_at'
+		'last_name', 'middle_name', 'first_name', 'norm_first_name', 'norm_occupation', 'narrative', 'norm_race', 'source', 'source_year', 'created_at',
+		'age', 'line', 'original_line', 'metaphone_last_name', 'household_id', 'family_id', 'fam-cen', 'dwell-cen'
 	];
 
 	if (!sourceLabel || !sourceLabel.includes('1880')) {
@@ -432,12 +561,37 @@ function renderSourceGrid(mentionsList, sourceLabel, highlightMentionId) {
 		headers.splice(newFullNameIdx + 1, 0, 'relation');
 	}
 
-	const familyIdIdx = headers.indexOf('family_id');
-	if (familyIdIdx !== -1) {
-		headers.splice(familyIdIdx, 1);
-		let birthYearIdx = headers.indexOf('birth_year');
-		if (birthYearIdx === -1) birthYearIdx = headers.length; // fallback
-		headers.splice(birthYearIdx, 0, 'family_id');
+	let familyIdx = headers.findIndex(h => h.toLowerCase() === 'family');
+	if (familyIdx !== -1) {
+		const familyKey = headers[familyIdx];
+		headers.splice(familyIdx, 1);
+		let genderIdx = headers.findIndex(h => h.toLowerCase() === 'gender');
+		if (genderIdx !== -1) {
+			headers.splice(genderIdx + 1, 0, familyKey);
+		} else {
+			let fullNamePos = headers.indexOf('full_name');
+			headers.splice(fullNamePos !== -1 ? fullNamePos + 1 : 0, 0, familyKey);
+		}
+	}
+
+	let headIdx = headers.findIndex(h => h.toLowerCase() === 'head');
+	if (headIdx !== -1) {
+		const headKey = headers[headIdx];
+		headers.splice(headIdx, 1);
+
+		let deathYearIdx = headers.findIndex(h => h.toLowerCase() === 'death_year' || h.toLowerCase() === 'death year');
+		let birthYearIdx = headers.findIndex(h => h.toLowerCase() === 'birth_year' || h.toLowerCase() === 'birth year');
+		let raceIdx = headers.findIndex(h => h.toLowerCase() === 'race');
+
+		if (deathYearIdx !== -1) {
+			headers.splice(deathYearIdx + 1, 0, headKey);
+		} else if (birthYearIdx !== -1) {
+			headers.splice(birthYearIdx + 1, 0, headKey);
+		} else if (raceIdx !== -1) {
+			headers.splice(raceIdx, 0, headKey);
+		} else {
+			headers.push(headKey);
+		}
 	}
 
 	let dataArrays = processedList.map(row => headers.map(h => row[h] != null ? row[h] : ''));
@@ -544,4 +698,169 @@ function handleContextSearch() {
 			handleContextSearch();
 		}
 	}
+}
+
+function highlightMostLikelyMatch() {
+	if (!currentGrid || !currentGrid.data || !currentGrid.data.length) return;
+
+	const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+	const mentionsArray = globalApp && globalApp.mentions ? globalApp.mentions : [];
+
+	let person = null;
+	if (window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid) {
+		person = window.treeApp.GetNode(window.treeApp.state.selectedPid);
+	}
+	if (!person && globalApp && globalApp.targetPerson) {
+		person = globalApp.targetPerson;
+	}
+	if (!person && globalApp && globalApp.curTree && globalApp.curTree.persons) {
+		const pList = Array.isArray(globalApp.curTree.persons) ? globalApp.curTree.persons : Object.values(globalApp.curTree.persons);
+		if (pList.length > 0) person = pList[0];
+	}
+
+	const idColIndex = currentGrid.headers.indexOf('mention_id');
+	let bestIndex = -1;
+
+	if (person) {
+		const fname = (person.first_name || '').split(':')[0].trim();
+		const lname = (person.last_name || '').split(':')[0].trim();
+		const byear = (person.birth_year ? String(person.birth_year) : '').split(':')[0].trim();
+		const gender = (person.gender ? String(person.gender) : '').split(':')[0].trim();
+
+		if (globalApp && !globalApp.score && window.Score) new window.Score();
+
+		if (globalApp && globalApp.score && typeof globalApp.score.Search === 'function') {
+			const sourceSelect = document.getElementById('cs-source-select');
+			const activeSource = sourceSelect ? sourceSelect.value : (currentGrid.labelText || '');
+
+			const fields = [];
+			if (fname) fields.push({ term: 'first_name', value: fname, match: 'Exact', rare: false });
+			if (lname) fields.push({ term: 'last_name', value: lname, match: 'Exact', rare: false });
+			if (byear) fields.push({ term: 'birth_year', value: byear, match: 'Exact', rare: false });
+			if (gender) fields.push({ term: 'gender', value: gender, match: 'Exact', rare: false });
+
+			if (fields.length > 0) {
+				const criteria = {
+					source: activeSource,
+					max_results: 50,
+					fields: fields
+				};
+
+				const results = globalApp.score.Search(mentionsArray, criteria);
+				if (results && results.length > 0) {
+					const topMentionId = results[0].mention_id || results[0].id;
+					if (idColIndex !== -1 && topMentionId) {
+						bestIndex = currentGrid.data.findIndex(row => String(row[idColIndex]) === String(topMentionId));
+					}
+				}
+			}
+		}
+
+		if (bestIndex === -1 && (lname || fname)) {
+			let highestScore = -1;
+			currentGrid.data.forEach((row, idx) => {
+				const rowStr = row.map(v => String(v).toLowerCase()).join(' ');
+				let score = 0;
+				if (lname && rowStr.includes(lname.toLowerCase())) score += 5;
+				if (fname && rowStr.includes(fname.toLowerCase())) score += 3;
+				if (byear && rowStr.includes(byear.toLowerCase())) score += 2;
+				if (gender && rowStr.includes(gender.toLowerCase())) score += 1;
+				if (score > highestScore && score > 0) {
+					highestScore = score;
+					bestIndex = idx;
+				}
+			});
+		}
+	}
+
+	if (bestIndex === -1 && currentGrid.data.length > 0) {
+		bestIndex = 0;
+	}
+
+	if (bestIndex !== -1) {
+		currentGrid.setHighlightIndex(bestIndex);
+	}
+}
+
+function openContextSearchDialog() {
+	const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+	let person = null;
+	if (window.treeApp && window.treeApp.state && window.treeApp.state.selectedPid) {
+		person = window.treeApp.GetNode(window.treeApp.state.selectedPid);
+	}
+	if (!person && globalApp && globalApp.targetPerson) {
+		person = globalApp.targetPerson;
+	}
+	if (!person && globalApp && globalApp.curTree && globalApp.curTree.persons) {
+		const pList = Array.isArray(globalApp.curTree.persons) ? globalApp.curTree.persons : Object.values(globalApp.curTree.persons);
+		if (pList.length > 0) person = pList[0];
+	}
+
+	const sourceSelect = document.getElementById('cs-source-select');
+	const currentSource = sourceSelect ? sourceSelect.value : (globalApp ? `${globalApp.county}-${globalApp.source}` : '');
+
+	const initialValues = {
+		source: currentSource
+	};
+
+	if (person) {
+		if (person.first_name) initialValues.first_name = person.first_name.split(':')[0];
+		if (person.last_name) initialValues.last_name = person.last_name.split(':')[0];
+		if (person.birth_year) initialValues.birth_year = String(person.birth_year).split(':')[0];
+		if (person.death_year) initialValues.death_year = String(person.death_year).split(':')[0];
+		if (person.gender) initialValues.gender = String(person.gender).split(':')[0];
+		if (person.race) initialValues.norm_race = String(person.race).split(':')[0];
+	}
+
+	if (typeof SearchBox === 'undefined' || typeof SearchBox.openDialog !== 'function') {
+		highlightMostLikelyMatch();
+		return;
+	}
+
+	SearchBox.openDialog(initialValues, (results, search_criteria) => {
+		const targetSource = search_criteria ? search_criteria.source : null;
+
+		const highlightTopResult = () => {
+			if (!currentGrid || !currentGrid.data) return;
+			const idColIndex = currentGrid.headers.indexOf('mention_id');
+			let bestIndex = -1;
+
+			if (results && results.length > 0) {
+				const topMentionId = results[0].mention_id || results[0].id;
+				if (idColIndex !== -1 && topMentionId) {
+					bestIndex = currentGrid.data.findIndex(row => String(row[idColIndex]) === String(topMentionId));
+				}
+			}
+
+			if (bestIndex === -1 && search_criteria && search_criteria.fields) {
+				const terms = search_criteria.fields.map(f => String(f.value || '').toLowerCase()).filter(Boolean);
+				if (terms.length > 0) {
+					let highestScore = -1;
+					currentGrid.data.forEach((row, idx) => {
+						const rowStr = row.map(v => String(v).toLowerCase()).join(' ');
+						let score = 0;
+						terms.forEach(t => { if (rowStr.includes(t)) score += 1; });
+						if (score > highestScore && score > 0) {
+							highestScore = score;
+							bestIndex = idx;
+						}
+					});
+				}
+			}
+
+			if (bestIndex !== -1) {
+				currentGrid.setHighlightIndex(bestIndex);
+			}
+		};
+
+		const sourceSelectEl = document.getElementById('cs-source-select');
+		const curSourceVal = sourceSelectEl ? sourceSelectEl.value : '';
+
+		if (targetSource && targetSource !== curSourceVal && typeof ShowSource === 'function') {
+			ShowSource(targetSource);
+			setTimeout(highlightTopResult, 200);
+		} else {
+			highlightTopResult();
+		}
+	});
 }

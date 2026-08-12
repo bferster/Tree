@@ -1050,18 +1050,26 @@ class TreeApp {
 			if (splitDivider && workspace && canvasContainer && detailsPanel) {
 				let isResizing = false;
 
-				splitDivider.addEventListener('mousedown', (e) => {
+				const getClientX = (evt) => {
+					if (evt.touches && evt.touches.length > 0) {
+						return evt.touches[0].clientX;
+					}
+					return evt.clientX;
+				};
+
+				const startResize = () => {
 					isResizing = true;
 					splitDivider.classList.add('active');
 					document.body.style.cursor = 'col-resize';
 					document.body.style.userSelect = 'none';
-				});
+				};
 
-				document.addEventListener('mousemove', (e) => {
+				const updateResize = (evt) => {
 					if (!isResizing) return;
+					const clientX = getClientX(evt);
 					const offsetLeft = workspace.getBoundingClientRect().left;
 					const totalWidth = workspace.clientWidth;
-					let pointerX = e.clientX - offsetLeft;
+					let pointerX = clientX - offsetLeft;
 
 					// Boundary constraints: 15% to 85%
 					const minWidth = totalWidth * 0.15;
@@ -1077,9 +1085,9 @@ class TreeApp {
 
 					// Recenter and fit the D3 canvas tree instantly as the divider is dragged
 					this.FitToScreen(0);
-				});
+				};
 
-				document.addEventListener('mouseup', () => {
+				const stopResize = () => {
 					if (isResizing) {
 						isResizing = false;
 						splitDivider.classList.remove('active');
@@ -1089,6 +1097,40 @@ class TreeApp {
 						// Smoothly settle the tree position once dragging is finished
 						this.FitToScreen(200);
 					}
+				};
+
+				// Mouse events
+				splitDivider.addEventListener('mousedown', (e) => {
+					startResize();
+				});
+
+				document.addEventListener('mousemove', (e) => {
+					if (isResizing) updateResize(e);
+				});
+
+				document.addEventListener('mouseup', () => {
+					stopResize();
+				});
+
+				// Touch events (mobile & tablet touchscreens)
+				splitDivider.addEventListener('touchstart', (e) => {
+					startResize();
+					if (e.cancelable) e.preventDefault();
+				}, { passive: false });
+
+				document.addEventListener('touchmove', (e) => {
+					if (isResizing) {
+						updateResize(e);
+						if (e.cancelable) e.preventDefault();
+					}
+				}, { passive: false });
+
+				document.addEventListener('touchend', () => {
+					stopResize();
+				});
+
+				document.addEventListener('touchcancel', () => {
+					stopResize();
 				});
 			}
 

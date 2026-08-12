@@ -425,7 +425,7 @@ class PersonEditor {
 		$factors.append(`
       <div class="vpe-row vpe-row-header">
         <div>FIELD</div>
-        <div>VALUE</div>
+        <div style="display:flex; justify-content:space-between; align-items:center;"><span>VALUE</span><span style="margin-right:60px">FROM</span></div>
         <div>COMPARE</div>
       </div>
     `);
@@ -565,11 +565,15 @@ class PersonEditor {
 			$chipText.text(fstate.match || cfg.defaultMatch || 'Boost');
 		} else if (!isNull && val1) {
 			$chipText.text(val1);
+		} else {
+			$chipText.text('click to set').css({ opacity: 0.5 });
 		}
 		$chip.append($chipText);
 
 		if (cfg.editKind === 'free' || cfg.editKind === 'choice') {
-			const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"></select>`);
+			const tooltipMsg = cfg.editKind === 'free' ? "Double-click to add text, or pick from options" : "Pick from options";
+			$chip.attr('title', tooltipMsg);
+			const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;" title="${PersonEditor.escapeHtml(tooltipMsg)}"></select>`);
 
 			fstate.options.forEach((o, i) => {
 				$sel.append(`<option value="${i}" ${i === fstate.selected ? 'selected' : ''} style="color:${ramp_[1]}">${PersonEditor.escapeHtml(o.option)}</option>`);
@@ -595,10 +599,12 @@ class PersonEditor {
 
 			const $rightContainer = $(`<div style="flex: 1; display: flex; align-items: center; justify-content: flex-end; min-height: 20px;"></div>`);
 			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
-			const $sourceText = $(`<span style="color:${isNull ? 'transparent' : ramp_[1]}; padding:0 4px; font-size:13px; font-weight:normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
+			const isMention = val2 && val2 !== 'Added';
+			const sourceTitleAttr = isMention ? ' title="Click to see mention"' : '';
+			const $sourceText = $(`<span style="color:${isNull ? 'transparent' : ramp_[1]}; padding:0 4px; font-size:13px; font-weight:normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor:${isMention ? 'pointer' : 'default'};"${sourceTitleAttr}>${displayVal2}</span>`);
 
 			$sourceText.on('click', function () {
-				if (val2 && val2 !== 'Added') {
+				if (isMention) {
 					$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
 				}
 			});
@@ -608,9 +614,11 @@ class PersonEditor {
 		} else {
 			$val.append($chip);
 			const displayVal2 = val2 ? PersonEditor.escapeHtml(val2) : '&nbsp;';
-			const $sourceText = $(`<span style="color:${ramp_[1]}; padding:0 4px; font-size:13px; font-weight:normal; margin-left:auto; cursor:${(val2 && val2 !== 'Added') ? 'pointer' : 'default'};">${displayVal2}</span>`);
+			const isMention = val2 && val2 !== 'Added';
+			const sourceTitleAttr = isMention ? ' title="Click to see mention"' : '';
+			const $sourceText = $(`<span style="color:${ramp_[1]}; padding:0 4px; font-size:13px; font-weight:normal; margin-left:auto; cursor:${isMention ? 'pointer' : 'default'};"${sourceTitleAttr}>${displayVal2}</span>`);
 			$sourceText.on('click', function () {
-				if (val2 && val2 !== 'Added') {
+				if (isMention) {
 					$('#right-panel-content .tab-btn[data-target="mentions-editor-container"]').click();
 				}
 			});
@@ -622,7 +630,8 @@ class PersonEditor {
 		// COMPARE / MATCH
 		const $compareCol = $(`<div style="display:flex; align-items:center; gap:8px;"></div>`);
 		const compareOpts = cfg.compareOptions || ['Exact', 'Ignore'];
-		const $matchSel = $(`<select style="width:115px; min-width:115px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:3px 6px; font-size:13px; cursor:pointer; color:#333; box-sizing:border-box;"></select>`);
+		const matchTooltip = (cfg.key === 'family_boost') ? "Boost score if common family members" : "Choose how to match this term";
+		const $matchSel = $(`<select title="${matchTooltip}" style="width:115px; min-width:115px; background:#fff; border:1px solid #d0d0d0; border-radius:6px; padding:3px 6px; font-size:13px; cursor:pointer; color:#333; box-sizing:border-box;"></select>`);
 
 		compareOpts.forEach(opt => {
 			const isSel = (fstate.match === opt);
@@ -646,7 +655,7 @@ class PersonEditor {
 
 		if (cfg.hasRare) {
 			const isRareChecked = fstate.rare !== undefined ? fstate.rare : false;
-			const $rareLabel = $(`<label style="display:flex; align-items:center; gap:3px; font-size:13px; color:#444; cursor:pointer; white-space:nowrap;"><input type="checkbox" ${isRareChecked ? 'checked' : ''} style="cursor:pointer;"> Rare</label>`);
+			const $rareLabel = $(`<label title="Boost score if a rare name" style="display:flex; align-items:center; gap:3px; font-size:13px; color:#444; cursor:pointer; white-space:nowrap;"><input type="checkbox" ${isRareChecked ? 'checked' : ''} style="cursor:pointer;"> Rare</label>`);
 			$rareLabel.find('input').on('change', function () {
 				const checked = $(this).is(':checked');
 				fstate.rare = checked;
@@ -703,12 +712,13 @@ class PersonEditor {
 		const $row = $(`<div class="vpe-row vpe-row-linked"></div>`);
 		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
 
-		const $val = $(`<div class="vpe-value-pill" style="position: relative; background:${ramp_[0]}"></div>`);
+		const linkedTooltip = "View family members. Click on one to show it";
+		const $val = $(`<div class="vpe-value-pill" style="position: relative; background:${ramp_[0]}" title="${PersonEditor.escapeHtml(linkedTooltip)}"></div>`);
 		const totalLinked = rels.length;
-		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${ramp_[1]}">${totalLinked} linked ${totalLinked === 1 ? 'person' : 'people'}</span>`);
+		const $chip = $(`<span class="vpe-chip" style="position: relative; color:${ramp_[1]}" title="${PersonEditor.escapeHtml(linkedTooltip)}">${totalLinked} linked ${totalLinked === 1 ? 'person' : 'people'}</span>`);
 		$val.append($chip);
 
-		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;"><option value="" selected disabled>Select to jump...</option></select>`);
+		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;" title="${PersonEditor.escapeHtml(linkedTooltip)}"><option value="" selected disabled>Select to jump...</option></select>`);
 		rels.forEach((r, i) => {
 			let linkedName = `Mention ${r.target_mention}`;
 			if (window.app && window.app.expand && window.app.expand.mentionsMap) {
@@ -1119,6 +1129,7 @@ class PersonEditor {
 			'CN-1880': '1880 Census',
 			'CN-1870': '1870 Census',
 			'CN-1860': '1860 Census',
+			'CN-1850': '1850 Census',
 			'CN-1900': '1900 Census',
 			'SS-1860': '1860 Slave Schedule',
 			'SS-1850': '1850 Slave Schedule',
@@ -1182,30 +1193,33 @@ class PersonEditor {
 			});
 		}
 
-		if (optionsMap.size === 0) {
-			const defaultFallbacks = [
-				{ value: 'CN-1880', label: '1880 Census' },
-				{ value: 'CN-1870', label: '1870 Census' },
-				{ value: 'CN-1860', label: '1860 Census' },
-				{ value: 'CN-1900', label: '1900 Census' },
-				{ value: 'SS-1860', label: '1860 Slave Schedule' },
-				{ value: 'SS-1850', label: '1850 Slave Schedule' },
-				{ value: 'FG', label: 'Find A Grave' },
-				{ value: 'VRB', label: 'Birth Records' },
-				{ value: 'VRM', label: 'Marriage Records' },
-				{ value: 'VRD', label: 'Death Records' },
-				{ value: 'VR', label: 'Vital Records' },
-				{ value: 'CH', label: 'Church Records' },
-				{ value: 'FBR', label: 'Free Black Register' },
-				{ value: 'FL', label: 'Freemans Records' },
-				{ value: 'SB', label: 'Slave Births' },
-				{ value: 'CC', label: 'Cohabitation Children' },
-				{ value: 'CF', label: 'Cohabitation Families' }
-			];
-			defaultFallbacks.forEach(opt => optionsMap.set(opt.value, opt.label));
-		}
+		const defaultFallbacks = [
+			{ value: 'CN-1880', label: '1880 Census' },
+			{ value: 'CN-1870', label: '1870 Census' },
+			{ value: 'CN-1860', label: '1860 Census' },
+			{ value: 'CN-1850', label: '1850 Census' },
+			{ value: 'CN-1900', label: '1900 Census' },
+			{ value: 'SS-1860', label: '1860 Slave Schedule' },
+			{ value: 'SS-1850', label: '1850 Slave Schedule' },
+			{ value: 'FG', label: 'Find A Grave' },
+			{ value: 'VRB', label: 'Birth Records' },
+			{ value: 'VRM', label: 'Marriage Records' },
+			{ value: 'VRD', label: 'Death Records' },
+			{ value: 'VR', label: 'Vital Records' },
+			{ value: 'CH', label: 'Church Records' },
+			{ value: 'FBR', label: 'Free Black Register' },
+			{ value: 'FL', label: 'Freemans Records' },
+			{ value: 'SB', label: 'Slave Births' },
+			{ value: 'CC', label: 'Cohabitation Children' },
+			{ value: 'CF', label: 'Cohabitation Families' }
+		];
+		defaultFallbacks.forEach(opt => {
+			if (!optionsMap.has(opt.value)) {
+				optionsMap.set(opt.value, opt.label);
+			}
+		});
 
-		const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VRB', 'VRM', 'VRD', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
+		const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VRB', 'VRM', 'VRD', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
 		const sortedKeys = Array.from(optionsMap.keys()).sort((a, b) => {
 			let idxA = preferredOrder.indexOf(a);
 			let idxB = preferredOrder.indexOf(b);
