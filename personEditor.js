@@ -144,11 +144,20 @@ class PersonEditor {
 		let canonical = person[key];
 		if (!canonical) {
 			if (key === 'norm_first_name' && person.first_name) {
-				canonical = window.Normalize.getNickname(person.first_name.split(':')[0]);
+				const rawFn = person.first_name.split(':')[0];
+				canonical = (window.app && window.app.match && typeof window.app.match.nickname === 'function')
+					? window.app.match.nickname(rawFn)
+					: (window.Match ? new window.Match().nickname(rawFn) : rawFn);
 			} else if (key === 'nysiis_last_name' && person.last_name) {
-				canonical = window.Normalize.getNYSIIS(person.last_name.split(':')[0]);
+				const rawLn = person.last_name.split(':')[0];
+				canonical = (window.app && window.app.match && typeof window.app.match.getNYSIIS === 'function')
+					? window.app.match.getNYSIIS(rawLn)
+					: (window.Match ? new window.Match().getNYSIIS(rawLn) : rawLn);
 			} else if (key === 'metaphone_last_name' && person.last_name) {
-				canonical = window.Normalize.getMetaphone(person.last_name.split(':')[0]);
+				const rawLn = person.last_name.split(':')[0];
+				canonical = (window.app && window.app.match && typeof window.app.match.getMetaphone === 'function')
+					? window.app.match.getMetaphone(rawLn)
+					: (window.Match ? new window.Match().getMetaphone(rawLn) : rawLn);
 			}
 		}
 
@@ -302,11 +311,20 @@ class PersonEditor {
 			let canonical = person[cfg.key];
 			if (!canonical) {
 				if (cfg.key === 'norm_first_name' && person.first_name) {
-					canonical = window.Normalize.getNickname(person.first_name.split(':')[0]);
+					const rawFn = person.first_name.split(':')[0];
+					canonical = (window.app && window.app.match && typeof window.app.match.nickname === 'function')
+						? window.app.match.nickname(rawFn)
+						: (window.Match ? new window.Match().nickname(rawFn) : rawFn);
 				} else if (cfg.key === 'nysiis_last_name' && person.last_name) {
-					canonical = window.Normalize.getNYSIIS(person.last_name.split(':')[0]);
+					const rawLn = person.last_name.split(':')[0];
+					canonical = (window.app && window.app.match && typeof window.app.match.getNYSIIS === 'function')
+						? window.app.match.getNYSIIS(rawLn)
+						: (window.Match ? new window.Match().getNYSIIS(rawLn) : rawLn);
 				} else if (cfg.key === 'metaphone_last_name' && person.last_name) {
-					canonical = window.Normalize.getMetaphone(person.last_name.split(':')[0]);
+					const rawLn = person.last_name.split(':')[0];
+					canonical = (window.app && window.app.match && typeof window.app.match.getMetaphone === 'function')
+						? window.app.match.getMetaphone(rawLn)
+						: (window.Match ? new window.Match().getMetaphone(rawLn) : rawLn);
 				}
 			}
 
@@ -382,6 +400,7 @@ class PersonEditor {
 			fields,
 			verity: person.verity,
 			sources,
+			include: PersonEditor.lastIncludeSetting || 'all',
 			editing: false
 		};
 	}
@@ -404,11 +423,16 @@ class PersonEditor {
         <div>
           <p class="vpe-target-summary">${PersonEditor.escapeHtml(fullDisplay)} &nbsp;&nbsp;${yearStr}</p>
         </div>
-        <i class="ti ti-x vpe-close" aria-label="Close"></i>
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div class="vpe-verity"></div>
+          <i class="ti ti-x vpe-close" aria-label="Close"></i>
+        </div>
       </div>
       <div class="vpe-factors"></div>
       <div class="vpe-footer"></div>
     `);
+
+		PersonEditor.renderVerity($dialog, state);
 
 		$dialog.find('.vpe-close').on('click', function () {
 			$dialog.trigger('vpe:close');
@@ -445,6 +469,7 @@ class PersonEditor {
 		// re-render after any change
 		$factors.off('vpe:rerender').on('vpe:rerender', function () {
 			PersonEditor.renderFactors($dialog, person, state);
+			PersonEditor.renderVerity($dialog, state);
 			PersonEditor.renderFooter($dialog, person, state);
 		});
 	}
@@ -526,11 +551,15 @@ class PersonEditor {
 				const val = $input.val().trim().split(':')[0];
 				const $factors = $row.closest('.vpe-factors');
 				if (cfg.key === 'first_name') {
-					const norm = window.Normalize.getNickname(val);
+					const norm = (window.app && window.app.match && typeof window.app.match.nickname === 'function')
+						? window.app.match.nickname(val)
+						: (window.Match ? new window.Match().nickname(val) : val);
 					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Nick name'; }).find('.vpe-chip').text(norm ? norm.toUpperCase() : '');
 				} else if (cfg.key === 'last_name') {
-					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'NYSIIS'; }).find('.vpe-chip').text(window.Normalize.getNYSIIS(val) ? window.Normalize.getNYSIIS(val).toUpperCase() : '');
-					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Metaphone'; }).find('.vpe-chip').text(window.Normalize.getMetaphone(val) ? window.Normalize.getMetaphone(val).toUpperCase() : '');
+					const getNYSIIS = (v) => (window.app && window.app.match && typeof window.app.match.getNYSIIS === 'function') ? window.app.match.getNYSIIS(v) : (window.Match ? new window.Match().getNYSIIS(v) : '');
+					const getMeta = (v) => (window.app && window.app.match && typeof window.app.match.getMetaphone === 'function') ? window.app.match.getMetaphone(v) : (window.Match ? new window.Match().getMetaphone(v) : '');
+					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'NYSIIS'; }).find('.vpe-chip').text(getNYSIIS(val) ? getNYSIIS(val).toUpperCase() : '');
+					$factors.find('.vpe-row').filter(function () { return $(this).find('.vpe-field-label').text() === 'Metaphone'; }).find('.vpe-chip').text(getMeta(val) ? getMeta(val).toUpperCase() : '');
 				}
 			});
 
@@ -921,13 +950,20 @@ class PersonEditor {
 			}
 
 			if (cfg.key === 'first_name') {
-				let norm = selectedValue ? window.Normalize.getNickname(selectedValue.split(':')[0]) : '';
+				const rawFn = selectedValue ? selectedValue.split(':')[0] : '';
+				let norm = rawFn
+					? ((window.app && window.app.match && typeof window.app.match.nickname === 'function')
+						? window.app.match.nickname(rawFn)
+						: (window.Match ? new window.Match().nickname(rawFn) : rawFn))
+					: '';
 				PersonEditor.updateFieldState(state, 'norm_first_name', norm || '');
 			} else if (cfg.key === 'last_name') {
 				let baseVal = selectedValue ? selectedValue.split(':')[0] : '';
-				let nysiis = baseVal ? window.Normalize.getNYSIIS(baseVal) : '';
+				const getNYSIIS = (v) => (window.app && window.app.match && typeof window.app.match.getNYSIIS === 'function') ? window.app.match.getNYSIIS(v) : (window.Match ? new window.Match().getNYSIIS(v) : '');
+				const getMeta = (v) => (window.app && window.app.match && typeof window.app.match.getMetaphone === 'function') ? window.app.match.getMetaphone(v) : (window.Match ? new window.Match().getMetaphone(v) : '');
+				let nysiis = baseVal ? getNYSIIS(baseVal) : '';
 				PersonEditor.updateFieldState(state, 'nysiis_last_name', nysiis || '');
-				let metaphone = baseVal ? window.Normalize.getMetaphone(baseVal) : '';
+				let metaphone = baseVal ? getMeta(baseVal) : '';
 				PersonEditor.updateFieldState(state, 'metaphone_last_name', metaphone || '');
 			}
 
@@ -995,15 +1031,12 @@ class PersonEditor {
 		}
 	}
 
-	/* ----------------------------------------------------------
-	   FOOTER: Verity stars, Sources dropdown, Search button
-	   ---------------------------------------------------------- */
-	static renderFooter($dialog, person, state) {
-		const $footer = $dialog.find('.vpe-footer');
-		$footer.empty();
+	static renderVerity($dialog, state) {
+		const $verity = $dialog.find('.vpe-verity');
+		if (!$verity.length) return;
+		$verity.empty();
 
-		// Verity (read-only, from confidence)
-		const $verity = $(`<div class="vpe-verity"><span class="vpe-verity-label">Verity:</span></div>`);
+		$verity.append(`<span class="vpe-verity-label">Verity:</span>`);
 		const $stars = $('<div class="vpe-star-row"></div>');
 		for (let s = 1; s <= 4; s++) {
 			const svg = PersonEditor.makeStarSVG(s <= state.verity);
@@ -1011,6 +1044,14 @@ class PersonEditor {
 			$stars.append(svg);
 		}
 		$verity.append($stars);
+	}
+
+	/* ----------------------------------------------------------
+	   FOOTER: Sources dropdown, Search button
+	   ---------------------------------------------------------- */
+	static renderFooter($dialog, person, state) {
+		const $footer = $dialog.find('.vpe-footer');
+		$footer.empty();
 
 		// Sources dropdown
 		const $sourcesWrap = $('<div class="vpe-sources-wrap"></div>');
@@ -1098,9 +1139,42 @@ class PersonEditor {
 		});
 		$countyWrap.append($countySelect);
 
-		$right.append($countyWrap, $sourcesWrap, $searchBtn);
+		// Include dropdown
+		const $includeWrap = $('<div class="vpe-include-wrap" style="display: inline-flex; align-items: center; margin-right: 10px;"></div>');
+		const $includeLabel = $('<label style="font-size: 14px; font-weight: 500; color: #555; margin-right: 6px;">Include:</label>');
+		const $includeSelect = $(`
+			<select class="vpe-include-btn" style="
+				display: inline-flex;
+				align-items: center;
+				background: transparent;
+				border: 0.5px solid #f0f0f0;
+				border-radius: 6px;
+				padding: 8px 24px 8px 12px;
+				font-size: 14px;
+				font-weight: 500;
+				cursor: pointer;
+				appearance: none;
+				-webkit-appearance: none;
+				-moz-appearance: none;
+				background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23757575%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+				background-repeat: no-repeat;
+				background-position: right 8px top 50%;
+				background-size: 8px auto;
+			">
+				<option value="all">All terms</option>
+				<option value="any">Any term</option>
+			</select>
+		`);
+		$includeSelect.val(state.include || 'all');
+		$includeSelect.on('change', function () {
+			state.include = $(this).val();
+			PersonEditor.lastIncludeSetting = state.include;
+		});
+		$includeWrap.append($includeLabel, $includeSelect);
 
-		$footer.append($verity, $right);
+		$right.append($countyWrap, $sourcesWrap, $includeWrap, $searchBtn);
+
+		$footer.append($right);
 	}
 
 	static getSourceLabel(val, county = 'AUG') {
@@ -1114,12 +1188,6 @@ class PersonEditor {
 					let core = sParts.length > 1 ? sParts.slice(1).join('-') : kUpper;
 					if (core === val || (core === 'VR' && val.startsWith('VR'))) {
 						const srcData = window.GlobalSources[k];
-						if (srcData && typeof srcData === 'object' && srcData.title) {
-							if (val === 'VRB') return 'Birth Records';
-							if (val === 'VRM') return 'Marriage Records';
-							if (val === 'VRD') return 'Death Records';
-							return srcData.title;
-						}
 					}
 				}
 			}
@@ -1134,9 +1202,6 @@ class PersonEditor {
 			'SS-1860': '1860 Slave Schedule',
 			'SS-1850': '1850 Slave Schedule',
 			'FG': 'Find A Grave',
-			'VRB': 'Birth Records',
-			'VRM': 'Marriage Records',
-			'VRD': 'Death Records',
 			'VR': 'Vital Records',
 			'CH': 'Church Records',
 			'FBR': 'Free Black Register',
@@ -1167,15 +1232,7 @@ class PersonEditor {
 					let sParts = kUpper.split('-');
 					let core = sParts.length > 1 ? sParts.slice(1).join('-') : kUpper;
 					let title = (srcData && typeof srcData === 'object' && srcData.title) ? srcData.title : core;
-
-					if (core === 'VR') {
-						optionsMap.set('VRB', 'Birth Records');
-						optionsMap.set('VRM', 'Marriage Records');
-						optionsMap.set('VRD', 'Death Records');
-						optionsMap.set('VR', title || 'Vital Records');
-					} else {
-						optionsMap.set(core, title);
-					}
+					optionsMap.set(core, title);
 				}
 			});
 		}
@@ -1202,9 +1259,6 @@ class PersonEditor {
 			{ value: 'SS-1860', label: '1860 Slave Schedule' },
 			{ value: 'SS-1850', label: '1850 Slave Schedule' },
 			{ value: 'FG', label: 'Find A Grave' },
-			{ value: 'VRB', label: 'Birth Records' },
-			{ value: 'VRM', label: 'Marriage Records' },
-			{ value: 'VRD', label: 'Death Records' },
 			{ value: 'VR', label: 'Vital Records' },
 			{ value: 'CH', label: 'Church Records' },
 			{ value: 'FBR', label: 'Free Black Register' },
@@ -1219,7 +1273,7 @@ class PersonEditor {
 			}
 		});
 
-		const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VRB', 'VRM', 'VRD', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
+		const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
 		const sortedKeys = Array.from(optionsMap.keys()).sort((a, b) => {
 			let idxA = preferredOrder.indexOf(a);
 			let idxB = preferredOrder.indexOf(b);
@@ -1344,6 +1398,7 @@ class PersonEditor {
 		return {
 			source: source,
 			max_results: 80,
+			include: state.include || PersonEditor.lastIncludeSetting || 'all',
 			fields: fields
 		};
 	}
@@ -1371,7 +1426,7 @@ class PersonEditor {
         padding: 0;
         box-sizing: border-box;
       }
-      .vpe-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.25rem; }
+      .vpe-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem; }
       .vpe-dialog { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
         background:#fff; border-radius:12px; border:1px solid #e3ddd5; box-shadow:0 2px 8px rgba(0,0,0,0.06); width:100%; box-sizing:border-box; padding:0.5rem; overflow:hidden; }
       .vpe-title { margin:0; font-size:16px; font-weight:600; }
@@ -1442,7 +1497,7 @@ class PersonEditor {
       .vpe-pill { display:inline-flex; align-items:center; font-size:13px; padding:4px 12px; border-radius:999px;
         white-space:nowrap; cursor:pointer; border:0.5px solid #f0f0f0; background:transparent; color:#757575; }
       .vpe-pill.active { background:#eaf2fb; color:#185fa5; border-color:#b5d4f4; }
-      .vpe-footer { display:flex; justify-content:space-between; align-items:center; gap:8px;
+      .vpe-footer { display:flex; justify-content:flex-end; align-items:center; gap:8px;
         margin-top:1.5rem; padding-top:1rem; border-top:0.5px solid #f0f0f0; }
       .vpe-verity { display:flex; align-items:center; gap:6px; }
       .vpe-verity-label { font-size:14px; font-weight:500; color:#757575; }

@@ -25,8 +25,21 @@ class VirtualGrid {
 	}
 
 	setData(headers, data, labelText = null, widths = null) {
-		this.headers = headers;
-		this.data = data;
+		const validIndices = [];
+		const validHeaders = [];
+		(headers || []).forEach((h, idx) => {
+			if (h != null && String(h).trim() !== '' && h !== 'undefined' && h !== 'null') {
+				validHeaders.push(h);
+				validIndices.push(idx);
+			}
+		});
+
+		this.headers = validHeaders;
+		if (validIndices.length === (headers || []).length) {
+			this.data = data || [];
+		} else {
+			this.data = (data || []).map(row => validIndices.map(i => row[i]));
+		}
 		if (labelText) this.labelText = labelText;
 
 		// Reset scroll positions
@@ -38,18 +51,12 @@ class VirtualGrid {
 		this.updateLabel();
 
 		if (widths) {
-			this.columnWidths = widths;
+			this.columnWidths = validIndices.map(i => widths[i]);
 		} else {
 			this.measureWidths();
 		}
 		this.renderHeader(false);
 		this.updateViewport();
-	}
-
-	setColumnWidths(widths) {
-		this.columnWidths = widths;
-		this.renderHeader();
-		this.renderBody();
 	}
 
 	updateLabel() {
@@ -483,7 +490,7 @@ function populateContextSourceDropdown(activeSource) {
 		matchingSources.push(activeSource);
 	}
 
-	const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VRB', 'VRM', 'VRD', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
+	const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
 	matchingSources.sort((a, b) => {
 		const getCore = (s) => s.includes('-') ? s.substring(s.indexOf('-') + 1) : s;
 		const coreA = getCore(a);
@@ -551,7 +558,8 @@ function renderSourceGrid(mentionsList, sourceLabel, highlightMentionId) {
 		return row;
 	});
 
-	let headers = Array.from(new Set(processedList.flatMap(row => Object.keys(row))));
+	let headers = Array.from(new Set(processedList.flatMap(row => Object.keys(row))))
+		.filter(h => h != null && String(h).trim() !== '' && h !== 'undefined' && h !== 'null');
 
 	const fullNameIdx = headers.indexOf('full_name');
 	const relationIdx = headers.indexOf('relation');

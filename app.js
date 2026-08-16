@@ -8,6 +8,7 @@ class App {
 		this.curPerson = -1;
 		this.county = "AUG";
 		this.source = "CN-1870";
+		this.match = (typeof Match !== 'undefined') ? new Match() : null;
 
 		this.curTree = {
 			treeName: "Family",
@@ -62,11 +63,6 @@ class App {
 		});
 	}
 
-
-	findMention(mention_id)                                      // FIND MENTION
-	{
-		return this.mentions.find(m => m.mention_id === mention_id);
-	}
 
 
 	sanitizeRelationships() {
@@ -841,6 +837,12 @@ class App {
 		}
 
 		this.isLoaded = true;                                  // Mark loaded
+		if (window.Match && !this.match) {
+			this.match = new window.Match();
+		}
+		if (this.match && this.mentions && this.mentions.length) {
+			this.match.usePool(this.mentions);
+		}
 		this.showProgress(`Loaded ${this.assertions.length} assertions, ${this.mentions.length} mentions.`, 100); // Done
 		setTimeout(() => this.hideProgress(), 1500);           // Hide popup
 
@@ -911,6 +913,12 @@ class App {
 					]);
 					this.assertions = assertions;
 					this.mentions = mentions;
+				}
+				if (window.Match && !this.match) {
+					this.match = new window.Match();
+				}
+				if (this.match && this.mentions && this.mentions.length) {
+					this.match.usePool(this.mentions);
 				}
 				setTimeout(() => this.hideProgress(), 1500);
 			}

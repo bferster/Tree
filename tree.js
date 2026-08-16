@@ -1436,36 +1436,11 @@ class TreeApp {
 		return newNode;
 	}
 
-	SetNodeVerity(pid, val)																		// SET NODE VERITY LEVEL
-	{
-		const n = this.GetNode(pid);
-		if (n) {
-			this.SaveState();
-			n.verity = val;
-			this.isDirty = true;
-		}
-	}
-
 	AddTriplet(subject, predicate, object, skipSave = false)																		// ADD RELATIONSHIP TRIPLET
 	{
 		if (!skipSave) this.SaveState();
 		if (!this.state.triplets.some(t => t.subject === subject && t.predicate === predicate && t.object === object)) {
 			this.state.triplets.push({ subject, predicate, object });
-		}
-	}
-
-	EditNode(pid, fields)																		// EDIT PERSON NODE FIELDS
-	{
-
-		this.SaveState();
-		const node = this.GetNode(pid);
-		if (node) {
-			Object.keys(fields).forEach(key => {
-				if (fields[key] !== undefined && key !== 'person_id') {
-					node[key] = fields[key];
-				}
-			});
-			this.isDirty = true;
 		}
 	}
 
@@ -1526,12 +1501,6 @@ class TreeApp {
 	{
 
 		return this.state.nodes.find(n => n.person_id === pid) || null;
-	}
-
-	GetRelationships(pid)																		// GET RELATIONSHIPS FOR PID
-	{
-
-		return this.state.triplets.filter(t => t.subject === pid);
 	}
 
 	GetGenderPath(gender, isEnslaver = false)																		// GET SILHOUETTE PATH BY GENDER

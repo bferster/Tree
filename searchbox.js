@@ -263,8 +263,15 @@ class SearchBox {
 
 				<!-- Footer -->
 				<div class="vpe-footer" style="display:flex; justify-content:space-between; align-items:center; margin-top:1.25rem; padding-top:0.75rem; border-top:0.5px solid #f0f0f0;">
-					<div>
+					<div style="display:flex; align-items:center; gap:10px;">
 						<button type="button" id="sb-toggle-all-btn" style="background:#f5f5f5; border:0.5px solid #d0d0d0; border-radius:6px; padding:6px 14px; font-size:13px; font-weight:500; cursor:pointer; color:#333;" title="Toggle all match options between Exact and Ignore">Toggle All</button>
+						<div style="display:inline-flex; align-items:center; gap:6px;">
+							<label style="font-size:13px; font-weight:500; color:#555;">Include:</label>
+							<select id="sb-include-select" style="background:transparent; border:0.5px solid #d0d0d0; border-radius:6px; padding:4px 8px; font-size:13px; font-weight:500; cursor:pointer;">
+								<option value="all">All terms</option>
+								<option value="any">Any term</option>
+							</select>
+						</div>
 					</div>
 					<div style="display:flex; gap:10px;">
 						<button type="button" id="sb-cancel-btn" style="background:transparent; border:0.5px solid #d0d0d0; border-radius:6px; padding:8px 18px; font-size:14px; font-weight:500; cursor:pointer; color:#555;">CANCEL</button>
@@ -381,6 +388,9 @@ class SearchBox {
 		$('#sb-family-boost-match').off('change.fb').on('change.fb', function() {
 			$('#sb-family-boost-pill-text').text($(this).val());
 		});
+
+		const includeVal = initialValues.include || SearchBox.lastIncludeSetting || 'all';
+		$('#sb-include-select').val(includeVal);
 	}
 
 	buildSearchCriteria() {
@@ -475,9 +485,13 @@ class SearchBox {
 			rare: false
 		});
 
+		const include = $('#sb-include-select').val() || SearchBox.lastIncludeSetting || 'all';
+		SearchBox.lastIncludeSetting = include;
+
 		return {
 			source,
 			max_results,
+			include,
 			fields
 		};
 	}

@@ -118,17 +118,9 @@
 		From files that are transcriptions of the US slave schedules for 1850 and 1860. Each row represents an enslaved person, their data and their enslaver. The enslaver has a name, but the enslaved do not and only have their gender, birth_year, and race.
 		Each row will generate two mentions. One for the enslaver and one for the enslaved. An isEnslavedBy assertion will be generated to link them together.
 
-		*Birth Records - VRB*
-		These come from the Virginia vital records and list the births of people in the county. Relevant fields are the name, birth_year, race, gender, father’s name, and mother’s name.
-		If a father or mother is listed, a new mention will be generated with their name. Assertions will be generated to link  them together as isSpouseOf and as parents to the child.
-
-		*Marriage Records - VRM*
-		These come from the Virginia vital records and list the marriages of people in the county. Relevant fields are the name, birth_year, race, gender, father’s name, and mother’s name.
-		If a father or mother is listed, a new mention will be generated with their name. Assertions will be generated to link them together as isSpouseOf.
-
-		*Death Records - VRD*
-		These come from the Virginia vital records and list the deaths of people in the county. Relevant fields are the name, birth_year, race, gender, father’s name, and mother’s name.
-		If a father or mother is listed, a new mention will be generated with their name. Assertions will be generated to link  them together as isSpouseOf.
+		*Vital Records- VR*
+		These come from the vital records and list the births and death of people in the county. Relevant fields are the name, birth_year, death_year, gender, parents' name.
+		If parents are listed, a new mention will be generated for each with their name. Assertions will be generated to link  them together as parents to the person.
 
 		*Find a Grave - FG*
 		This file contains the cemeteries where people are buried, from 1600 to 1900. Relevant fields are the name, birth_year, death_year, and location of the cemetery they were buried.

@@ -71,26 +71,154 @@ function getFamId(m) {
 	return (m.household_id !== null && m.household_id !== undefined && String(m.household_id).trim() !== '') ? m.household_id : m.family_id;
 }
 
-// Ensure Normalize class resolution across environments (browser global vs. Node require)
-const NormalizeClass = (typeof Normalize !== 'undefined')
-	? Normalize
-	: ((typeof window !== 'undefined' && window.Normalize)
-		? window.Normalize
-		: (typeof require !== 'undefined' ? require('./normalize') : null));
+// Resolution pattern for GroupMatcher (browser global vs. Node require).
+const GroupMatcherClass = (typeof globalThis !== 'undefined' && globalThis.GroupMatcher)
+	? globalThis.GroupMatcher
+	: (typeof require !== 'undefined' ? require('./groupMatcher') : null);
 
-// Same resolution pattern for GroupMatcher (browser global vs. Node require).
-const GroupMatcherClass = (typeof GroupMatcher !== 'undefined')
-	? GroupMatcher
-	: ((typeof window !== 'undefined' && window.GroupMatcher)
-		? window.GroupMatcher
-		: (typeof require !== 'undefined' ? require('./groupMatcher') : null));
+// Same resolution pattern for Match (browser global vs. Node require).
+const MatchClass = (typeof globalThis !== 'undefined' && globalThis.Match)
+	? globalThis.Match
+	: (typeof require !== 'undefined' ? (require('./match').Match || require('./match')) : null);
+
+function getCanonicalNickname(name) {
+	if (!name) return "";
+	if (typeof app !== 'undefined' && app && app.match && typeof app.match.nickname === 'function') {
+		return app.match.nickname(name);
+	}
+	if (typeof window !== 'undefined' && window.app && window.app.match && typeof window.app.match.nickname === 'function') {
+		return window.app.match.nickname(name);
+	}
+	if (MatchClass) {
+		if (!Score._defaultMatch) Score._defaultMatch = new MatchClass();
+		return Score._defaultMatch.nickname(name);
+	}
+	return normUpper(name);
+}
+
+function getCanonicalNYSIIS(name) {
+	if (!name) return "";
+	if (typeof app !== 'undefined' && app && app.match && typeof app.match.getNYSIIS === 'function') {
+		return app.match.getNYSIIS(name);
+	}
+	if (typeof window !== 'undefined' && window.app && window.app.match && typeof window.app.match.getNYSIIS === 'function') {
+		return window.app.match.getNYSIIS(name);
+	}
+	if (MatchClass) {
+		if (!Score._defaultMatch) Score._defaultMatch = new MatchClass();
+		return Score._defaultMatch.getNYSIIS(name);
+	}
+	return normUpper(name);
+}
+
+function getCanonicalMetaphone(name) {
+	if (!name) return "";
+	if (typeof app !== 'undefined' && app && app.match && typeof app.match.getMetaphone === 'function') {
+		return app.match.getMetaphone(name);
+	}
+	if (typeof window !== 'undefined' && window.app && window.app.match && typeof window.app.match.getMetaphone === 'function') {
+		return window.app.match.getMetaphone(name);
+	}
+	if (MatchClass) {
+		if (!Score._defaultMatch) Score._defaultMatch = new MatchClass();
+		return Score._defaultMatch.getMetaphone(name);
+	}
+	return normUpper(name);
+}
+
+function getDoubleMetaphoneMatchScore(w1, w2) {
+	if (typeof app !== 'undefined' && app && app.match && typeof app.match.doubleMetaphoneMatchScore === 'function') {
+		return app.match.doubleMetaphoneMatchScore(w1, w2);
+	}
+	if (typeof window !== 'undefined' && window.app && window.app.match && typeof window.app.match.doubleMetaphoneMatchScore === 'function') {
+		return window.app.match.doubleMetaphoneMatchScore(w1, w2);
+	}
+	if (MatchClass) {
+		if (!Score._defaultMatch) Score._defaultMatch = new MatchClass();
+		return Score._defaultMatch.doubleMetaphoneMatchScore(w1, w2);
+	}
+	return 0.0;
+}
+
+function getJaroWinkler(s1, s2, prefixScale = 0.1, boostThreshold = 0.7) {
+	if (!s1 || !s2) return 0.0;
+	if (typeof app !== 'undefined' && app && app.match && typeof app.match.jaroWinkler === 'function') {
+		return app.match.jaroWinkler(s1, s2, prefixScale, boostThreshold);
+	}
+	if (typeof window !== 'undefined' && window.app && window.app.match && typeof window.app.match.jaroWinkler === 'function') {
+		return window.app.match.jaroWinkler(s1, s2, prefixScale, boostThreshold);
+	}
+	if (MatchClass) {
+		if (!Score._defaultMatch) Score._defaultMatch = new MatchClass();
+		return Score._defaultMatch.jaroWinkler(s1, s2, prefixScale, boostThreshold);
+	}
+	return 0.0;
+}
+
+function getNameFrequencies(mentions) {
+	if (typeof app !== 'undefined' && app && app.match && typeof app.match.buildNameFrequencies === 'function') {
+		return app.match.buildNameFrequencies(mentions);
+	}
+	if (typeof window !== 'undefined' && window.app && window.app.match && typeof window.app.match.buildNameFrequencies === 'function') {
+		return window.app.match.buildNameFrequencies(mentions);
+	}
+	if (MatchClass) {
+		if (!Score._defaultMatch) Score._defaultMatch = new MatchClass();
+		return Score._defaultMatch.buildNameFrequencies(mentions);
+	}
+	return { firstNameFreq: new Map(), lastNameFreq: new Map() };
+}
+
+function getNameRarityModifier(value, freqMap, rarityConfig) {
+	if (typeof app !== 'undefined' && app && app.match && typeof app.match.nameWeightModifier === 'function') {
+		return app.match.nameWeightModifier(value, freqMap);
+	}
+	if (typeof window !== 'undefined' && window.app && window.app.match && typeof window.app.match.nameWeightModifier === 'function') {
+		return window.app.match.nameWeightModifier(value, freqMap);
+	}
+	if (MatchClass) {
+		if (!Score._defaultMatch) Score._defaultMatch = new MatchClass();
+		return Score._defaultMatch.nameWeightModifier(value, freqMap);
+	}
+	return 0;
+}
 
 class Score {
 
 	constructor(config = {})                                    // CONSTRUCTOR
 	{
-		app.score = this;                                        // Register globally so tree/search/editor code can reach it via app.score
+		if (typeof app !== 'undefined') {
+			app.score = this;                                        // Register globally so tree/search/editor code can reach it via app.score
+		}
 		this.config = mergeConfig(DEFAULT_CONFIG, config);
+	}
+
+	JaroWinkler(s1, s2, prefixScale = 0.1, boostThreshold = 0.7) {
+		return getJaroWinkler(s1, s2, prefixScale, boostThreshold);
+	}
+
+	buildNameFrequencies(mentions) {
+		return getNameFrequencies(mentions);
+	}
+
+	nameWeightModifier(value, freqMap) {
+		return getNameRarityModifier(value, freqMap);
+	}
+
+	getNameWeightModifier(value, freqMap) {
+		return getNameRarityModifier(value, freqMap);
+	}
+
+	getNYSIIS(name) {
+		return getCanonicalNYSIIS(name);
+	}
+
+	getMetaphone(name) {
+		return getCanonicalMetaphone(name);
+	}
+
+	nickname(name) {
+		return getCanonicalNickname(name);
 	}
 
 	_getFamilyIndex(mentions) {
@@ -510,11 +638,6 @@ class Score {
 		};
 	}
 
-	JaroWinkler(s1, s2)                                        // JARO-WINKLER DISTANCE
-	{
-		if (!s1 || !s2) return 0.0;                            // Quit if empty
-		return NormalizeClass.jaroWinkler(s1, s2);               // Delegate to the canonical implementation
-	}
 
 	// -------------------------------------------------------------------------
 	// Group match search (1850/1860 slave schedules) — see GroupMatch.md.
@@ -707,15 +830,15 @@ class Score {
 
 				if (termName === 'first_name' || termName === 'norm_first_name') {
 					if (matchMode === 'Nickname' || matchMode === 'Canonical') {
-						const nick = NormalizeClass && typeof NormalizeClass.getNickname === 'function' ? NormalizeClass.getNickname(origValue) : null;
+						const nick = getCanonicalNickname(origValue);
 						computedTerm = nick ? String(nick).toUpperCase() : normUpper(origValue);
 					}
 				} else if (termName === 'last_name' || termName === 'nysiis_last_name' || termName === 'metaphone_last_name') {
 					if (matchMode === 'NYSIIS') {
-						const nysiis = NormalizeClass && typeof NormalizeClass.getNYSIIS === 'function' ? NormalizeClass.getNYSIIS(origValue) : null;
+						const nysiis = getCanonicalNYSIIS(origValue);
 						computedTerm = nysiis || normUpper(origValue);
 					} else if (matchMode === 'Metaphone') {
-						const meta = NormalizeClass ? (NormalizeClass.doubleMetaphone ? NormalizeClass.doubleMetaphone(origValue) : (NormalizeClass.getMetaphone ? NormalizeClass.getMetaphone(origValue) : null)) : null;
+						const meta = getCanonicalMetaphone(origValue);
 						computedTerm = meta ? (Array.isArray(meta) ? meta.join('/') : meta) : normUpper(origValue);
 					}
 				} else if (termName === 'birth_year') {
@@ -751,7 +874,8 @@ class Score {
 
 		let candidates = (mentions || []).filter((m) => sourceMatch(m.source, search_criteria.source));
 
-		// --- Step 2: hard-block fields (norm_race, gender) ---
+		const isAnyTerm = Boolean(search_criteria && search_criteria.include && String(search_criteria.include).toLowerCase().includes('any'));
+
 		const normalizeVal = (val) => {
 			if (!val) return "";
 			const s = String(val).split(':')[0].trim().toUpperCase();
@@ -764,77 +888,97 @@ class Score {
 		};
 
 		const raceField = fieldByTerm(fields, "norm_race");
-		if (raceField && isPresent(raceField.value) && raceField.match !== "Ignore" && raceField.value !== "Ignore") {
-			const targetRace = normalizeVal(raceField.value);
-			candidates = candidates.filter((m) => {
-				if (!isPresent(m.norm_race)) return true;
-				const candRace = normalizeVal(m.norm_race);
-				return !candRace || candRace === targetRace;
-			});
-		}
+		const raceActive = Boolean(raceField && isPresent(raceField.value) && raceField.match !== "Ignore" && raceField.value !== "Ignore");
+		const targetRace = raceActive ? normalizeVal(raceField.value) : null;
 
 		const genderField = fieldByTerm(fields, "gender");
-		if (genderField && isPresent(genderField.value) && genderField.match !== "Ignore" && genderField.value !== "Ignore") {
-			const targetGender = normalizeVal(genderField.value);
-			candidates = candidates.filter((m) => {
-				if (!isPresent(m.gender)) return true;
-				const candGender = normalizeVal(m.gender);
-				return !candGender || candGender === targetGender;
-			});
-		}
+		const genderActive = Boolean(genderField && isPresent(genderField.value) && genderField.match !== "Ignore" && genderField.value !== "Ignore");
+		const targetGender = genderActive ? normalizeVal(genderField.value) : null;
 
-		// --- Step 3: birth_year hard window (knockout beyond the chosen tolerance) ---
 		const birthField = fieldByTerm(fields, "birth_year");
-		const birthActive = birthField && birthField.match !== "Ignore" && isPresent(birthField.value);
+		const birthActive = Boolean(birthField && birthField.match !== "Ignore" && isPresent(birthField.value));
 		let birthWindow = null;
 		if (birthActive) {
 			birthWindow = cfg.birthYearWindows[birthField.match];
 			if (birthWindow === undefined) birthWindow = 0;
-			candidates = candidates.filter((m) => {
-				if (!isPresent(m.birth_year)) return true; // absence is not evidence against a match
-				const diff = Math.abs(Number(m.birth_year) - Number(birthField.value));
-				return diff <= birthWindow;
-			});
 		}
 
-		// --- Step 3b: death_year hard window ---
 		const deathField = fieldByTerm(fields, "death_year");
-		const deathActive = deathField && deathField.match !== "Ignore" && isPresent(deathField.value);
+		const deathActive = Boolean(deathField && deathField.match !== "Ignore" && isPresent(deathField.value));
 		let deathWindow = null;
 		if (deathActive) {
 			deathWindow = cfg.birthYearWindows[deathField.match];
 			if (deathWindow === undefined) deathWindow = 0;
-			candidates = candidates.filter((m) => {
-				if (!isPresent(m.death_year)) return true;
-				const diff = Math.abs(Number(m.death_year) - Number(deathField.value));
-				return diff <= deathWindow;
-			});
 		}
 
-		// --- Step 4: precompute rarity pool (post-blocking, pre-name-scoring) ---
-		const nameFreq = (NormalizeClass && NormalizeClass.buildNameFrequencies) ? NormalizeClass.buildNameFrequencies(candidates) : { firstNameFreq: new Map(), lastNameFreq: new Map() };
-
 		const firstField = fieldByTerm(fields, "first_name");
+		const firstActive = Boolean(firstField && firstField.match !== "Ignore" && isPresent(firstField.value));
+
 		const lastField = fieldByTerm(fields, "last_name");
+		const lastActive = Boolean(lastField && lastField.match !== "Ignore" && isPresent(lastField.value));
+
+		// Precompute name frequencies for name scoring
+		const nameFreq = getNameFrequencies(candidates);
+
+		if (isAnyTerm) {
+			const hasAnyActive = firstActive || lastActive || birthActive || deathActive || raceActive || genderActive;
+			if (hasAnyActive) {
+				candidates = candidates.filter((m) => {
+					if (firstActive && this._scoreFirstName(m, firstField, nameFreq) > 0) return true;
+					if (lastActive && this._scoreLastName(m, lastField, nameFreq) > 0) return true;
+					if (birthActive && isPresent(m.birth_year) && Math.abs(Number(m.birth_year) - Number(birthField.value)) <= birthWindow) return true;
+					if (deathActive && isPresent(m.death_year) && Math.abs(Number(m.death_year) - Number(deathField.value)) <= deathWindow) return true;
+					if (raceActive && isPresent(m.norm_race) && normalizeVal(m.norm_race) === targetRace) return true;
+					if (genderActive && isPresent(m.gender) && normalizeVal(m.gender) === targetGender) return true;
+					return false;
+				});
+			}
+		} else {
+			if (raceActive) {
+				candidates = candidates.filter((m) => {
+					if (!isPresent(m.norm_race)) return true;
+					const candRace = normalizeVal(m.norm_race);
+					return !candRace || candRace === targetRace;
+				});
+			}
+			if (genderActive) {
+				candidates = candidates.filter((m) => {
+					if (!isPresent(m.gender)) return true;
+					const candGender = normalizeVal(m.gender);
+					return !candGender || candGender === targetGender;
+				});
+			}
+			if (birthActive) {
+				candidates = candidates.filter((m) => {
+					if (!isPresent(m.birth_year)) return true;
+					const diff = Math.abs(Number(m.birth_year) - Number(birthField.value));
+					return diff <= birthWindow;
+				});
+			}
+			if (deathActive) {
+				candidates = candidates.filter((m) => {
+					if (!isPresent(m.death_year)) return true;
+					const diff = Math.abs(Number(m.death_year) - Number(deathField.value));
+					return diff <= deathWindow;
+				});
+			}
+		}
 
 		if (cfg.debug && firstField && firstField.rare && isPresent(firstField.value)) {
 			const k = String(firstField.value).trim().toUpperCase().replace(/[^A-Z]/g, "");
 			const freq = nameFreq.firstNameFreq.get(k) || 0;
-			const mod = (NormalizeClass && NormalizeClass.getNameWeightModifier) ? NormalizeClass.getNameWeightModifier(firstField.value, nameFreq.firstNameFreq, cfg.rarity) : 0;
+			const mod = getNameRarityModifier(firstField.value, nameFreq.firstNameFreq, cfg.rarity);
 			console.log(`[Rarity Trace]first_name: "${firstField.value}"(Key: ${k}) | Count in candidate pool(${candidates.length} mentions): ${freq} | Rarity modifier: ${mod >= 0 ? '+' : ''}${mod} `);
 		}
 
 		if (cfg.debug && lastField && lastField.rare && isPresent(lastField.value)) {
 			const k = String(lastField.value).trim().toUpperCase().replace(/[^A-Z]/g, "");
 			const freq = nameFreq.lastNameFreq.get(k) || 0;
-			const mod = (NormalizeClass && NormalizeClass.getNameWeightModifier) ? NormalizeClass.getNameWeightModifier(lastField.value, nameFreq.lastNameFreq, cfg.rarity) : 0;
+			const mod = getNameRarityModifier(lastField.value, nameFreq.lastNameFreq, cfg.rarity);
 			console.log(`[Rarity Trace]last_name: "${lastField.value}"(Key: ${k}) | Count in candidate pool(${candidates.length} mentions): ${freq} | Rarity modifier: ${mod >= 0 ? '+' : ''}${mod} `);
 		}
 
 		// --- Step 5: score remaining candidates on active continuous fields ---
-
-		const firstActive = Boolean(firstField && firstField.match !== "Ignore" && isPresent(firstField.value));
-		const lastActive = Boolean(lastField && lastField.match !== "Ignore" && isPresent(lastField.value));
 
 		// Pre-resolve activePerson and familyIndex once before scoring candidates
 		const famField = fieldByTerm(fields, "family_boost");
@@ -878,8 +1022,8 @@ class Score {
 				else if (firstField.match === "Nickname") key = "norm_first_name";
 				mFactors[key] = { value: fnScore };
 
-				if (firstField.rare && fnScore > 0 && NormalizeClass && NormalizeClass.getNameWeightModifier) {
-					const mod = NormalizeClass.getNameWeightModifier(firstField.value, nameFreq.firstNameFreq, cfg.rarity) / 100;
+				if (firstField.rare && fnScore > 0) {
+					const mod = getNameRarityModifier(firstField.value, nameFreq.firstNameFreq, cfg.rarity) / 100;
 					if (mod !== 0) mFactors['rarityFirstName'] = { value: mod };
 				}
 			}
@@ -894,8 +1038,8 @@ class Score {
 				else if (lastField.match === "Metaphone") key = "exactSoundexLast";
 				mFactors[key] = { value: lnScore };
 
-				if (lastField.rare && lnScore > 0 && NormalizeClass && NormalizeClass.getNameWeightModifier) {
-					const mod = NormalizeClass.getNameWeightModifier(lastField.value, nameFreq.lastNameFreq, cfg.rarity) / 100;
+				if (lastField.rare && lnScore > 0) {
+					const mod = getNameRarityModifier(lastField.value, nameFreq.lastNameFreq, cfg.rarity) / 100;
 					if (mod !== 0) mFactors['rarityLastName'] = { value: mod };
 				}
 			}
@@ -994,12 +1138,12 @@ class Score {
 		if (!isPresent(field.value)) return 0;
 
 		const searchNorm = normUpper(field.value);
-		const searchCanonical = normUpper(NormalizeClass ? NormalizeClass.getNickname(field.value) : field.value);
+		const searchCanonical = normUpper(getCanonicalNickname(field.value));
 
 		const firstNorm = isPresent(mention.first_name) ? normUpper(mention.first_name) : "";
 		const normNorm = isPresent(mention.norm_first_name) ? normUpper(mention.norm_first_name) : "";
-		const candCanonical = (normNorm && NormalizeClass && NormalizeClass.getNickname(normNorm))
-			|| (firstNorm && NormalizeClass ? normUpper(NormalizeClass.getNickname(firstNorm)) : normNorm);
+		const candCanonical = (normNorm && getCanonicalNickname(normNorm))
+			|| (firstNorm ? normUpper(getCanonicalNickname(firstNorm)) : normNorm);
 
 		if (!firstNorm && !normNorm && !candCanonical) return 0;
 
@@ -1050,7 +1194,7 @@ class Score {
 		}
 
 		if (field.rare && base > 0) {
-			const modifier = (NormalizeClass && NormalizeClass.getNameWeightModifier) ? NormalizeClass.getNameWeightModifier(field.value, nameFreq.firstNameFreq, cfg.rarity) / 100 : 0;
+			const modifier = getNameRarityModifier(field.value, nameFreq.firstNameFreq, cfg.rarity) / 100;
 			base = clamp(base + modifier, 0, 1);
 		}
 		return base;
@@ -1099,7 +1243,7 @@ class Score {
 			}
 			case "NYSIIS": {
 				if (isPresent(mention.nysiis_last_name)) {
-					const searchCode = NormalizeClass ? NormalizeClass.getNYSIIS(field.value) : normUpper(field.value);
+					const searchCode = getCanonicalNYSIIS(field.value);
 					base = searchCode === mention.nysiis_last_name ? 0.85 : 0.0;
 				} else {
 					base = (searchNorm === candLast || fullContainsWord(searchNorm)) ? 0.85 : 0.0;
@@ -1108,7 +1252,7 @@ class Score {
 			}
 			case "Metaphone": {
 				if (isPresent(mention.metaphone_last_name)) {
-					base = NormalizeClass ? NormalizeClass.doubleMetaphoneMatchScore(field.value, mention.metaphone_last_name) : ((searchNorm === candLast || fullContainsWord(searchNorm)) ? 1.0 : 0.0);
+					base = getDoubleMetaphoneMatchScore(field.value, mention.metaphone_last_name);
 				} else {
 					base = (searchNorm === candLast || fullContainsWord(searchNorm)) ? 1.0 : 0.0;
 				}
@@ -1119,7 +1263,7 @@ class Score {
 		}
 
 		if (field.rare && base > 0) {
-			const modifier = (NormalizeClass && NormalizeClass.getNameWeightModifier) ? NormalizeClass.getNameWeightModifier(field.value, nameFreq.lastNameFreq, cfg.rarity) / 100 : 0;
+			const modifier = getNameRarityModifier(field.value, nameFreq.lastNameFreq, cfg.rarity) / 100;
 			base = clamp(base + modifier, 0, 1);
 		}
 		return base;
@@ -1144,7 +1288,7 @@ class Score {
 
 }
 
-window.Score = Score;                                            // EXPORT GLOBALLY
+if (typeof window !== 'undefined') window.Score = Score;                                            // EXPORT GLOBALLY
 
 if (typeof module !== 'undefined' && module.exports) {
 	module.exports = { Score };
