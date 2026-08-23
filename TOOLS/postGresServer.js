@@ -82,13 +82,15 @@ const server = http.createServer((req, res) => {
 	});
 });
 
+const zlib = require('zlib');
+
 function proxyRequest(targetUrl, req, res) {
 	const parsedUrl = new URL(targetUrl);
 
 	// CORS Headers
 	res.setHeader('Access-Control-Allow-Origin', '*');
 	res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
-	res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Prefer');
+	res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Prefer, Accept');
 	res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Location, Preference-Applied');
 
 	if (req.method === 'OPTIONS') {
@@ -113,6 +115,8 @@ function proxyRequest(targetUrl, req, res) {
 	delete options.headers['sec-fetch-site'];
 	delete options.headers['sec-fetch-dest'];
 
+	const clientAcceptsGzip = Boolean(req.headers['accept-encoding'] && req.headers['accept-encoding'].includes('gzip'));
+
 	const proxyReq = http.request(options, (proxyRes) => {
 		// Copy headers from target API to client response
 		Object.keys(proxyRes.headers).forEach(key => {
@@ -123,7 +127,16 @@ function proxyRequest(targetUrl, req, res) {
 		});
 
 		res.statusCode = proxyRes.statusCode;
-		proxyRes.pipe(res);
+
+		// If client accepts gzip and response is not already compressed, compress on the fly
+		if (clientAcceptsGzip && !proxyRes.headers['content-encoding'] && req.method !== 'HEAD' && proxyRes.statusCode === 200) {
+			res.setHeader('Content-Encoding', 'gzip');
+			res.removeHeader('Content-Length');
+			const gzipStream = zlib.createGzip({ level: 6 });
+			proxyRes.pipe(gzipStream).pipe(res);
+		} else {
+			proxyRes.pipe(res);
+		}
 	});
 
 	proxyReq.on('error', (err) => {

@@ -94,18 +94,18 @@ class ExpandAssertions {
 		const allAssertions = [...assertions];
 		for (const [famKey, members] of this.mentionsByFamily.entries()) {
 			if (famKey.includes('CN-')) {
-				let head = members.find(m => m.head === true || String(m.head || '').trim().toLowerCase() === 't' || String(m.head || '').trim().toLowerCase() === 'y' || (m.original_data && String(m.original_data.head || '').trim().toLowerCase() === 'y'));
+				let head = members.find(m => m.head === true || String(m.head || '').trim().toLowerCase() === 't' || String(m.head || '').trim().toLowerCase() === 'y');
 				if (!head) head = members.find(m => {
-					const rel = m.original_data ? (m.original_data.relation || m.original_data.Relation) : m.relation;
+					const rel = m.relation;
 					const rStr = String(rel || '').trim().toLowerCase();
 					return rStr === 'head' || rStr === 'self' || rStr === 'hd' || rStr === 'h';
 				});
 				if (!head && members.length > 0) head = members[0];
-				
+
 				if (head) {
 					for (const m of members) {
 						if (m.mention_id !== head.mention_id) {
-							const rel = m.original_data ? (m.original_data.relation || m.original_data.Relation) : m.relation;
+							const rel = m.relation;
 							const rawRel = String(rel || '').trim().toLowerCase().replace(/[-\s]+/g, '');
 							const pred = ExpandAssertions.CENSUS_RELATION_MAP[rawRel];
 							if (pred) {
@@ -240,7 +240,7 @@ class ExpandAssertions {
 								const mSx = (m.soundex_last_name || m.metaphone_last_name || '').split(':')[0].trim().toLowerCase();
 								const memSx = (member.soundex_last_name || member.metaphone_last_name || '').split(':')[0].trim().toLowerCase();
 
-								const hasExplicitRel = Boolean((member.original_data && (member.original_data.relation || member.original_data.Relation)) || member.relation);
+								const hasExplicitRel = Boolean(member.relation);
 								if (!hasExplicitRel && mSur && memSur) {
 									const surMatch = (mSur === memSur);
 									const sxMatch = (mSx && memSx && mSx === memSx);
@@ -260,40 +260,40 @@ class ExpandAssertions {
 					const famKey = hasFam ? `${source}|${famId}` : null;
 					const familyMembers = famKey ? (this.mentionsByFamily.get(famKey) || []) : [m];
 
-						// Find head
-						let head = familyMembers.find(member => String(member.head || '').trim().toLowerCase() === 't');
-						if (!head) head = familyMembers[0];
+					// Find head
+					let head = familyMembers.find(member => String(member.head || '').trim().toLowerCase() === 't');
+					if (!head) head = familyMembers[0];
 
-						// Find last member by sorting the family members
-						const headIdx = sorted.findIndex(member => member.mention_id === head.mention_id);
-						const sortedFamily = [...familyMembers].sort((a, b) => this._parseMentionId(a.mention_id) - this._parseMentionId(b.mention_id));
-						const last = sortedFamily[sortedFamily.length - 1];
-						const lastIdx = sorted.findIndex(member => member.mention_id === last.mention_id);
+					// Find last member by sorting the family members
+					const headIdx = sorted.findIndex(member => member.mention_id === head.mention_id);
+					const sortedFamily = [...familyMembers].sort((a, b) => this._parseMentionId(a.mention_id) - this._parseMentionId(b.mention_id));
+					const last = sortedFamily[sortedFamily.length - 1];
+					const lastIdx = sorted.findIndex(member => member.mention_id === last.mention_id);
 
-						if (headIdx !== -1 && lastIdx !== -1) {
-							// Preceding neighbors
-							const precedingNeighbors = sorted.slice(Math.max(0, headIdx - 5), headIdx)
-								.filter(neighbor => {
-									const nFamId = String(neighbor.family_id || '').trim();
-									return famId === '' ? neighbor.mention_id !== id : nFamId !== famId;
-								});
+					if (headIdx !== -1 && lastIdx !== -1) {
+						// Preceding neighbors
+						const precedingNeighbors = sorted.slice(Math.max(0, headIdx - 5), headIdx)
+							.filter(neighbor => {
+								const nFamId = String(neighbor.family_id || '').trim();
+								return famId === '' ? neighbor.mention_id !== id : nFamId !== famId;
+							});
 
-							// Succeeding neighbors
-							const succeedingNeighbors = sorted.slice(lastIdx + 1, lastIdx + 6)
-								.filter(neighbor => {
-									const nFamId = String(neighbor.family_id || '').trim();
-									return famId === '' ? neighbor.mention_id !== id : nFamId !== famId;
-								});
+						// Succeeding neighbors
+						const succeedingNeighbors = sorted.slice(lastIdx + 1, lastIdx + 6)
+							.filter(neighbor => {
+								const nFamId = String(neighbor.family_id || '').trim();
+								return famId === '' ? neighbor.mention_id !== id : nFamId !== famId;
+							});
 
-							const neighbors = [...precedingNeighbors, ...succeedingNeighbors];
-							for (const neighbor of neighbors) {
-								const virtualAssertion = { subject_id: id, predicate: 'isNeighborOf', object_id: neighbor.mention_id, start_year: year, end_year: '' };
-								addResult(this._row(neighbor.mention_id, 'isNeighborOf', 1.0, 'stored', virtualAssertion, null));
-							}
+						const neighbors = [...precedingNeighbors, ...succeedingNeighbors];
+						for (const neighbor of neighbors) {
+							const virtualAssertion = { subject_id: id, predicate: 'isNeighborOf', object_id: neighbor.mention_id, start_year: year, end_year: '' };
+							addResult(this._row(neighbor.mention_id, 'isNeighborOf', 1.0, 'stored', virtualAssertion, null));
 						}
 					}
 				}
 			}
+		}
 
 		// 4. Compositions. Merge parent edges across all equivalents.
 		const parentEdges = [];
@@ -305,7 +305,7 @@ class ExpandAssertions {
 		for (const { parent, edge: pe } of parentEdges) {
 			for (const { other: spouse, edge: se } of this.spouses.get(parent) || []) {
 				if (equivalents.has(spouse)) continue; // A != C
-				
+
 				let hasDirect = false;
 				for (const eqId of equivalents) {
 					if (this._directPairs.has(this._pairKey(eqId, 'isChildOf', spouse, false))) {
@@ -327,7 +327,7 @@ class ExpandAssertions {
 		for (const { other: spouse, edge: se } of spouseEdges) {
 			for (const { child, edge: ce } of this.childrenByParent.get(spouse) || []) {
 				if (equivalents.has(child)) continue; // A != C
-				
+
 				let hasDirect = false;
 				for (const eqId of equivalents) {
 					if (this._directPairs.has(this._pairKey(eqId, 'isParentOf', child, false))) {
@@ -480,16 +480,7 @@ class ExpandAssertions {
 
 	_getBirthYear(m) {
 		if (!m) return null;
-		let by = m.birth_year;
-		if (!by && m.original_data) by = m.original_data.birth_year;
-		if (!by && m.original_data) {
-			const age = parseInt(m.original_data.age, 10);
-			if (!isNaN(age)) {
-				const cYear = parseInt(this._getCensusYear(m.source), 10) || 1880;
-				by = cYear - age;
-			}
-		}
-		const parsed = parseInt(by, 10);
+		const parsed = parseInt(m.birth_year, 10);
 		return isNaN(parsed) ? null : parsed;
 	}
 }

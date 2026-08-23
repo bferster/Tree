@@ -5,7 +5,7 @@ When starting up the project, follow these steps:
 1. **Start the SSH Tunnel**:
    Start the SSH tunnel to access the remote Postgres database and API services.
    ```bash
-   ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -i "C:\Bill\CC\js\StageToolsKey.pem" -L 3000:127.0.0.1:3000 -L 5432:127.0.0.1:5432 bitnami@52.70.208.176 -N
+   ssh -C -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -i "C:\Bill\CC\js\StageToolsKey.pem" -L 3000:127.0.0.1:3000 -L 5432:127.0.0.1:5432 bitnami@52.70.208.176 -N
    ```
 
 2. **Start Local Web Server on Port 8000**:

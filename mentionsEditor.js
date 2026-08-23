@@ -308,7 +308,7 @@ class MentionsEditor {
 		const mid = this.currentMentionId;
 		const targetP = this.targetPerson || (window.app && window.app.targetPerson);
 		const anchorPid = (targetP && targetP.person_id) || window.treeApp.state.selectedPid;
-		
+
 		let relation = (window.app && window.app.curRelation) ? window.app.curRelation : null;
 		if (relation === 'inFamilyOf' || relation === 'inHouseholdOf') {
 			relation = null;
@@ -353,7 +353,7 @@ class MentionsEditor {
 			window.app.curRelation = null;
 			window.app.targetPerson = null;
 		}
-		
+
 		let initX = 200, initY = 200;
 		if (anchorPid && window.treeApp) {
 			const sourceNode = window.treeApp.GetNode(anchorPid);
@@ -386,7 +386,7 @@ class MentionsEditor {
 		const getVal = (key) => {
 			return mention[key];
 		};
-		
+
 		const newPerson = {
 			person_id: pid,
 			mentions: [mid],
@@ -409,9 +409,9 @@ class MentionsEditor {
 		window.app.curTree.persons.push(newPerson);
 
 		window.treeApp.AddNode(newPerson);
-		
+
 		window.app.rebuildAllRelationships();
-		
+
 		if (typeof window.treeApp.ApplyLayout === 'function') {
 			window.treeApp.ApplyLayout(true);
 		}
@@ -663,18 +663,6 @@ class MentionsEditor {
       `;
 		}).join('');
 
-		const originalData = match.mention.original_data;
-		const originalDataHtml = originalData
-			? `
-			<div class="me-raw-block">
-				<div class="me-raw-header" style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px; user-select: none;">
-					<p class="me-raw-label" style="margin: 0; font-weight: 600; font-size: 11px; text-transform: uppercase; color: #666;">Original data</p>
-					<span class="me-raw-toggle-icon" style="font-size: 10px; color: #999; margin-left: 6px; transition: transform 0.2s; display: inline-block;">▶</span>
-				</div>
-				<pre class="me-raw-json" style="display: none; margin-top: 0;">${typeof originalData === 'string' ? originalData : JSON.stringify(originalData, null, 2)}</pre>
-			</div>
-			`
-			: '';
 
 
 		const m = match.mention;
@@ -822,9 +810,6 @@ class MentionsEditor {
 		if (familyHtml) {
 			combinedBottomHtml += `<div style="height: 1px; background: #e0e0e0; margin: 24px 0 0 0;"></div>`;
 			combinedBottomHtml += familyHtml;
-		}
-		if (originalDataHtml) {
-			combinedBottomHtml += originalDataHtml;
 		}
 		if (groupMatchHtml) {
 			combinedBottomHtml += groupMatchHtml;

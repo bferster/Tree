@@ -18,7 +18,6 @@ I want to design a  module within the Verité user app for displaying and choosi
 	source: a unique identifier of the source ingested 
 	source_type: “census”, “slaveschedule”, “findagrave”, …
 	source_year: year of source data
-	original_data: the full row in original source table
 	confidence: from 0.0 to 0.99
 	full_name
 	first_name 

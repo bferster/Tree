@@ -1,0 +1,226 @@
+{
+    "treeName": "Family",
+    "county": "AUG",
+    "owner": "Bill",
+    "persons": [
+        {
+            "person_id": "P002",
+            "mentions": [
+                "AUG-CN-1870-11649",
+                "AUG-CN-1880-24520"
+            ],
+            "anchor": null,
+            "first_name": "Arch:AUG-CN-1870-11649",
+            "middle_name": "",
+            "last_name": "Crawford:AUG-CN-1870-11649",
+            "suffix": null,
+            "birth_year": "1835:AUG-CN-1870-11649",
+            "death_year": "",
+            "gender": "M:AUG-CN-1870-11649",
+            "race": "B:AUG-CN-1870-11649",
+            "x": 200,
+            "y": 200,
+            "verity": 3,
+            "isEnslaver": false,
+            "family_boost": ""
+        },
+        {
+            "person_id": "P1786307668869",
+            "mentions": [
+                "AUG-CN-1880-24521"
+            ],
+            "first_name": "Martha:AUG-CN-1880-24521",
+            "middle_name": "J:AUG-CN-1880-24521",
+            "last_name": "Crawford:AUG-CN-1880-24521",
+            "suffix": null,
+            "birth_year": "1840:AUG-CN-1880-24521",
+            "death_year": null,
+            "gender": "F:AUG-CN-1880-24521",
+            "race": "B:AUG-CN-1880-24521",
+            "anchor": "isSpouseOf:P002",
+            "x": 320,
+            "y": 100,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308000332",
+            "mentions": [
+                "AUG-CN-1880-24522"
+            ],
+            "first_name": "Jinnie:AUG-CN-1880-24522",
+            "middle_name": null,
+            "last_name": "Crawford:AUG-CN-1880-24522",
+            "suffix": null,
+            "birth_year": "1864:AUG-CN-1880-24522",
+            "death_year": null,
+            "gender": "F:AUG-CN-1880-24522",
+            "race": "B:AUG-CN-1880-24522",
+            "anchor": "isChildOf:P002",
+            "x": 100,
+            "y": 0,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308009540",
+            "mentions": [
+                "AUG-CN-1880-24523"
+            ],
+            "first_name": "Charles:AUG-CN-1880-24523",
+            "middle_name": null,
+            "last_name": "Crawford:AUG-CN-1880-24523",
+            "suffix": null,
+            "birth_year": "1866:AUG-CN-1880-24523",
+            "death_year": null,
+            "gender": "M:AUG-CN-1880-24523",
+            "race": "B:AUG-CN-1880-24523",
+            "anchor": "isChildOf:P002",
+            "x": 392.7212829589844,
+            "y": 253.99356079101562,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308067878",
+            "mentions": [
+                "AUG-CN-1880-24528"
+            ],
+            "first_name": "Sidney:AUG-CN-1880-24528",
+            "middle_name": null,
+            "last_name": "Crawford:AUG-CN-1880-24528",
+            "suffix": null,
+            "birth_year": "1878:AUG-CN-1880-24528",
+            "death_year": null,
+            "gender": "M:AUG-CN-1880-24528",
+            "race": "B:AUG-CN-1880-24528",
+            "anchor": "isChildOf:P002",
+            "x": 534.6264953613281,
+            "y": 353.58233642578125,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308126063",
+            "mentions": [
+                "AUG-CN-1880-24524"
+            ],
+            "first_name": "Mary:AUG-CN-1880-24524",
+            "middle_name": "Lee:AUG-CN-1880-24524",
+            "last_name": "Crawford:AUG-CN-1880-24524",
+            "suffix": null,
+            "birth_year": "1868:AUG-CN-1880-24524",
+            "death_year": null,
+            "gender": "F:AUG-CN-1880-24524",
+            "race": "B:AUG-CN-1880-24524",
+            "anchor": "isChildOf:P002",
+            "x": 100,
+            "y": 0,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308135791",
+            "mentions": [
+                "AUG-CN-1880-24526"
+            ],
+            "first_name": "Katy:AUG-CN-1880-24526",
+            "middle_name": null,
+            "last_name": "Crawford:AUG-CN-1880-24526",
+            "suffix": null,
+            "birth_year": "1873:AUG-CN-1880-24526",
+            "death_year": null,
+            "gender": "F:AUG-CN-1880-24526",
+            "race": "B:AUG-CN-1880-24526",
+            "anchor": "isChildOf:P002",
+            "x": 100,
+            "y": 0,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308145247",
+            "mentions": [
+                "AUG-CN-1880-24527"
+            ],
+            "first_name": "Lawrence:AUG-CN-1880-24527",
+            "middle_name": null,
+            "last_name": "Crawford:AUG-CN-1880-24527",
+            "suffix": null,
+            "birth_year": "1876:AUG-CN-1880-24527",
+            "death_year": null,
+            "gender": "M:AUG-CN-1880-24527",
+            "race": "B:AUG-CN-1880-24527",
+            "anchor": "isChildOf:P002",
+            "x": 1200,
+            "y": 350,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308180239",
+            "mentions": [
+                "AUG-CN-1880-24525"
+            ],
+            "first_name": "Lena:AUG-CN-1880-24525",
+            "middle_name": "L:AUG-CN-1880-24525",
+            "last_name": "Crawford:AUG-CN-1880-24525",
+            "suffix": null,
+            "birth_year": "1870:AUG-CN-1880-24525",
+            "death_year": null,
+            "gender": "F:AUG-CN-1880-24525",
+            "race": "B:AUG-CN-1880-24525",
+            "anchor": "isChildOf:P002",
+            "x": 200,
+            "y": 200,
+            "moved": false,
+            "verity": 2,
+            "isEnslaver": false
+        },
+        {
+            "person_id": "P1786308067879",
+            "anchor": "isEnslaverOf:P002",
+            "first_name": "Cyrus:AUG-CN-1870-11826",
+            "middle_name": "",
+            "norm_first_name": "",
+            "last_name": "Alexander:AUG-CN-1870-11826",
+            "nysiis_last_name": "",
+            "metaphone_last_name": "",
+            "suffix": null,
+            "race": "W:AUG-CN-1870-11826",
+            "gender": "M:AUG-CN-1870-11826",
+            "birth_year": "1825:AUG-CN-1870-11826",
+            "death_year": "",
+            "confidence": 1,
+            "mentions": [
+                "AUG-CN-1870-11826",
+                "AUG-CN-1860-18771",
+                "AUG-SS-1860-4019"
+            ],
+            "linked_persons": [],
+            "enslaved": false,
+            "isEnslaver": true,
+            "x": 483.58741760253906,
+            "y": -242.10762786865234,
+            "moved": true,
+            "expanded": true,
+            "hiddenDirs": {
+                "top": false,
+                "bottom": false,
+                "left": false,
+                "right": false
+            },
+            "verity": 4,
+            "family_boost": ""
+        }
+    ],
+    "notepad": "",
+    "relationships": []
+}

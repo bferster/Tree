@@ -1,6 +1,23 @@
 // match.js  (revised)
 // ---------------------------------------------------------------------------
 // Match — standalone name-comparison primitives + person<->mention scoring.
+//
+// CHANGES IN THIS REVISION (see design notes):
+//   1. Household (Lever C) is now a NOISY-OR *boost* on the residual gap to
+//      certainty, not an averaged lever. It can only raise a score, never drag
+//      it, so an absent or weak roster is no longer a penalty.
+//        S0 = weighted(name, birth)            // base identity evidence
+//        H  = 1 - prod(1 - h_k)                // noisy-OR over matched relatives
+//        S  = S0 + beta * H * (1 - S0)         // residual-gap boost (beta default 0.6)
+//   2. Birth profile default sigma loosened 2.0 -> 3.0 and knockout 10 -> 12,
+//      to fit the age-report noise of 1850/1860 self/enumerator-reported ages.
+//   3. Race knockout uses _raceClass(), which collapses Black<->Mulatto into one
+//      class so routine B<->M reclassification across enumerations does not veto.
+//   4. Calibration features are now [name, birth, H] (H is the family feature).
+//
+// Unchanged: name cascade (MatchName), Jaro-Winkler, rarity, nickname table,
+// logistic calibration machinery.
+//
 // No external dependencies. Tunables via the constructor / per-call ctx.
 // ---------------------------------------------------------------------------
 
@@ -439,16 +456,25 @@ class Match {
 		const lb = this._normLast(b.last_name);
 		if (la && lb && la === lb) return { strength: 1.0, kind: 'EXACT_LASTNAME' };
 		if (this._surnameBridge && this._surnameBridge(a, b)) return { strength: 0.9, kind: 'BRIDGED' };
+		
 		const dm = this._doubleMetaphoneScore(a.metaphone_last_name, b.metaphone_last_name);
-		if (dm === null) {
-			const na = Match.normUpper(a.nysiis_last_name);
-			const nb = Match.normUpper(b.nysiis_last_name);
-			if (na && nb && na === nb) return { strength: 0.85, kind: 'NYSIIS' };
-			return { strength: 0.0, kind: 'NO_MATCH' };
-		}
 		if (dm === 1.0) return { strength: 1.0, kind: 'PHONETIC_STRONG' };
 		if (dm === 0.8) return { strength: 0.8, kind: 'PHONETIC_MODERATE' };
+
+		// Check NYSIIS phonetic match
+		const na = Match.normUpper(a.nysiis_last_name);
+		const nb = Match.normUpper(b.nysiis_last_name);
+		if (na && nb && na === nb) return { strength: 0.85, kind: 'NYSIIS' };
+
 		if (dm === 0.6) return { strength: 0.6, kind: 'PHONETIC_WEAK', weakHint: true };
+
+		// Fuzzy Jaro-Winkler similarity on surnames
+		if (la && lb) {
+			const jw = this.jaroWinkler(la, lb);
+			if (jw >= 0.90) return { strength: 0.80, kind: 'FUZZY_STRONG' };
+			if (jw >= 0.85) return { strength: 0.65, kind: 'FUZZY_MODERATE', weakHint: true };
+		}
+
 		return { strength: 0.0, kind: 'NO_MATCH' };
 	}
 
@@ -548,6 +574,29 @@ class Match {
 		const v = String((o && o.birth_year != null) ? o.birth_year : '').split(':')[0].trim();
 		const n = parseInt(v, 10);
 		return Number.isFinite(n) ? n : null;
+	}
+	// Normalized birth place for EXACT matching. Prefers a norm_birth_place
+	// column if present, else birth_place. Case/whitespace-insensitive, trailing
+	// punctuation dropped; otherwise compared verbatim. Returns '' when absent.
+	_birthPlace(o) {
+		const raw = (o && (o.norm_birth_place != null && String(o.norm_birth_place).trim() !== '')) ? o.norm_birth_place
+			: (o && o.birth_place != null) ? o.birth_place : '';
+		let s = String(raw).split(':')[0].trim();
+		if (!s || s.toLowerCase() === 'null') return '';
+		return s.toUpperCase().replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim();
+	}
+	// Normalized occupation CATEGORY for boost-only agreement. norm_occupation
+	// holds coarse categories (DOMESTIC, AGRICULTURE, LABORER, ...). Blank / null
+	// / configured boilerplate => '' (neutral). Compared verbatim after
+	// case/whitespace normalization.
+	_normOccupation(o, boilerplate) {
+		const raw = (o && (o.norm_occupation != null && String(o.norm_occupation).trim() !== '')) ? o.norm_occupation
+			: (o && o.occupation != null) ? o.occupation : '';
+		let s = String(raw).split(':')[0].trim();
+		if (!s || s.toLowerCase() === 'null') return '';
+		s = s.toUpperCase().replace(/\s+/g, ' ').trim();
+		if (boilerplate && boilerplate.has(s)) return '';
+		return s;
 	}
 
 	// --- Lever C — household / family continuity (noisy-OR support) ---------
@@ -733,6 +782,17 @@ class Match {
 		const W0 = Object.assign({ name: 0.40, birth: 0.30 }, ctx.weights || {});
 		const corroboration = ctx.corroboration != null ? ctx.corroboration : 0;
 		const BETA = ctx.householdBoost != null ? ctx.householdBoost : 0.6;
+		// Birthplace (exact match) tunables. Absent field => no-op.
+		const BP_BOOST = ctx.birthplaceBoost != null ? ctx.birthplaceBoost : 0.15;      // exact agreement raises residual gap
+		const BP_PENALTY = ctx.birthplacePenalty != null ? ctx.birthplacePenalty : 0.15; // disagreement softly lowers score
+		const BP_KNOCKOUT = ctx.birthplaceKnockout === true;                            // opt-in hard veto on disagreement
+		// Occupation (norm_occupation) tunables. Minor valence, BOOST-ONLY: category
+		// agreement nudges up; disagreement/blank is neutral (occupation drifts over
+		// a decade, so a mismatch is not evidence against a match). No-op if absent.
+		const OCC_BOOST = ctx.occupationBoost != null ? ctx.occupationBoost : 0.05;
+		const OCC_BOILERPLATE = ctx.occupationBoilerplate
+			? new Set(ctx.occupationBoilerplate.map((x) => String(x).toUpperCase().trim()))
+			: null;
 		const ko = (reason) => ({ score: 0, tier: 'KNOCKOUT', reason, firedLevers: [], why: null });
 
 		// Birth profiles: sigma loosened for 1850/1860 age-report noise.
@@ -780,21 +840,52 @@ class Match {
 		}
 		const H = cAvailable ? C.H : 0;
 
-		// ===== COMBINE: base identity (name+birth) THEN household boost =====
+		// ===== LEVER P: birth place (EXACT match) =====
+		// Compared verbatim after case/whitespace normalization. Agreement is a
+		// residual-gap boost; disagreement is a soft penalty (or, opt-in, a
+		// hard knockout). Absent on either side => neutral (no effect), so this
+		// is a complete no-op until the birth_place column exists in the data.
+		const pPlace = this._birthPlace(person), mPlace = this._birthPlace(mention);
+		const pAvailable = !!(pPlace && mPlace);
+		let placeState = 'NA', placeAgree = null;
+		if (pAvailable) {
+			placeAgree = (pPlace === mPlace);
+			placeState = placeAgree ? 'AGREE' : 'DISAGREE';
+			if (!placeAgree && BP_KNOCKOUT) return ko('BIRTHPLACE_DISAGREE');
+		}
+
+		// ===== LEVER O: occupation category (BOOST-ONLY, minor) =====
+		// Same norm_occupation category on both sides => small boost. Disagreement
+		// and blanks are neutral (occupation drifts across a decade). No-op if absent.
+		const pOcc = this._normOccupation(person, OCC_BOILERPLATE), mOcc = this._normOccupation(mention, OCC_BOILERPLATE);
+		const occAvailable = !!(pOcc && mOcc);
+		const occAgree = occAvailable ? (pOcc === mOcc) : null;
+		const occState = !occAvailable ? 'NA' : (occAgree ? 'AGREE' : 'DISAGREE');
+
+		// ===== COMBINE: base identity (name+birth), birthplace, THEN residual boosts =====
 		// S0 = weighted(name, birth), redistributed if one lever is absent.
-		// S  = S0 + beta * H * (1 - S0)  -> household can only raise, never drag.
+		// Birthplace-agree, household, and occupation-agree are noisy-OR boosts on the
+		// residual gap (raise only, never drag). Birthplace disagreement applies a
+		// soft penalty; occupation never penalizes.
 		let wA = aAvailable ? W0.name : 0;
 		let wB = bAvailable ? W0.birth : 0;
 		const wBase = (wA + wB) || 1;
-		const S0 = (wA / wBase) * A + (wB / wBase) * B;
-		const rawScore = S0 + BETA * H * (1 - S0);
+		let S0 = (wA / wBase) * A + (wB / wBase) * B;
+		if (placeState === 'AGREE') S0 = S0 + BP_BOOST * (1 - S0);
+		else if (placeState === 'DISAGREE') S0 = Math.max(0, S0 - BP_PENALTY);
+		let rawScore = S0 + BETA * H * (1 - S0);
+		if (occState === 'AGREE') rawScore = rawScore + OCC_BOOST * (1 - rawScore);
 		const score = Math.max(0, Math.min(1, rawScore + corroboration));
 
+		// tier reflects the CORE identity levers (name/birth/birthplace/family);
+		// occupation is minor and is listed but does not inflate the tier.
 		const fired = [];
 		if (aAvailable && nd.rung !== 'SURNAME_ONLY' && A >= 0.4) fired.push('name');
 		if (bAvailable && B >= 0.4) fired.push('birth');
+		if (placeState === 'AGREE') fired.push('birthplace');
 		if (C.fired) fired.push('family');
 		const tier = fired.length >= 3 ? 'STRONG' : fired.length === 2 ? 'SUPPORTED' : fired.length === 1 ? 'PROVISIONAL' : 'WEAK';
+		if (occState === 'AGREE') fired.push('occupation');
 
 		const out = {
 			score, tier, firedLevers: fired, reason: null,
@@ -805,8 +896,12 @@ class Match {
 				base: +S0.toFixed(3),
 				rung: nd.rung, surnameKind: nd.surnameKind, needsCorroboration: !!nd.needsCorroboration,
 				birthGap: gap, birthProfile: profile, familyCount: C.count,
+				birthplace: placeState, birthplaceAgree: placeAgree,
+				birthPlacePerson: pPlace || '', birthPlaceMention: mPlace || '',
+				occupation: occState, occupationAgree: occAgree, occupationBoost: OCC_BOOST,
+				occupationPerson: pOcc || '', occupationMention: mOcc || '',
 				familyMatches: C.matched.map((m) => { const p = m.candidate, yr = (range(p.birth_year) || [''])[0]; return (p.full_name || `${p.first_name || ''} ${p.last_name || ''}`).trim() + (yr ? `-${yr}` : ''); }),
-				corroboration, available: { name: aAvailable, birth: bAvailable, household: cAvailable },
+				corroboration, available: { name: aAvailable, birth: bAvailable, birthplace: pAvailable, occupation: occAvailable, household: cAvailable },
 			},
 		};
 		if (this._calib && this.probability) { try { out.probability = this.probability([A, B, H]); } catch (e) { /* feature mismatch */ } }

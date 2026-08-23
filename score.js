@@ -243,9 +243,6 @@ class Score {
 		}
 		return this._familyIndexCache.index;
 	}
-
-	// Map<String(mention_id), mention> — avoids re-scanning the whole mentions table
-	// for every enslaver_id lookup in _getEnslaverName.
 	_getMentionIndex(mentions) {
 		if (!this._mentionIndexCache || this._mentionIndexCache.mentions !== mentions) {
 			const idx = new Map();
@@ -277,127 +274,6 @@ class Score {
 			this._personIndexCache = { persons, index: idx };
 		}
 		return this._personIndexCache.index;
-	}
-
-	// Source-loading pipeline generates two mentions per 1850/1860 slave-schedule row
-	// (the enslaver + the enslaved) linked by a wasEnslavedBy assertion — see
-	// SKILLS/dataDescription.md. This is also the format where the enslaved person's
-	// own record carries no name at all, so surfacing the enslaver's name matters most.
-	isSlaveScheduleSource(source) {
-		const norm = String(source || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-		return norm.includes('SS1850') || norm.includes('SS1860');
-	}
-
-	// Map<String(enslaved mention_id), enslaver mention_id> built from the wasEnslavedBy
-	// (and inverse enslaves/isEnslaverOf) assertions — avoids rescanning the whole
-	// assertions table for every mention that needs its enslaver resolved.
-	_getEnslavedByIndex(assertions) {
-		if (!this._enslavedByIndexCache || this._enslavedByIndexCache.assertions !== assertions) {
-			const idx = new Map();
-			if (Array.isArray(assertions)) {
-				for (let i = 0; i < assertions.length; i++) {
-					const a = assertions[i];
-					if (!a) continue;
-					if (a.predicate === 'wasEnslavedBy' && a.subject_id) {
-						idx.set(String(a.subject_id), a.object_id);
-					} else if ((a.predicate === 'enslaves' || a.predicate === 'isEnslaverOf') && a.object_id) {
-						idx.set(String(a.object_id), a.subject_id);
-					}
-				}
-			}
-			this._enslavedByIndexCache = { assertions, index: idx };
-		}
-		return this._enslavedByIndexCache.index;
-	}
-
-	_getEnslaverName(m) {
-		if (!m) return '';
-		const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
-
-		if (m.enslaver_name) return String(m.enslaver_name).trim();
-		if (m.enslaver) return typeof m.enslaver === 'string' ? m.enslaver.trim() : (m.enslaver.full_name || m.enslaver.name || '');
-
-		let orig = m.original_data;
-		if (typeof orig === 'string') {
-			try { orig = JSON.parse(orig); } catch (e) { }
-		}
-		if (orig && typeof orig === 'object') {
-			const eName = orig.enslaver || orig.enslaver_name || orig.Enslaver || orig['Enslaver Name'] || orig['enslaver_name'] || orig.owner || orig.Owner;
-			if (eName && typeof eName === 'string') return eName.trim();
-		}
-
-		// Authoritative link: the wasEnslavedBy assertion generated at ingest time.
-		if (globalApp && globalApp.assertions && globalApp.mentions) {
-			const enslaverMentionId = this._getEnslavedByIndex(globalApp.assertions).get(String(m.mention_id));
-			if (enslaverMentionId) {
-				const eM = this._getMentionIndex(globalApp.mentions).get(String(enslaverMentionId));
-				if (eM) {
-					const name = [eM.first_name, eM.middle_name, eM.last_name].filter(Boolean).join(' ') || eM.full_name;
-					if (name) return name.trim();
-				}
-			}
-		}
-
-		if (m.enslaver_id && globalApp) {
-			if (globalApp.mentions) {
-				const eM = this._getMentionIndex(globalApp.mentions).get(String(m.enslaver_id));
-				if (eM) {
-					const name = [eM.first_name, eM.middle_name, eM.last_name].filter(Boolean).join(' ') || eM.full_name;
-					if (name) return name.trim();
-				}
-			}
-			if (globalApp.curTree && globalApp.curTree.persons) {
-				const eP = this._getPersonIndex(globalApp.curTree.persons).get(String(m.enslaver_id));
-				if (eP) {
-					const name = [eP.first_name, eP.last_name].filter(Boolean).join(' ');
-					if (name) return name.trim();
-				}
-			}
-		}
-
-		// Fallback specific to 1850/1860 slave schedules: within a household, the one
-		// named row with head='t' is the enslaver (the transcription format for these
-		// two sources — everyone else in the household is listed by age/sex/race only,
-		// with no name). Only valid for these two sources; census "head" means the
-		// ordinary head-of-household and has nothing to do with enslavement.
-		const famId = getFamId(m);
-		if (famId && m.source && this.isSlaveScheduleSource(m.source) && globalApp && globalApp.mentions) {
-			// Same grouping the family index already builds — jump straight to this
-			// mention's family unit instead of rescanning the entire mentions table.
-			const group = this._getFamilyIndex(globalApp.mentions).get(m.source + '|F|' + famId) || [];
-			const groupEnslaver = group.find(x => {
-				if (x.mention_id === m.mention_id) return false;
-				const headVal = String(x.head || '').trim().toLowerCase();
-				const isHead = headVal === 't' || headVal === 'true' || headVal === 'y' || headVal === 'yes';
-				return isHead && (isPresent(x.first_name) || isPresent(x.full_name));
-			});
-			if (groupEnslaver) {
-				const name = [groupEnslaver.first_name, groupEnslaver.middle_name, groupEnslaver.last_name].filter(Boolean).join(' ') || groupEnslaver.full_name;
-				if (name) return name.trim();
-			}
-		}
-
-		if (globalApp && globalApp.curTree && globalApp.curTree.relationships && globalApp.curTree.persons) {
-			const pid = m.person_id || m.mention_id;
-			const rels = globalApp.curTree.relationships;
-			const personIndex = this._getPersonIndex(globalApp.curTree.persons);
-
-			for (const r of rels) {
-				let enslaverPid = null;
-				if (r.predicate === 'wasEnslavedBy' && r.subject_id === pid) enslaverPid = r.object_id;
-				else if ((r.predicate === 'isEnslaverOf' || r.predicate === 'enslaves') && r.object_id === pid) enslaverPid = r.subject_id;
-
-				if (enslaverPid) {
-					const eP = personIndex.get(String(enslaverPid));
-					if (eP) {
-						const name = [eP.first_name, eP.last_name].filter(Boolean).join(' ');
-						if (name) return name.trim();
-					}
-				}
-			}
-		}
-
-		return '';
 	}
 
 	_calculateFamilyBoost(anchorPerson, candidateMention, familyIndex = null) {
@@ -598,12 +474,10 @@ class Score {
 			usedCandPids.add(pair.cM.mention_id);
 			const rawName = pair.cM.first_name || pair.cM.norm_first_name || 'Relative';
 			const nameStr = rawName.split(':')[0];
-			const enslaverName = this._getEnslaverName(pair.cM);
 			matchedKin.push({
 				name: nameStr,
 				mention_id: pair.cM.mention_id,
 				score: pair.score,
-				...(enslaverName ? { enslaver_name: enslaverName } : {})
 			});
 		}
 

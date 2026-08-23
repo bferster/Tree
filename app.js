@@ -385,13 +385,16 @@ class App {
 			// Fallback if count is unknown
 			this.showProgress(`Loading ${label}...`, false);
 			const separator = url.includes('?') ? '&' : '?';
-			const res = await fetch(url + (maxRecords ? `${separator}limit=${maxRecords}` : ''));
+			const res = await fetch(url + (maxRecords ? `${separator}limit=${maxRecords}` : ''), {
+				headers: { 'Accept': 'text/csv' }
+			});
 			if (!res.ok) throw new Error(`Failed to load ${label}: ${res.status} ${res.statusText}`);
-			return await res.json();
+			const text = await res.text();
+			return d3.csvParse(text);
 		}
 
-		// 2. Fetch in chunks
-		const chunkLimit = 10000;
+		// 2. Fetch in chunks (using CSV for 4x smaller payload & faster parsing)
+		const chunkLimit = 50000;
 		const separator = url.includes('?') ? '&' : '?';
 		const fetchPromises = [];
 		let loadedRecords = 0;
@@ -399,12 +402,15 @@ class App {
 
 		for (let offset = 0; offset < totalRecords; offset += chunkLimit) {
 			const fetchLimit = Math.min(chunkLimit, totalRecords - offset);
-			const promise = fetch(`${url}${separator}limit=${fetchLimit}&offset=${offset}`)
+			const promise = fetch(`${url}${separator}limit=${fetchLimit}&offset=${offset}`, {
+				headers: { 'Accept': 'text/csv' }
+			})
 				.then(res => {
 					if (!res.ok) throw new Error(`Failed to load chunk for ${label}`);
-					return res.json();
+					return res.text();
 				})
-				.then(chunkData => {
+				.then(csvText => {
+					const chunkData = d3.csvParse(csvText);
 					loadedRecords += chunkData.length;
 					const percent = Math.round((loadedRecords / totalRecords) * 100);
 					this.showProgress(`Loading ${label}... ${percent}%`, percent);
@@ -760,26 +766,15 @@ class App {
 			this.curTree.county = this.county;
 		}
 
-		if (isTest) {
-			this.showProgress('Loading data from CSV...', false);
-			const [allAssertions, allMentions] = await Promise.all([
-				d3.csv(`img/assertions.csv?v=${version}`),
-				d3.csv(`img/mentions.csv?v=${version}`)
-			]);
-
-			this.assertions = allAssertions.filter(r => r.subject_id && r.subject_id.startsWith(countyPrefix));
-			this.mentions = allMentions.filter(r => r.source && r.source.startsWith(countyPrefix)).map(r => { delete r.narrative_vector; return r; });
-		}
-		else {
-			this.showProgress('Connecting to database...', false);
-			const mentionsCols = 'mention_id,source,source_year,original_data,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,narrative,metaphone_last_name';
-			const [assertions, mentions] = await Promise.all([
-				this.fetchWithProgress(`/api/assertions?subject_id=like.${countyPrefix}*&order=assertion_id`, 'assertions'),
-				this.fetchWithProgress(`/api/mentions?select=${mentionsCols}&source=like.${countyPrefix}*&order=mention_id`, 'mentions')
-			]);
-			this.assertions = assertions;
-			this.mentions = mentions;
-		}
+		this.showProgress('Connecting to database...', false);
+		const mentionsCols = 'mention_id,source,source_year,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,metaphone_last_name,birth_place';
+		const assertionsCols = 'assertion_id,subject_id,predicate,object_id,start_year,end_year,who,confidence';
+		const [assertions, mentions] = await Promise.all([
+			this.fetchWithProgress(`/api/assertions?select=${assertionsCols}&subject_id=like.${countyPrefix}*&order=assertion_id`, 'assertions'),
+			this.fetchWithProgress(`/api/mentions?select=${mentionsCols}&source=like.${countyPrefix}*&order=mention_id`, 'mentions')
+		]);
+		this.assertions = assertions;
+		this.mentions = mentions;
 
 		const currentPersons = Array.isArray(this.curTree.persons) ? this.curTree.persons : Object.values(this.curTree.persons || {});
 		if (currentPersons.length === 0 && this.mentions && this.mentions.length > 0) {
@@ -906,9 +901,10 @@ class App {
 					this.mentions = allMentions.filter(r => r.source && r.source.startsWith(countyPrefix)).map(r => { delete r.narrative_vector; return r; });
 				} else {
 					this.showProgress('Connecting to database...', false);
-					const mentionsCols = 'mention_id,source,source_year,original_data,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,narrative,soundex_last_name';
+					const mentionsCols = 'mention_id,source,source_year,confidence,full_name,first_name,middle_name,last_name,birth_year,death_year,race,gender,occupation,legal_status,norm_first_name,nysiis_last_name,norm_race,norm_occupation,head,household_id,family_id,metaphone_last_name,birth_place';
+					const assertionsCols = 'assertion_id,subject_id,predicate,object_id,start_year,end_year,who,confidence';
 					const [assertions, mentions] = await Promise.all([
-						this.fetchWithProgress(`/api/assertions?subject_id=like.${countyPrefix}*&order=assertion_id`, 'assertions'),
+						this.fetchWithProgress(`/api/assertions?select=${assertionsCols}&subject_id=like.${countyPrefix}*&order=assertion_id`, 'assertions'),
 						this.fetchWithProgress(`/api/mentions?select=${mentionsCols}&source=like.${countyPrefix}*&order=mention_id`, 'mentions')
 					]);
 					this.assertions = assertions;

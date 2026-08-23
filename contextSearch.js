@@ -527,26 +527,8 @@ function renderSourceGrid(mentionsList, sourceLabel, highlightMentionId) {
 	if (!sourceLabel || !sourceLabel.includes('1880')) {
 		excludeFields.push('relation');
 	}
-
-	// Flatten original_data and include all other top-level mention fields
-	const processedList = mentionsList.map(m => {
-		let origData = m.original_data || {};
-		if (typeof origData === 'string') {
-			try { origData = JSON.parse(origData); } catch (e) { origData = {}; }
-		}
-		if (Array.isArray(origData)) {
-			origData = origData.length > 0 ? origData[0] : {};
-		}
-
-		let relVal = '';
-		if (origData) {
-			relVal = origData.Relation || origData.relation || origData.Relationship || origData.relationship || origData['Rel to Head'] || '';
-		}
-
-		const row = { ...m, ...origData, relation: relVal };
-		delete row.original_data; // Remove the object/string so it doesn't render as [object Object]
-
-		// Remove requested excluded fields (case-insensitive check just in case)
+	const processedList = (mentionsList || []).map(m => {
+		const row = { ...m };
 		excludeFields.forEach(field => {
 			if (field in row) delete row[field];
 			const lowerField = field.toLowerCase();
@@ -554,7 +536,6 @@ function renderSourceGrid(mentionsList, sourceLabel, highlightMentionId) {
 				if (k.toLowerCase() === lowerField) delete row[k];
 			});
 		});
-
 		return row;
 	});
 
