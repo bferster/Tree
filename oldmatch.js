@@ -15,26 +15,6 @@
 //      class so routine B<->M reclassification across enumerations does not veto.
 //   4. Calibration features are now [name, birth, H] (H is the family feature).
 //
-// PRECISION REVISION (validated on a 500-pair human-reviewed sample; strict
-// auto-accept precision was 52.6%). Four changes:
-//   A. Surname-distance guard (_surnameMatch): a phonetic / NYSIIS / bridged
-//      surname tier only stands if the raw surnames are also close under
-//      Jaro-Winkler (>= surnameFuzzyFloor, default 0.85). Stops double-metaphone
-//      collisions (Price/Boyers, Carrier/Crow) from counting as a full surname
-//      while sparing genuine spelling variants (Snyder/Snider, Kline/Cline).
-//   B. Nickname demotion (matchNameDetail): base 1.00 (EXACT_FIRST_SURNAME) is
-//      reserved for LITERALLY identical given names. Nickname-table equivalence
-//      (Fannie/Frances) and fuzzy matches drop to NICKNAME_FIRST_SURNAME (0.85)
-//      and are marked needsCorroboration.
-//   C. Corroboration gate (MatchPerson combiner): needsCorroboration is no longer
-//      diagnostic-only. A needsCorroboration rung with NO corroborating evidence
-//      (no household, no birthplace-agree, no occupation-agree) takes a subtractive
-//      corroborationPenalty (default 0.15). Second downward soft signal, alongside
-//      birthplace disagreement. Set corroborationPenalty=0 to restore old behavior.
-//   D. Calibration features are now [name, birth, H, surnameReliability]; the new
-//      scalar lets probability see how trustworthy the surname match is. Margin is
-//      a caller-level signal and stays out of this per-pair vector.
-//
 // Unchanged: name cascade (MatchName), Jaro-Winkler, rarity, nickname table,
 // logistic calibration machinery.
 //
@@ -56,26 +36,6 @@ class Match {
 	};
 
 	static DEFAULT_JW_FUZZY_PASS = 0.85;
-
-	// Surname-distance guard: floor on raw-surname Jaro-Winkler below which a
-	// phonetic / NYSIIS / bridged code match is rejected (falls through to
-	// NO_MATCH). Exact full-/last-name tiers are exempt (they are identical).
-	static DEFAULT_SURNAME_FUZZY_FLOOR = 0.85;
-
-	// surnameReliability: how much to trust the surname match, fed to calibration
-	// (feature D). Higher = more trustworthy. Keyed by surnameKind.
-	static SURNAME_RELIABILITY = {
-		EXACT_FULLNAME: 1.0,
-		EXACT_LASTNAME: 1.0,
-		BRIDGED: 0.85,
-		FUZZY_STRONG: 0.75,
-		NYSIIS: 0.70,
-		PHONETIC_STRONG: 0.70,
-		PHONETIC_MODERATE: 0.50,
-		FUZZY_MODERATE: 0.45,
-		PHONETIC_WEAK: 0.35,
-		NO_MATCH: 0.0,
-	};
 
 	static DEFAULT_NICKNAMES = {
 		// William
@@ -280,10 +240,6 @@ class Match {
 			? config.jwFuzzyPassThreshold
 			: Match.DEFAULT_JW_FUZZY_PASS;
 
-		this.surnameFuzzyFloor = (config.surnameFuzzyFloor != null)
-			? config.surnameFuzzyFloor
-			: Match.DEFAULT_SURNAME_FUZZY_FLOOR;
-
 		this._nickToCanon = new Map();
 		const tables = [Match.DEFAULT_NICKNAMES, config.nicknames || {}];
 		for (const table of tables) {
@@ -435,29 +391,19 @@ class Match {
 		if (gA.cls === 'ABSENT' || gB.cls === 'ABSENT') {
 			if (firedSurname) { rung = 'SURNAME_ONLY'; base = 0.3; needsCorroboration = true; }
 		} else if (gA.cls === 'FULL' && gB.cls === 'FULL') {
-			// Three levels of given-name agreement, strongest first:
-			//   givenIdentical - literally the same string after normUpper (base 1.0)
-			//   givenExact     - same canonical form via the nickname table, but NOT
-			//                    identical (Fannie/Frances) -> 0.85, needsCorroboration
-			//   givenNickname  - fuzzy Jaro-Winkler match -> 0.85, needsCorroboration
-			// A same-name-family, same-surname, close-birth pair is common among
-			// siblings and neighbors in a county census, so anything short of a
-			// literal match now wants corroboration.
 			const canonA = this.nickname(gA.norm);
 			const canonB = this.nickname(gB.norm);
-			const givenIdentical = gA.norm === gB.norm;
-			const givenExact = !givenIdentical && !!canonA && canonA === canonB;
+			const givenExact = !!canonA && canonA === canonB;
 			const jw = this.jaroWinkler(gA.norm, gB.norm);
 			const givenNickname = jw >= this.jwFuzzyPassThreshold;
-			const givenAgree = givenIdentical || givenExact || givenNickname;
 
-			if (givenIdentical && firedSurname) {
+			if (givenExact && firedSurname) {
 				rung = 'EXACT_FIRST_SURNAME'; base = 1.0; usedFirstNameAgreement = true;
-			} else if ((givenExact || givenNickname) && firedSurname) {
-				rung = 'NICKNAME_FIRST_SURNAME'; base = 0.85; needsCorroboration = true; usedFirstNameAgreement = true;
-			} else if (givenAgree && sm.strength >= 0.6 && sm.strength < 0.8) {
-				rung = 'PHONETIC_MODERATE_SURNAME'; base = 0.7; needsCorroboration = true; usedFirstNameAgreement = true;
-			} else if (givenAgree && sm.strength === 0.0) {
+			} else if (givenNickname && firedSurname) {
+				rung = 'NICKNAME_FIRST_SURNAME'; base = 0.85; usedFirstNameAgreement = true;
+			} else if ((givenExact || givenNickname) && sm.strength >= 0.6 && sm.strength < 0.8) {
+				rung = 'PHONETIC_MODERATE_SURNAME'; base = 0.7; usedFirstNameAgreement = true;
+			} else if ((givenExact || givenNickname) && sm.strength === 0.0) {
 				rung = 'GIVEN_NAME_ONLY'; base = 0.4; needsCorroboration = true; usedFirstNameAgreement = true;
 			} else if (firedSurname) {
 				rung = 'SURNAME_ONLY'; base = 0.3; needsCorroboration = true;
@@ -509,46 +455,27 @@ class Match {
 		const la = this._normLast(a.last_name);
 		const lb = this._normLast(b.last_name);
 		if (la && lb && la === lb) return { strength: 1.0, kind: 'EXACT_LASTNAME' };
-
-		// Surname-distance guard. The phonetic / NYSIIS / bridged tiers below match
-		// on CODES, not spellings, and double-metaphone primaries collide for
-		// genuinely different surnames (Bell/Bull, Price/Boyers, Carrier/Crow). A
-		// code match only stands if the raw surnames are also close under
-		// Jaro-Winkler (>= surnameFuzzyFloor). Exact full-/last-name matched above
-		// and are exempt. When a surname string is missing on either side we cannot
-		// verify spelling, so the guard is a no-op (evidence excluded, not penalized).
-		const surnameJw = (la && lb) ? this.jaroWinkler(la, lb) : null;
-		const guardOk = (surnameJw == null) || (surnameJw >= this.surnameFuzzyFloor);
-
-		if (guardOk && this._surnameBridge && this._surnameBridge(a, b)) return { strength: 0.9, kind: 'BRIDGED' };
-
+		if (this._surnameBridge && this._surnameBridge(a, b)) return { strength: 0.9, kind: 'BRIDGED' };
+		
 		const dm = this._doubleMetaphoneScore(a.metaphone_last_name, b.metaphone_last_name);
-		if (guardOk && dm === 1.0) return { strength: 1.0, kind: 'PHONETIC_STRONG' };
-		if (guardOk && dm === 0.8) return { strength: 0.8, kind: 'PHONETIC_MODERATE' };
+		if (dm === 1.0) return { strength: 1.0, kind: 'PHONETIC_STRONG' };
+		if (dm === 0.8) return { strength: 0.8, kind: 'PHONETIC_MODERATE' };
 
 		// Check NYSIIS phonetic match
 		const na = Match.normUpper(a.nysiis_last_name);
 		const nb = Match.normUpper(b.nysiis_last_name);
-		if (guardOk && na && nb && na === nb) return { strength: 0.85, kind: 'NYSIIS' };
+		if (na && nb && na === nb) return { strength: 0.85, kind: 'NYSIIS' };
 
-		if (guardOk && dm === 0.6) return { strength: 0.6, kind: 'PHONETIC_WEAK', weakHint: true };
+		if (dm === 0.6) return { strength: 0.6, kind: 'PHONETIC_WEAK', weakHint: true };
 
-		// Fuzzy Jaro-Winkler similarity on surnames (already distance-based, so it
-		// carries its own guard - no separate floor needed).
+		// Fuzzy Jaro-Winkler similarity on surnames
 		if (la && lb) {
-			const jw = surnameJw != null ? surnameJw : this.jaroWinkler(la, lb);
+			const jw = this.jaroWinkler(la, lb);
 			if (jw >= 0.90) return { strength: 0.80, kind: 'FUZZY_STRONG' };
 			if (jw >= 0.85) return { strength: 0.65, kind: 'FUZZY_MODERATE', weakHint: true };
 		}
 
 		return { strength: 0.0, kind: 'NO_MATCH' };
-	}
-
-	// surnameReliability scalar for calibration (feature D). Unknown kinds get a
-	// neutral 0.5 so a new tier never silently reads as fully trustworthy.
-	_surnameReliability(kind) {
-		const R = Match.SURNAME_RELIABILITY;
-		return (kind && R[kind] != null) ? R[kind] : 0.5;
 	}
 
 	_doubleMetaphoneScore(codeA, codeB) {
@@ -755,14 +682,7 @@ class Match {
 	}
 
 	// =======================================================================
-	// PROBABILITY CALIBRATION  (features = [name, birth, H, surnameReliability])
-	//   surnameReliability lets probability see how trustworthy the surname match
-	//   is - the signal the old [name, birth, H] vector was blind to. Margin
-	//   (winner - runner-up) is a CALLER-level signal (it needs the full candidate
-	//   set) and is deliberately NOT in this per-pair vector; put it in the caller's
-	//   MATCH/MAYBE bucketing instead. When you change this list, update the
-	//   caller's labeled-pair export in the same commit or every fitted model
-	//   silently misaligns (probability() throws on length mismatch, swallowed).
+	// PROBABILITY CALIBRATION  (features = [name, birth, H])
 	// =======================================================================
 	_calibFeatures(res) {
 		if (Array.isArray(res)) return res.slice();
@@ -770,10 +690,7 @@ class Match {
 		const A = w ? (w.name || 0) : (res.name != null ? res.name : 0);
 		const B = w ? (w.birth || 0) : (res.birth != null ? res.birth : 0);
 		const C = w ? (w.family || 0) : (res.family != null ? res.family : 0);
-		let R;
-		if (w && w.surnameReliability != null) R = w.surnameReliability;
-		else R = this._surnameReliability(w ? w.surnameKind : res.surnameKind);
-		return [A || 0, B || 0, Math.min(1, C || 0), R != null ? R : 0.5];
+		return [A || 0, B || 0, Math.min(1, C || 0)];
 	}
 
 	fitCalibration(rows, opts = {}) {
@@ -873,10 +790,6 @@ class Match {
 		// agreement nudges up; disagreement/blank is neutral (occupation drifts over
 		// a decade, so a mismatch is not evidence against a match). No-op if absent.
 		const OCC_BOOST = ctx.occupationBoost != null ? ctx.occupationBoost : 0.05;
-		// Corroboration gate: a needsCorroboration name rung with NO corroborating
-		// evidence takes this subtractive penalty. Set to 0 to restore the previous
-		// diagnostic-only behavior exactly.
-		const CORROB_PENALTY = ctx.corroborationPenalty != null ? ctx.corroborationPenalty : 0.15;
 		const OCC_BOILERPLATE = ctx.occupationBoilerplate
 			? new Set(ctx.occupationBoilerplate.map((x) => String(x).toUpperCase().trim()))
 			: null;
@@ -962,17 +875,6 @@ class Match {
 		else if (placeState === 'DISAGREE') S0 = Math.max(0, S0 - BP_PENALTY);
 		let rawScore = S0 + BETA * H * (1 - S0);
 		if (occState === 'AGREE') rawScore = rawScore + OCC_BOOST * (1 - rawScore);
-		// Corroboration gate (second downward soft signal). Fires only when the name
-		// rung is marked needsCorroboration AND nothing corroborated the pair:
-		// household did not fire, birthplace is not AGREE, occupation is not AGREE.
-		// It never fires for EXACT_FIRST_SURNAME (literal-identical given), and since
-		// it only subtracts when no boost was applied it never interacts with a boost.
-		const corroborated = C.fired || placeState === 'AGREE' || occState === 'AGREE';
-		let corroborationGate = false;
-		if (nd.needsCorroboration && !corroborated && CORROB_PENALTY > 0) {
-			rawScore = Math.max(0, rawScore - CORROB_PENALTY);
-			corroborationGate = true;
-		}
 		const score = Math.max(0, Math.min(1, rawScore + corroboration));
 
 		// tier reflects the CORE identity levers (name/birth/birthplace/family);
@@ -985,8 +887,6 @@ class Match {
 		const tier = fired.length >= 3 ? 'STRONG' : fired.length === 2 ? 'SUPPORTED' : fired.length === 1 ? 'PROVISIONAL' : 'WEAK';
 		if (occState === 'AGREE') fired.push('occupation');
 
-		const sRel = this._surnameReliability(nd.surnameKind);
-
 		const out = {
 			score, tier, firedLevers: fired, reason: null,
 			weights: { name: +(wA / wBase).toFixed(3), birth: +(wB / wBase).toFixed(3), householdBoost: BETA },
@@ -994,8 +894,7 @@ class Match {
 				name: +A.toFixed(3), birth: +B.toFixed(3), family: +H.toFixed(3),
 				householdH: +H.toFixed(3), boost: BETA,
 				base: +S0.toFixed(3),
-				rung: nd.rung, surnameKind: nd.surnameKind, surnameReliability: +sRel.toFixed(3),
-				needsCorroboration: !!nd.needsCorroboration, corroborationGate,
+				rung: nd.rung, surnameKind: nd.surnameKind, needsCorroboration: !!nd.needsCorroboration,
 				birthGap: gap, birthProfile: profile, familyCount: C.count,
 				birthplace: placeState, birthplaceAgree: placeAgree,
 				birthPlacePerson: pPlace || '', birthPlaceMention: mPlace || '',
@@ -1005,7 +904,7 @@ class Match {
 				corroboration, available: { name: aAvailable, birth: bAvailable, birthplace: pAvailable, occupation: occAvailable, household: cAvailable },
 			},
 		};
-		if (this._calib && this.probability) { try { out.probability = this.probability([A, B, H, sRel]); } catch (e) { /* feature mismatch */ } }
+		if (this._calib && this.probability) { try { out.probability = this.probability([A, B, H]); } catch (e) { /* feature mismatch */ } }
 		return out;
 	}
 
