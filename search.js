@@ -5,10 +5,17 @@
 //
 //   search.scan(curTree, personId)                -> coverage across all sources
 //   search.find(curTree, personId, { source })    -> ranked candidates in one source
+//   search.findBatch(curTree, personIds, {source})-> jointly resolve several
+//                                                     tree persons against one
+//                                                     source (cross-support +
+//                                                     collision detection)
 //
-// Nothing here writes isSameAs. Both entry points return candidates; the
-// researcher decides. accept()/reject() emit assertion rows for the caller to
-// persist.
+// Nothing here writes isSameAs to the tree/assertion store - that's still the
+// caller's job. accept()/reject() emit assertion rows for the caller to
+// persist, but they DO feed this Search instance's own in-session state right
+// away: addAssertion() re-wires the surname bridge, and _recordOutcome() banks
+// a labeled feature vector so this.match's calibration (Match.fitCalibration/
+// probability) sharpens as researchers confirm or reject candidates.
 //
 // DEPENDS ON match.js (class Match). Scoring is delegated to Match.MatchPerson;
 // this file supplies the person profile, the kin set, the constraints, and the
@@ -109,7 +116,11 @@
 		minMotherAge:      13,
 		maxMotherAge:      50,
 		minFatherAge:      14,
-		maxFatherAge:      70
+		maxFatherAge:      70,
+		// Calibration feedback loop (see accept()/reject()/_maybeRefitCalibration).
+		calibMinSamples:   20,  // total labeled pairs required before first fit
+		calibMinPerClass:  5,   // accepts AND rejects required before first fit
+		calibRefitEvery:   5    // refit after this many new labels accrue
 	};
 
 	var MENTION_ID_RE = /^[A-Za-z]{2,5}[-_][A-Za-z0-9]{2,5}[-_]\d{3,4}[-_][\w.]+$/;
@@ -204,9 +215,17 @@
 		this.bridges    = config.bridges || null;   // optional precomputed household bridges
 		this.match      = config.match || new MatchCls(config.matchConfig || {});
 
+		// Calibration feedback loop (Stage 6a below). Rows are either produced
+		// by accept()/reject() during this session or supplied up front via
+		// config.calibrationSeed (e.g. a prior human-reviewed sample), in the
+		// same {features|res, label} shape Match.fitCalibration accepts.
+		this._calibLog = (config.calibrationSeed || []).slice();
+		this._calibLogAtLastFit = 0;
+
 		this._index();
 		this._wireRarity();
 		this._wireSurnameBridge();
+		this._maybeRefitCalibration();
 	}
 
 	// -----------------------------------------------------------------------
@@ -314,7 +333,7 @@
 
 	// Surname bridge: two surnames count as bridged when an assertion connects
 	// them (hasNameVariant, or a marriage/spouse link across the two names).
-	Search.prototype._wireSurnameBridge = function () {
+	Search.prototype._computeSurnameVariants = function () {
 		var self = this;
 		var variants = new Map();   // UPPER surname -> Set of UPPER surnames
 
@@ -340,14 +359,31 @@
 			link(upper(s.last_name), upper(o.last_name));
 		});
 
-		this._surnameVariants = variants;
+		return variants;
+	};
 
+	Search.prototype._wireSurnameBridge = function () {
+		var self = this;
+		this._surnameVariants = this._computeSurnameVariants();
+
+		// Reads self._surnameVariants at call time (not a captured local), so
+		// refreshSurnameBridge() below can swap the Map in place and every
+		// retrieval from then on sees the update without re-wiring the closure.
 		this.match.setSurnameBridge(function (x, y) {
 			var lx = upper(x && x.last_name), ly = upper(y && y.last_name);
 			if (!lx || !ly) return false;
-			var set = variants.get(lx);
+			var set = self._surnameVariants.get(lx);
 			return !!(set && set.has(ly));
 		});
+	};
+
+	// Recompute the surname-variant map from the current this.assertions.
+	// personEditor.js keeps one Search instance alive for a whole session
+	// (window.app.search), so a hasNameVariant assertion added mid-session -
+	// via addAssertion() below, including the ones accept()/reject() record -
+	// would otherwise never reach retrieval until the page reloaded.
+	Search.prototype.refreshSurnameBridge = function () {
+		this._surnameVariants = this._computeSurnameVariants();
 	};
 
 	// =======================================================================
@@ -698,7 +734,13 @@
 	// STAGE 3 — TIME SLICE
 	// =======================================================================
 
-	Search.prototype.timeSlice = function (kin, year, targetSource, egoMentions) {
+	// tentative (optional): Map<person_id, mention> of NOT-YET-ACCEPTED grounding
+	// hypotheses, supplied by findBatch() when it jointly resolves several tree
+	// persons against the same source-year. A kin member with no confirmed
+	// mention yet but a strong provisional pick from an earlier batch round can
+	// still ground household/proximity/cohort support for the rest of the
+	// batch. Single-person scan()/find() calls omit it and behave as before.
+	Search.prototype.timeSlice = function (kin, year, targetSource, egoMentions, tentative) {
 		var self = this;
 		if (year == null) return kin.slice();
 
@@ -720,6 +762,10 @@
 			for (var i = 0; i < k.profile.mentions.length; i++) {
 				var m = self.byId.get(k.profile.mentions[i]);
 				if (m && m.source === targetSource) { c.groundedMention = m; break; }
+			}
+			if (!c.groundedMention && tentative && tentative.has(k.person_id)) {
+				var tm = tentative.get(k.person_id);
+				if (tm && tm.source === targetSource) c.groundedMention = tm;
 			}
 			c.grounded = !!c.groundedMention;
 
@@ -970,9 +1016,17 @@
 		arr.forEach(function (e) {
 			(isProtected(e) ? protectedSet : rest).push(e);
 		});
+		// Rank the trimmable overflow by actual name fit (the same cheap check
+		// scan() uses for best_rough), not by how many blocking paths happened
+		// to retrieve it. A candidate found through one strong surname block is
+		// a better keep than one found through three weak phonetic blocks, and
+		// path-count alone can't tell those apart.
+		rest.forEach(function (e) {
+			e._capScore = self.match.MatchName(o, e.mention);
+		});
 		rest.sort(function (a, b) {
-			if (a.paths.size !== b.paths.size) return b.paths.size - a.paths.size;
-			return pathRank(b) - pathRank(a);
+			if (a._capScore !== b._capScore) return b._capScore - a._capScore;
+			return b.paths.size - a.paths.size;
 		});
 		var room = Math.max(0, this.opts.maxCandidates - protectedSet.length);
 		return protectedSet.concat(rest.slice(0, room));
@@ -984,14 +1038,6 @@
 				    p === 'BRIDGE' || p === 'BLOCK_FB' || p === 'BLOCK_F') yes = true;
 			});
 			return yes;
-		}
-		function pathRank(e) {
-			var best = 0;
-			e.paths.forEach(function (p) {
-				if (p === 'BLOCK_L') best = Math.max(best, 2);
-				else if (p === 'BLOCK_N' || p === 'BLOCK_M') best = Math.max(best, 1);
-			});
-			return best;
 		}
 	};
 
@@ -1225,6 +1271,79 @@
 	};
 
 	// =======================================================================
+	// STAGE 6a — CALIBRATION FEEDBACK LOOP
+	// Match.fitCalibration()/probability() exist but nothing ever called them:
+	// find() shipped with hand-picked floor/ceiling/boost constants and no
+	// calibrated probability. accept()/reject() already produce exactly the
+	// labeled pairs calibration needs, so this stage plugs them in: every
+	// accept/reject re-scores the pair, banks its feature vector, and refits
+	// this.match once enough labels of both kinds have accrued. From then on
+	// every scoreCandidate() result carries a real res.probability (see the
+	// `available` block in MatchPerson's `why`), and future work can derive
+	// floor/ceiling/margin from the fitted model instead of guessing.
+	// =======================================================================
+
+	// Re-score an already-known (person, mention) pair outside of find()'s
+	// per-source loop, so accept()/reject() can bank its feature vector without
+	// requiring the caller to have just run find() over that source.
+	Search.prototype._scorePair = function (curTree, personId, mentionId) {
+		var m = this.byId.get(mentionId);
+		if (!m) return null;
+		var target = { source: m.source, year: m._year, type: m._type };
+		var profile = this.buildProfile(curTree, personId);
+		var kin = this.timeSlice(this.buildKin(curTree, personId), target.year, target.source, profile.mentions);
+		var constraints = this.buildConstraints(curTree, profile, kin, target);
+		var entry = { mention: m, paths: new Set(['ACCEPT_REJECT_RECOMPUTE']) };
+		return this.scoreCandidate(profile, kin, constraints, entry, target);
+	};
+
+	Search.prototype._recordOutcome = function (curTree, personId, mentionId, label) {
+		// Calibration bookkeeping must never break accept()/reject()'s contract.
+		try {
+			var res = this._scorePair(curTree, personId, mentionId);
+			if (!res || res.knockout || !res.why) return;
+			var features = this.match._calibFeatures(res);
+			this._calibLog.push({ features: features, label: !!label, person_id: personId, mention_id: mentionId, ts: Date.now() });
+			this._maybeRefitCalibration();
+		} catch (err) { /* leave calibration state as it was */ }
+	};
+
+	Search.prototype._maybeRefitCalibration = function () {
+		var log = this._calibLog || [];
+		var n = log.length;
+		if (n < this.opts.calibMinSamples) return;
+		if (n - this._calibLogAtLastFit < this.opts.calibRefitEvery) return;
+		var positives = 0;
+		for (var i = 0; i < n; i++) if (log[i].label) positives++;
+		if (positives < this.opts.calibMinPerClass || (n - positives) < this.opts.calibMinPerClass) return;
+		try {
+			this.match.fitCalibration(log);
+			this._calibLogAtLastFit = n;
+		} catch (err) { /* keep the previous fit (if any); try again next label */ }
+	};
+
+	// Force a fit right now regardless of the auto-refit thresholds. Useful
+	// after bulk-seeding config.calibrationSeed or for a manual "recalibrate"
+	// action in the UI. Throws if match.fitCalibration's own minimums aren't met.
+	Search.prototype.fitCalibration = function () {
+		var calib = this.match.fitCalibration(this._calibLog || []);
+		this._calibLogAtLastFit = (this._calibLog || []).length;
+		return calib;
+	};
+
+	Search.prototype.calibrationStatus = function () {
+		var log = this._calibLog || [];
+		var positives = log.reduce(function (a, r) { return a + (r.label ? 1 : 0); }, 0);
+		return {
+			samples: log.length,
+			positives: positives,
+			negatives: log.length - positives,
+			fitted: !!this.match._calib,
+			logloss: this.match._calib ? this.match._calib.logloss : null
+		};
+	};
+
+	// =======================================================================
 	// ENTRY POINTS
 	// =======================================================================
 
@@ -1398,10 +1517,164 @@
 		};
 	};
 
+	// FIND BATCH — jointly resolve several tree persons against ONE source at
+	// once, instead of one find() call per person. Two problems single-person
+	// find() cannot see across calls:
+	//   1. Bootstrapping: household/proximity/cohort support requires a kin
+	//      member to already be GROUNDED (a confirmed mention in this exact
+	//      source-year). Early in research nobody in a family is grounded yet,
+	//      so none of those levers fire for anyone. findBatch runs a first pass
+	//      with no cross-support, then lets each person's strong (>= ceiling)
+	//      pick tentatively ground their kin for a second pass, so a confident
+	//      hit on one relative can lift the rest of the household.
+	//   2. Collision: two different tree persons can each score the SAME
+	//      mention as their best candidate. find() has no visibility into any
+	//      other person's search, so both would independently report MATCH.
+	//      findBatch resolves this with a single greedy assignment over every
+	//      (person, mention) pair above floor, highest score first, so once a
+	//      mention is claimed nobody else's status can also read MATCH for it.
+	// Returns { source, year, persons: { [person_id]: <find()-shaped result> } }.
+	// A losing side of a collision is marked status CONTESTED (not MAYBE),
+	// with contested_by naming the person who kept the mention - a one-appearance
+	// -per-source-year mention cannot honestly belong to two people at once.
+	Search.prototype.findBatch = function (curTree, personIds, opts) {
+		opts = opts || {};
+		if (!opts.source) throw new Error('findBatch: opts.source is required (e.g. "AUG-CN-1870")');
+		var self = this;
+		var info = this.sources.get(opts.source);
+		if (!info) throw new Error('findBatch: unknown source ' + opts.source);
+
+		var floor     = opts.floor   != null ? opts.floor   : this.opts.floor;
+		var ceiling   = opts.ceiling != null ? opts.ceiling : this.opts.ceiling;
+		var limit     = opts.limit   != null ? opts.limit   : this.opts.limit;
+		var rounds    = opts.rounds  != null ? opts.rounds  : 2;
+		var marginMin = opts.margin  != null ? opts.margin  : 0.05;
+
+		var target = { source: info.source, year: info.year, type: info.type };
+		var ids = (personIds && personIds.length) ? personIds.slice()
+			: (curTree.persons || []).map(function (p) { return p.person_id; });
+
+		var tentative = new Map();     // person_id -> mention, cross-support hypothesis
+		var perPerson = {};            // person_id -> working state for this round
+		var claimedBy = new Map();     // mention_id -> person_id (last round's assignment)
+
+		for (var round = 1; round <= rounds; round++) {
+			perPerson = {};
+			ids.forEach(function (pid) {
+				var profile, kin, constraints;
+				try { profile = self.buildProfile(curTree, pid); }
+				catch (err) { perPerson[pid] = { error: err.message }; return; }
+
+				kin = self.timeSlice(self.buildKin(curTree, pid), info.year, info.source, profile.mentions, tentative);
+				constraints = self.buildConstraints(curTree, profile, kin, target);
+
+				if (constraints.closedBy ||
+				    (constraints.deathCeiling != null && info.year > constraints.deathCeiling)) {
+					perPerson[pid] = { profile: profile, closed: true, closedBy: constraints.closedBy, scored: [] };
+					return;
+				}
+
+				var pool = self.retrieve(profile, kin, constraints, target);
+				var scored = [];
+				for (var i = 0; i < pool.length; i++) {
+					var r = self.scoreCandidate(profile, kin, constraints, pool[i], target);
+					if (r && !r.knockout && r.score >= floor) scored.push(r);
+				}
+				scored.sort(function (a, b) { return b.score - a.score; });
+				perPerson[pid] = { profile: profile, kin: kin, scored: scored, closed: false };
+			});
+
+			// Global greedy assignment across every (person, mention) pair above
+			// floor: highest score locks in first, consuming both sides, so a
+			// mention already claimed can't also go to a second person and a
+			// person already assigned doesn't keep competing for a worse pick.
+			var pairs = [];
+			ids.forEach(function (pid) {
+				var pp = perPerson[pid];
+				if (!pp || pp.closed || pp.error) return;
+				pp.scored.forEach(function (r) { pairs.push({ pid: pid, mention_id: r.mention_id, score: r.score }); });
+			});
+			pairs.sort(function (a, b) { return b.score - a.score; });
+
+			var assignedTo = new Map();   // person_id -> mention_id
+			claimedBy = new Map();
+			pairs.forEach(function (pr) {
+				if (assignedTo.has(pr.pid) || claimedBy.has(pr.mention_id)) return;
+				assignedTo.set(pr.pid, pr.mention_id);
+				claimedBy.set(pr.mention_id, pr.pid);
+			});
+
+			if (round < rounds) {
+				var nextTentative = new Map();
+				assignedTo.forEach(function (mentionId, pid) {
+					var pp = perPerson[pid];
+					var top = pp.scored[0];
+					// Only a clear, high-confidence pick is trustworthy enough to
+					// ground someone ELSE's search; a middling MAYBE would just
+					// propagate uncertainty through the household.
+					if (top && top.mention_id === mentionId && top.score >= ceiling) {
+						nextTentative.set(pid, self.byId.get(mentionId));
+					}
+				});
+				tentative = nextTentative;
+			}
+		}
+
+		var out = {};
+		ids.forEach(function (pid) {
+			var pp = perPerson[pid];
+			if (!pp || pp.error) { out[pid] = { person_id: pid, error: (pp && pp.error) || 'unknown error' }; return; }
+			if (pp.closed) {
+				out[pid] = {
+					person_id: pid, source: info.source, year: info.year, label: info.label,
+					closed: true, closed_by: pp.closedBy, candidates: []
+				};
+				return;
+			}
+
+			var scored = pp.scored;
+			var second = scored.length > 1 ? scored[1].score : 0;
+			scored.forEach(function (c, idx) {
+				c.margin      = idx === 0 ? +(c.score - second).toFixed(3) : null;
+				c.second_best = idx === 0 && scored.length > 1 ? +second.toFixed(3) : null;
+				var rivalPid = claimedBy.get(c.mention_id);
+				var contested = rivalPid != null && rivalPid !== pid;
+				c.contested_by = contested ? rivalPid : null;
+				c.status = contested ? 'CONTESTED'
+					: (idx === 0 && c.score >= ceiling && (scored.length === 1 || (c.score - second) >= marginMin))
+						? 'MATCH' : 'MAYBE';
+				c.why.margin      = c.margin;
+				c.why.second_best = c.second_best;
+			});
+
+			out[pid] = {
+				person_id: pid, name: pp.profile.asMatchObject.full_name,
+				source: info.source, year: info.year, label: info.label, closed: false,
+				candidates: scored.slice(0, limit)
+			};
+		});
+
+		return { source: info.source, year: info.year, label: info.label, persons: out };
+	};
+
 	// =======================================================================
 	// ACCEPT / REJECT
-	// Neither writes to storage. Both return assertion rows for the caller.
+	// Neither writes to tree/assertion STORAGE - the caller still owns that -
+	// but both now feed the in-session calibration log and surname-bridge
+	// index immediately (addAssertion), so later find()/findBatch() calls in
+	// the same Search instance see the effect right away.
 	// =======================================================================
+
+	// Make an assertion visible to retrieval within this Search instance right
+	// now, rather than waiting for the caller to reconstruct the index. A
+	// hasNameVariant row re-enables the surname bridge for the very next
+	// find()/findBatch() call instead of only after a page reload.
+	Search.prototype.addAssertion = function (a) {
+		if (!a) return;
+		this.assertions = this.assertions || [];
+		this.assertions.push(a);
+		if (String(a.predicate || '').trim() === 'hasNameVariant') this.refreshSurnameBridge();
+	};
 
 	Search.prototype.accept = function (curTree, personId, mentionId, opts) {
 		opts = opts || {};
@@ -1414,7 +1687,8 @@
 		if (person.mentions.indexOf(mentionId) < 0) person.mentions.push(mentionId);
 
 		// New leads: assertions attached to the accepted mention point at people
-		// who may not be in the tree yet.
+		// who may not be in the tree yet. Read BEFORE the isSameAs row below is
+		// added, so that row never shows up as a lead pointing at itself.
 		var leads = (this.assertions || []).filter(function (a) {
 			return a && (a.subject_id === mentionId || a.object_id === mentionId);
 		}).map(function (a) {
@@ -1426,16 +1700,20 @@
 			};
 		});
 
+		var assertion = {
+			subject_id: person.mentions[0] || mentionId,
+			predicate:  'isSameAs',
+			object_id:  mentionId,
+			start_year: m._year,
+			end_year:   '',
+			who:        opts.who || 'human',
+			confidence: opts.confidence != null ? opts.confidence : 0.9
+		};
+		this.addAssertion(assertion);
+		this._recordOutcome(curTree, personId, mentionId, true);
+
 		return {
-			assertion: {
-				subject_id: person.mentions[0] || mentionId,
-				predicate:  'isSameAs',
-				object_id:  mentionId,
-				start_year: m._year,
-				end_year:   '',
-				who:        opts.who || 'human',
-				confidence: opts.confidence != null ? opts.confidence : 0.9
-			},
+			assertion: assertion,
 			profile: this.buildProfile(curTree, personId),   // birth window may have widened
 			leads:   leads
 		};
@@ -1449,16 +1727,20 @@
 		person.rejected = person.rejected || [];
 		if (person.rejected.indexOf(mentionId) < 0) person.rejected.push(mentionId);
 
+		var assertion = {
+			subject_id: (person.mentions || [])[0] || personId,
+			predicate:  'isNotSameAs',
+			object_id:  mentionId,
+			start_year: '',
+			end_year:   '',
+			who:        opts.who || 'human',
+			confidence: opts.confidence != null ? opts.confidence : 1
+		};
+		this.addAssertion(assertion);
+		this._recordOutcome(curTree, personId, mentionId, false);
+
 		return {
-			assertion: {
-				subject_id: (person.mentions || [])[0] || personId,
-				predicate:  'isNotSameAs',
-				object_id:  mentionId,
-				start_year: '',
-				end_year:   '',
-				who:        opts.who || 'human',
-				confidence: opts.confidence != null ? opts.confidence : 1
-			}
+			assertion: assertion
 		};
 	};
 
