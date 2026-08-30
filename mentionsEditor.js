@@ -1031,7 +1031,7 @@ class MentionsEditor {
 		}
 		globalApp.source = core;
 		if (window.PersonEditor) {
-			window.PersonEditor.lastIncludeSetting = 'omni';
+			window.PersonEditor.lastIncludeSetting = 'auto';
 		}
 		$('.vpe-sources-btn').val(core);
 

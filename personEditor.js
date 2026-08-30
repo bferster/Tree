@@ -49,6 +49,7 @@ class PersonEditor {
 	static STAR_FILL = '#EF9F27';
 	static STAR_EMPTY = '#9e9e9e';
 	static STAR_PATH = "M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.7-6.2 3.7 1.6-7L2 9.2l7.1-.6z";
+	static lastIncludeSetting = 'auto';
 
 	/* ----------------------------------------------------------
 	   FIELD CONFIG
@@ -400,7 +401,7 @@ class PersonEditor {
 			fields,
 			verity: person.verity,
 			sources,
-			include: PersonEditor.lastIncludeSetting || 'all',
+			include: PersonEditor.lastIncludeSetting || 'auto',
 			editing: false
 		};
 	}
@@ -1123,7 +1124,7 @@ class PersonEditor {
 					console.warn('[Scan Search] searchObj or searchObj.scan not available');
 					results = [];
 				}
-			} else if (includeMode === 'omni') {
+			} else if (includeMode === 'auto' || includeMode === 'omni') {
 				let searchObj = (window.app && window.app.search) ? window.app.search : null;
 				if (!searchObj && typeof Search !== 'undefined') {
 					searchObj = new Search({
@@ -1241,11 +1242,11 @@ class PersonEditor {
 							};
 						}) : [];
 					} catch (err) {
-						console.error('[Omni Search] Error in search.find:', err);
+						console.error('[Auto Search] Error in search.find:', err);
 						results = [];
 					}
 				} else {
-					console.warn('[Omni Search] searchObj or searchObj.find not available');
+					console.warn('[Auto Search] searchObj or searchObj.find not available');
 					results = [];
 				}
 			} else {
@@ -1347,11 +1348,11 @@ class PersonEditor {
 			">
 				<option value="all">All</option>
 				<option value="any">Any</option>
-				<option value="omni">Omni</option>
+				<option value="auto">Auto</option>
 				<option value="scan">Scan</option>
 			</select>
 		`);
-		$includeSelect.val(state.include || 'all');
+		$includeSelect.val(state.include || PersonEditor.lastIncludeSetting || 'auto');
 		$includeSelect.on('change', function () {
 			state.include = $(this).val();
 			PersonEditor.lastIncludeSetting = state.include;
@@ -1587,7 +1588,7 @@ class PersonEditor {
 		return {
 			source: source,
 			max_results: 80,
-			include: state.include || PersonEditor.lastIncludeSetting || 'all',
+			include: state.include || PersonEditor.lastIncludeSetting || 'auto',
 			fields: fields
 		};
 	}
