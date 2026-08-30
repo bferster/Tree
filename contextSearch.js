@@ -797,12 +797,17 @@ function openContextSearchDialog() {
 	};
 
 	if (person) {
-		if (person.first_name) initialValues.first_name = person.first_name.split(':')[0];
-		if (person.last_name) initialValues.last_name = person.last_name.split(':')[0];
-		if (person.birth_year) initialValues.birth_year = String(person.birth_year).split(':')[0];
-		if (person.death_year) initialValues.death_year = String(person.death_year).split(':')[0];
-		if (person.gender) initialValues.gender = String(person.gender).split(':')[0];
-		if (person.race) initialValues.norm_race = String(person.race).split(':')[0];
+		const cleanField = (v) => {
+			if (!v) return undefined;
+			const val = String(v).split(':')[0].trim();
+			return (val && val.toLowerCase() !== 'click to set') ? val : undefined;
+		};
+		if (person.first_name) initialValues.first_name = cleanField(person.first_name);
+		if (person.last_name) initialValues.last_name = cleanField(person.last_name);
+		if (person.birth_year) initialValues.birth_year = cleanField(person.birth_year);
+		if (person.death_year) initialValues.death_year = cleanField(person.death_year);
+		if (person.gender) initialValues.gender = cleanField(person.gender);
+		if (person.race) initialValues.norm_race = cleanField(person.race);
 	}
 
 	if (typeof SearchBox === 'undefined' || typeof SearchBox.openDialog !== 'function') {

@@ -58,7 +58,10 @@ class MentionsEditor {
 		gender: "Gender",
 		suffix: "Suffix",
 		middle_name: "Middle name",
-		norm_first_name: "Nick name"
+		norm_first_name: "Nick name",
+		enslaverHolding: "Enslaver holding",
+		proximityFit: "Nearness fit",
+		cohortFit: "Cohort fit"
 	};
 
 	static FACTOR_COLORS = {
@@ -85,7 +88,10 @@ class MentionsEditor {
 		gender: 'c-pink',
 		suffix: 'c-pink',
 		middle_name: 'c-purple',
-		norm_first_name: 'c-purple'
+		norm_first_name: 'c-purple',
+		enslaverHolding: 'c-amber',
+		proximityFit: 'c-teal',
+		cohortFit: 'c-blue'
 	};
 
 	static RAMP = {
@@ -528,6 +534,10 @@ class MentionsEditor {
 			return;
 		}
 
+		const m = match.mention;
+		const sourceLabel = m.source ? String(m.source).replace(/_/g, '-') : '';
+		const isScan = Boolean(m.isScanResult || (m.why && m.why.candidates !== undefined) || m.candidates !== undefined);
+
 		if (this.targetPerson && this.targetPerson.person_id === -1) {
 			this.addBtn.style.display = 'none';
 			if (this.addPersonBtn) this.addPersonBtn.style.display = 'none';
@@ -553,7 +563,12 @@ class MentionsEditor {
 				this.addPersonBtn.style.visibility = 'visible';
 			}
 		}
-		if (this.isSearchResult) {
+		if (isScan) {
+			this.addBtn.textContent = `Search in ${sourceLabel || m.source}`;
+			this.addBtn.style.display = '';
+			this.addBtn.disabled = false;
+			if (this.addPersonBtn) this.addPersonBtn.style.display = 'none';
+		} else if (this.isSearchResult) {
 			this.addBtn.textContent = "Add mention to person";
 		} else {
 			this.addBtn.textContent = "Remove mention from person";
@@ -595,9 +610,9 @@ class MentionsEditor {
 			if (key === 'householdContinuity') return '';
 			if (isSmartNameOn && !this.isSearchResult) {
 				if ((nameKeys.includes(key) && key !== 'rarityLastName') || key === 'suffix') return '';
-			} else if (this.factors) {
+			} else if (this.factors && this.factors.length > 0) {
 				const fieldKey = factorToFieldMap[key];
-				if (fieldKey && this.factors) {
+				if (fieldKey) {
 					const factorConfig = this.factors.find(f => f.field === fieldKey);
 					if (factorConfig && factorConfig.compare === 'ignore') return '';
 				}
@@ -607,7 +622,7 @@ class MentionsEditor {
 			if (!factor || !factor.value) return '';
 			const value = Math.round(factor.value * 10);
 			if (value === 0) return '';
-			let label = MentionsEditor.FACTOR_LABELS[key];
+			let label = factor.label || MentionsEditor.FACTOR_LABELS[key];
 			if (key === 'rarityFirstName') {
 				if (value < 0) label = "Common first";
 				else if (value === 1 || value === 2) label = "Uncommon first";
@@ -664,9 +679,6 @@ class MentionsEditor {
 		}).join('');
 
 
-
-		const m = match.mention;
-		const sourceLabel = m.source ? String(m.source).replace(/_/g, '-') : '';
 
 		const toTitleCase = (str) => {
 			if (!str) return '';
@@ -806,13 +818,118 @@ class MentionsEditor {
 			`;
 		}
 
+		// Why / Evidence Breakdown panel (from search.js / Omni search)
+		let whyHtml = '';
+		const whyData = match.mention.why || match.why || (match.factors && match.factors.rung ? match.factors : null);
+		if (whyData && typeof whyData === 'object') {
+			const status = match.mention.status || whyData.status || (match.score >= 0.8 ? 'MATCH' : 'MAYBE');
+			const statusColor = status === 'MATCH' ? '#2e7d4f' : '#b45309';
+			const statusBg = status === 'MATCH' ? '#e6f4ea' : '#fef3c7';
+
+			const margin = whyData.margin != null ? `+${(whyData.margin * 100).toFixed(1)}%` : null;
+			const paths = Array.isArray(whyData.paths) ? whyData.paths.join(', ') : '';
+
+			const rows = [];
+			if (isScan) {
+				if (whyData.label || whyData.source) {
+					rows.push({ label: 'Source', val: whyData.label ? `${whyData.label} (${whyData.source})` : whyData.source });
+				}
+				if (whyData.year) {
+					rows.push({ label: 'Year', val: String(whyData.year) });
+				}
+				if (whyData.candidates !== undefined) {
+					rows.push({ label: 'Candidates Found', val: String(whyData.candidates) });
+				}
+				if (whyData.best_rough != null) {
+					rows.push({ label: 'Best Rough Score', val: `${Math.round(whyData.best_rough * 100)}%` });
+				}
+				if (whyData.blocked_reason) {
+					rows.push({ label: 'Blocked Reason', val: whyData.blocked_reason });
+				}
+			} else {
+				if (whyData.rung) {
+					rows.push({ label: 'Name Agreement', val: `Rung: ${whyData.rung}` });
+				}
+				if (whyData.birth) {
+					const b = whyData.birth;
+					const diffStr = (typeof b === 'object' && b.diff != null) ? ` (Δ ${b.diff} yr${b.diff === 1 ? '' : 's'})` : '';
+					const bScore = (typeof b === 'object' && b.score != null) ? `${Math.round(b.score * 100)}%` : String(b);
+					rows.push({ label: 'Birth Window Fit', val: `${bScore}${diffStr}` });
+				}
+				if (whyData.gender != null) {
+					rows.push({ label: 'Gender Fit', val: typeof whyData.gender === 'number' ? `${Math.round(whyData.gender * 100)}%` : String(whyData.gender) });
+				}
+				if (whyData.race != null) {
+					rows.push({ label: 'Race Fit', val: typeof whyData.race === 'number' ? `${Math.round(whyData.race * 100)}%` : String(whyData.race) });
+				}
+				if (whyData.family != null || whyData.household != null) {
+					const fVal = whyData.family != null ? whyData.family : whyData.household;
+					rows.push({ label: 'Household / Kin', val: `${Math.round(fVal * 100)}%` });
+				}
+				if (whyData.enslaver && whyData.enslaver.strength > 0) {
+					rows.push({ label: 'Enslaver Holding Fit', val: `${Math.round(whyData.enslaver.strength * 100)}% (${whyData.enslaver.holding || ''})` });
+				}
+				if (whyData.proximity && whyData.proximity.strength > 0) {
+					rows.push({ label: 'Enumeration Proximity', val: `${Math.round(whyData.proximity.strength * 100)}%` });
+				}
+				if (whyData.cohort && whyData.cohort.strength > 0) {
+					rows.push({ label: 'Cohort Profile Fit', val: `${Math.round(whyData.cohort.strength * 100)}%` });
+				}
+				if (paths) {
+					rows.push({ label: 'Retrieval Paths', val: paths });
+				}
+			}
+
+			const breakdownRows = rows.map(r => `
+				<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 4px 6px; border-bottom: 1px solid rgba(0,0,0,0.04);">
+					<span style="color: #666; font-weight: 500;">${MentionsEditor._esc(r.label)}</span>
+					<span style="font-weight: 600; color: #1e293b;">${MentionsEditor._esc(r.val)}</span>
+				</div>
+			`).join('');
+
+			const sectionTitle = isScan ? 'Scan Evidence' : 'Match Evidence (Why)';
+			whyHtml = `
+				<div class="me-why-block" style="margin-top: 16px; border-top: 1px solid var(--me-border); padding-top: 12px;">
+					<div class="me-why-header" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin-bottom: 8px; user-select: none;">
+						<div style="display: flex; align-items: center; gap: 6px;">
+							<p class="me-raw-label" style="margin: 0; font-weight: 600; font-size: 11px; text-transform: uppercase; color: #666;">${MentionsEditor._esc(sectionTitle)}</p>
+							<span class="me-why-toggle-icon" style="font-size: 10px; color: #999; transition: transform 0.2s; display: inline-block;">▼</span>
+						</div>
+						<div style="display: flex; gap: 6px; align-items: center;">
+							<span style="background: ${statusBg}; color: ${statusColor}; border-radius: 4px; padding: 1px 6px; font-size: 11px; font-weight: 700;">${MentionsEditor._esc(status)}</span>
+							${margin ? `<span style="font-size: 11px; color: #666;">margin: ${MentionsEditor._esc(margin)}</span>` : ''}
+						</div>
+					</div>
+					<div class="me-why-content" style="display: block;">
+						<div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px;">
+							${breakdownRows || '<div style="font-size: 12px; color: #666; font-style: italic;">No breakdown available</div>'}
+						</div>
+					</div>
+				</div>
+			`;
+		}
+
 		let combinedBottomHtml = '';
 		if (familyHtml) {
 			combinedBottomHtml += `<div style="height: 1px; background: #e0e0e0; margin: 24px 0 0 0;"></div>`;
 			combinedBottomHtml += familyHtml;
 		}
+		if (whyHtml) {
+			combinedBottomHtml += whyHtml;
+		}
 		if (groupMatchHtml) {
 			combinedBottomHtml += groupMatchHtml;
+		}
+
+		let scanActionHtml = '';
+		if (isScan) {
+			scanActionHtml = `
+				<div style="margin: 16px 0 12px 0;">
+					<button type="button" class="me-search-source-btn" style="background:#0078d7; color:white; border:none; border-radius:6px; padding:12px 18px; font-size:14px; font-weight:bold; cursor:pointer; width:100%; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 1px 3px rgba(0,0,0,0.15); transition: background 0.2s;">
+						🔍 Search Candidates in ${MentionsEditor._esc(sourceLabel || m.source)}
+					</button>
+				</div>
+			`;
 		}
 
 		this.detailEl.innerHTML = `
@@ -831,6 +948,7 @@ class MentionsEditor {
       </div>
       <table class="me-field-table">${fieldRows}</table>
       ${combinedBottomHtml}
+      ${scanActionHtml}
     `;
 
 		this.detailEl.querySelectorAll('.me-family-row').forEach(el => {
@@ -860,6 +978,21 @@ class MentionsEditor {
 			});
 		}
 
+		const whyHeader = this.detailEl.querySelector('.me-why-header');
+		if (whyHeader) {
+			whyHeader.addEventListener('click', () => {
+				const whyContent = this.detailEl.querySelector('.me-why-content');
+				const icon = this.detailEl.querySelector('.me-why-toggle-icon');
+				if (whyContent.style.display === 'none') {
+					whyContent.style.display = 'block';
+					icon.textContent = '▼';
+				} else {
+					whyContent.style.display = 'none';
+					icon.textContent = '▶';
+				}
+			});
+		}
+
 		const gmHeader = this.detailEl.querySelector('.me-gm-header');
 		if (gmHeader) {
 			gmHeader.addEventListener('click', () => {
@@ -875,11 +1008,138 @@ class MentionsEditor {
 			});
 		}
 
+		const searchSrcBtn = this.detailEl.querySelector('.me-search-source-btn');
+		if (searchSrcBtn) {
+			searchSrcBtn.addEventListener('click', () => {
+				this.searchInSource(match.mention.source);
+			});
+		}
+	}
+
+	searchInSource(sourceId) {
+		if (!sourceId) return;
+		const globalApp = window.app || (typeof app !== 'undefined' ? app : null);
+		if (!globalApp) return;
+
+		// Extract core source name (e.g. "AUG-CN-1880" -> "CN-1880")
+		let core = sourceId;
+		if (core.includes('-')) {
+			const parts = core.split('-');
+			if (parts.length > 1) {
+				core = parts.slice(1).join('-');
+			}
+		}
+		globalApp.source = core;
+		if (window.PersonEditor) {
+			window.PersonEditor.lastIncludeSetting = 'omni';
+		}
+		$('.vpe-sources-btn').val(core);
+
+		let searchObj = globalApp.search;
+		if (!searchObj && typeof Search !== 'undefined') {
+			searchObj = new Search({
+				mentions: globalApp.mentions || [],
+				assertions: globalApp.assertions || [],
+				match: globalApp.match || null
+			});
+			globalApp.search = searchObj;
+		}
+
+		const curTree = globalApp.curTree || { persons: [], relationships: [] };
+		const person = this.targetPerson || (curTree.persons && curTree.persons[0]) || null;
+		const pid = person ? person.person_id : null;
+
+		if (searchObj && typeof searchObj.find === 'function' && pid) {
+			let targetSource = sourceId;
+			if (searchObj.sources && !searchObj.sources.has(targetSource)) {
+				for (let k of searchObj.sources.keys()) {
+					if (k === targetSource || k.endsWith('-' + targetSource) || targetSource.endsWith('-' + k)) {
+						targetSource = k;
+						break;
+					}
+				}
+			}
+
+			try {
+				const findRes = searchObj.find(curTree, pid, { source: targetSource });
+
+				const buildFactorsFromWhy = (why) => {
+					const factors = {};
+					if (!why) return factors;
+					const rung = String(why.rung || '').toUpperCase();
+					const sKind = String(why.surnameKind || '').toUpperCase();
+
+					if (rung.includes('EXACT_FIRST')) {
+						factors['exactFirstName'] = { value: why.first_name != null ? why.first_name : 1.0 };
+					} else if (rung.includes('NICKNAME')) {
+						factors['norm_first_name'] = { value: why.first_name != null ? why.first_name : 0.85 };
+					} else if (rung.includes('PHONETIC') || rung.includes('FUZZY')) {
+						factors['fuzzyFirstName'] = { value: why.first_name != null ? why.first_name : 0.7 };
+					} else if (rung.includes('INITIAL')) {
+						factors['fuzzyFirstName'] = { value: why.first_name != null ? why.first_name : 0.55 };
+					} else if (why.first_name > 0) {
+						factors['exactFirstName'] = { value: why.first_name };
+					}
+
+					if (sKind === 'EXACT_LASTNAME' || (rung.includes('SURNAME') && sKind !== 'NONE')) {
+						if (sKind === 'NYSIIS') {
+							factors['exactNysiisLast'] = { value: why.last_name != null ? why.last_name : 0.85 };
+						} else if (sKind === 'SOUNDEX' || sKind === 'METAPHONE') {
+							factors['fuzzyLastName'] = { value: why.last_name != null ? why.last_name : 0.75 };
+						} else {
+							factors['exactLastName'] = { value: why.last_name != null ? why.last_name : 1.0 };
+						}
+					} else if (why.last_name > 0) {
+						factors['exactLastName'] = { value: why.last_name };
+					}
+
+					if (why.birth != null && (typeof why.birth === 'number' ? why.birth > 0 : true)) {
+						const bVal = typeof why.birth === 'object' ? (why.birth.score != null ? why.birth.score : 0.9) : why.birth;
+						if (bVal > 0) factors['birthYear'] = { value: bVal };
+					}
+
+					if (why.gender != null && why.gender > 0) factors['gender'] = { value: why.gender };
+					if (why.race != null && why.race > 0) factors['race'] = { value: why.race };
+
+					const famScore = why.family != null ? why.family : why.household;
+					if (famScore != null && famScore > 0) {
+						factors['familyBoost'] = { value: famScore, matches: why.familyMatches || [] };
+					}
+					if (why.enslaver && why.enslaver.strength > 0) factors['enslaverHolding'] = { value: why.enslaver.strength };
+					if (why.proximity && why.proximity.strength > 0) factors['proximityFit'] = { value: why.proximity.strength };
+					if (why.cohort && why.cohort.strength > 0) factors['cohortFit'] = { value: why.cohort.strength };
+
+					return factors;
+				};
+
+				const results = (findRes && findRes.candidates) ? findRes.candidates.map(c => {
+					const mFactors = buildFactorsFromWhy(c.why);
+					return {
+						...c.mention,
+						score: c.score != null ? c.score : 0,
+						_score: c.score != null ? c.score : 0,
+						_probability: c.probability != null ? c.probability : c.score,
+						_matchStrength: c.score != null ? c.score : 0,
+						why: c.why,
+						factors: mFactors,
+						_factors: mFactors
+					};
+				}) : [];
+
+				this.load(person, [targetSource], results, []);
+				this.scrollToTop();
+			} catch (err) { }
+		}
 	}
 
 	_handleAdd() {
 		const mention = this.getCurrentMention();
 		if (!mention || !this.targetPerson) return;
+
+		if (mention.isScanResult) {
+			this.searchInSource(mention.source);
+			return;
+		}
 
 		if (this.isSearchResult) {
 			if (!Array.isArray(this.targetPerson.mentions)) {

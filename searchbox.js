@@ -385,7 +385,7 @@ class SearchBox {
 		const fbVal = initialValues.family_boost_match || initialValues.family_boost || SearchBox.lastFamilyBoostMatch || 'Boost';
 		$('#sb-family-boost-match').val(fbVal);
 		$('#sb-family-boost-pill-text').text(fbVal);
-		$('#sb-family-boost-match').off('change.fb').on('change.fb', function() {
+		$('#sb-family-boost-match').off('change.fb').on('change.fb', function () {
 			$('#sb-family-boost-pill-text').text($(this).val());
 		});
 
@@ -498,11 +498,164 @@ class SearchBox {
 
 	handleFormSubmit() {
 		const search_criteria = this.buildSearchCriteria();
-		console.trace('SearchBox - Searching terms:', search_criteria);
 		const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
 		if (window.app && !window.app.score && window.Score) new window.Score();
 
-		const results = window.app.score.Search(mentionsArray, search_criteria);
+		let results;
+		if (search_criteria.include === 'scan') {
+			let searchObj = (window.app && window.app.search) ? window.app.search : null;
+			if (!searchObj && typeof Search !== 'undefined') {
+				searchObj = new Search({
+					mentions: mentionsArray,
+					assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
+					match: (window.app && window.app.match) ? window.app.match : null
+				});
+				if (window.app) window.app.search = searchObj;
+			}
+			const curTree = (window.app && window.app.curTree) ? window.app.curTree : { persons: [], relationships: [] };
+			let personId = (this.targetPerson && this.targetPerson.person_id) || (window.app && window.app.curPerson !== -1 ? window.app.curPerson : null);
+			if (searchObj && typeof searchObj.scan === 'function' && personId) {
+				try {
+					const scanRes = searchObj.scan(curTree, personId);
+					results = (scanRes && scanRes.sources) ? scanRes.sources.map(s => ({
+						mention_id: s.source,
+						source: s.source,
+						source_type: s.label || s.type || '',
+						full_name: `${s.label || s.source} (${s.year || ''})`,
+						score: s.best_rough != null ? s.best_rough : (s.candidates > 0 ? 0.5 : 0),
+						_score: s.best_rough != null ? s.best_rough : 0,
+						_probability: s.best_rough != null ? s.best_rough : 0,
+						_matchStrength: s.best_rough != null ? s.best_rough : 0,
+						birth_year: s.year,
+						narrative: `Candidates: ${s.candidates} | Best rough score: ${s.best_rough != null ? Math.round(s.best_rough * 100) + '%' : 'N/A'}${s.blocked_reason ? ' | Blocked: ' + s.blocked_reason : ''}`,
+						why: s,
+						factors: s,
+						isScanResult: true
+					})) : [];
+				} catch (err) {
+					results = [];
+				}
+			} else {
+				results = window.app.score.Search(mentionsArray, search_criteria);
+			}
+		} else if (search_criteria.include === 'omni') {
+			let searchObj = (window.app && window.app.search) ? window.app.search : null;
+			if (!searchObj && typeof Search !== 'undefined') {
+				searchObj = new Search({
+					mentions: mentionsArray,
+					assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
+					match: (window.app && window.app.match) ? window.app.match : null
+				});
+				if (window.app) window.app.search = searchObj;
+			}
+			const curTree = (window.app && window.app.curTree) ? window.app.curTree : { persons: [], relationships: [] };
+			let personId = (this.targetPerson && this.targetPerson.person_id) || (window.app && window.app.curPerson !== -1 ? window.app.curPerson : null);
+			if (searchObj && typeof searchObj.find === 'function' && personId) {
+				let targetSource = search_criteria.source;
+				if (searchObj.sources && !searchObj.sources.has(targetSource)) {
+					for (let k of searchObj.sources.keys()) {
+						if (k === targetSource || k.endsWith('-' + targetSource) || targetSource.endsWith('-' + k)) {
+							targetSource = k;
+							break;
+						}
+					}
+				}
+				try {
+					const findRes = searchObj.find(curTree, personId, { source: targetSource });
+					const buildFactorsFromWhy = (why, score) => {
+						const factors = {};
+						if (!why) return factors;
+						const rung = String(why.rung || '').toUpperCase();
+						const sKind = String(why.surnameKind || '').toUpperCase();
+
+						// First name factor
+						if (rung.includes('EXACT_FIRST')) {
+							factors['exactFirstName'] = { value: why.first_name != null ? why.first_name : 1.0 };
+						} else if (rung.includes('NICKNAME')) {
+							factors['norm_first_name'] = { value: why.first_name != null ? why.first_name : 0.85 };
+						} else if (rung.includes('PHONETIC') || rung.includes('FUZZY')) {
+							factors['fuzzyFirstName'] = { value: why.first_name != null ? why.first_name : 0.7 };
+						} else if (rung.includes('INITIAL')) {
+							factors['fuzzyFirstName'] = { value: why.first_name != null ? why.first_name : 0.55 };
+						} else if (why.first_name > 0) {
+							factors['exactFirstName'] = { value: why.first_name };
+						}
+
+						// Last name factor
+						if (sKind === 'EXACT_LASTNAME' || (rung.includes('SURNAME') && sKind !== 'NONE')) {
+							if (sKind === 'NYSIIS') {
+								factors['exactNysiisLast'] = { value: why.last_name != null ? why.last_name : 0.85 };
+							} else if (sKind === 'SOUNDEX' || sKind === 'METAPHONE') {
+								factors['fuzzyLastName'] = { value: why.last_name != null ? why.last_name : 0.75 };
+							} else {
+								factors['exactLastName'] = { value: why.last_name != null ? why.last_name : 1.0 };
+							}
+						} else if (why.last_name > 0) {
+							factors['exactLastName'] = { value: why.last_name };
+						}
+
+						// Birth Year
+						if (why.birth != null && (typeof why.birth === 'number' ? why.birth > 0 : true)) {
+							const bVal = typeof why.birth === 'object' ? (why.birth.score != null ? why.birth.score : 0.9) : why.birth;
+							if (bVal > 0) factors['birthYear'] = { value: bVal };
+						}
+
+						// Gender
+						if (why.gender != null && why.gender > 0) {
+							factors['gender'] = { value: why.gender };
+						}
+
+						// Race
+						if (why.race != null && why.race > 0) {
+							factors['race'] = { value: why.race };
+						}
+
+						// Family / Household boost
+						const famScore = why.family != null ? why.family : why.household;
+						if (famScore != null && famScore > 0) {
+							factors['familyBoost'] = { value: famScore, matches: why.familyMatches || [] };
+						}
+
+						// Enslaver holding fit
+						if (why.enslaver && why.enslaver.strength > 0) {
+							factors['enslaverHolding'] = { value: why.enslaver.strength };
+						}
+
+						// Proximity fit
+						if (why.proximity && why.proximity.strength > 0) {
+							factors['proximityFit'] = { value: why.proximity.strength };
+						}
+
+						// Cohort fit
+						if (why.cohort && why.cohort.strength > 0) {
+							factors['cohortFit'] = { value: why.cohort.strength };
+						}
+
+						return factors;
+					};
+
+					results = (findRes && findRes.candidates) ? findRes.candidates.map(c => {
+						const mFactors = buildFactorsFromWhy(c.why, c.score);
+						return {
+							...c.mention,
+							score: c.score != null ? c.score : 0,
+							_score: c.score != null ? c.score : 0,
+							_probability: c.probability != null ? c.probability : c.score,
+							_matchStrength: c.score != null ? c.score : 0,
+							why: c.why,
+							factors: mFactors,
+							_factors: mFactors
+						};
+					}) : [];
+				} catch (err) {
+					results = [];
+				}
+			} else {
+				results = window.app.score.Search(mentionsArray, search_criteria);
+			}
+		} else {
+			results = window.app.score.Search(mentionsArray, search_criteria);
+		}
 
 		if (typeof this.onSearchCallback === 'function') {
 			this.onSearchCallback(results, search_criteria);

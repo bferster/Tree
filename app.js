@@ -838,6 +838,13 @@ class App {
 		if (this.match && this.mentions && this.mentions.length) {
 			this.match.usePool(this.mentions);
 		}
+		if (typeof Search !== 'undefined') {
+			this.search = new Search({
+				mentions: this.mentions || [],
+				assertions: this.assertions || [],
+				match: this.match
+			});
+		}
 		this.showProgress(`Loaded ${this.assertions.length} assertions, ${this.mentions.length} mentions.`, 100); // Done
 		setTimeout(() => this.hideProgress(), 1500);           // Hide popup
 
@@ -915,6 +922,13 @@ class App {
 				}
 				if (this.match && this.mentions && this.mentions.length) {
 					this.match.usePool(this.mentions);
+				}
+				if (typeof Search !== 'undefined') {
+					this.search = new Search({
+						mentions: this.mentions || [],
+						assertions: this.assertions || [],
+						match: this.match
+					});
 				}
 				setTimeout(() => this.hideProgress(), 1500);
 			}

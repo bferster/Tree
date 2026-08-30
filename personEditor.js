@@ -409,12 +409,17 @@ class PersonEditor {
 	   Shell: header + factors table container
 	   ---------------------------------------------------------- */
 	static renderShell($dialog, person, state) {
-		const fname = (person.first_name || '').split(':')[0];
-		const mname = (person.middle_name || '').split(':')[0];
-		const lname = (person.last_name || '').split(':')[0];
+		const clean = (s) => {
+			if (!s) return '';
+			const val = String(s).split(':')[0].trim();
+			return val.toLowerCase() === 'click to set' ? '' : val;
+		};
+		const fname = clean(person.first_name);
+		const mname = clean(person.middle_name);
+		const lname = clean(person.last_name);
 		let fullDisplay = [fname, mname, lname].filter(Boolean).join(' ').trim();
 		if (!fullDisplay && person.full_name) {
-			fullDisplay = person.full_name.split(':')[0];
+			fullDisplay = clean(person.full_name);
 		}
 		const byear = person.birth_year ? String(person.birth_year).split(':')[0] : '?';
 		const yearStr = byear !== '?' ? `(b. ${PersonEditor.escapeHtml(byear)})` : '';
@@ -1004,12 +1009,17 @@ class PersonEditor {
 			}
 
 			// Update the person editor header
-			const fname = (person.first_name || '').split(':')[0];
-			const mname = (person.middle_name || '').split(':')[0];
-			const lname = (person.last_name || '').split(':')[0];
+			const clean = (s) => {
+				if (!s) return '';
+				const val = String(s).split(':')[0].trim();
+				return val.toLowerCase() === 'click to set' ? '' : val;
+			};
+			const fname = clean(person.first_name);
+			const mname = clean(person.middle_name);
+			const lname = clean(person.last_name);
 			let fullDisplay = [fname, mname, lname].filter(Boolean).join(' ').trim();
 			if (!fullDisplay && person.full_name) {
-				fullDisplay = person.full_name.split(':')[0];
+				fullDisplay = clean(person.full_name);
 			}
 			const byear = person.birth_year ? String(person.birth_year).split(':')[0] : '?';
 			const yearStr = byear !== '?' ? `(b. ${PersonEditor.escapeHtml(byear)})` : '';
@@ -1064,19 +1074,194 @@ class PersonEditor {
 			const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
 			if (window.app && !window.app.score && window.Score) new window.Score();
 
-			// 1850/1860 slave schedules can't be matched person-by-person — the
-			// enslaved carry no name at all, only age/sex/race, so field scoring
-			// buries the correct household under name-mismatch penalties. Use the
-			// GroupMatcher family-vs-holding algorithm instead (see GroupMatch.md)
-			// when we have a real tree person to build an 1870 family group from.
-			const scoreObj = window.app.score;
-			const isSlaveSchedule = scoreObj && typeof scoreObj.isSlaveScheduleSource === 'function' && scoreObj.isSlaveScheduleSource(search_criteria.source);
+			const includeMode = String(state.include || search_criteria.include || '').toLowerCase();
 			let results;
-			if (isSlaveSchedule && person && person.person_id !== -1 && typeof scoreObj.SearchGroupMatch === 'function') {
-				const sourceTag = String(search_criteria.source).toUpperCase().includes('1850') ? 'SS-1850' : 'SS-1860';
-				results = scoreObj.SearchGroupMatch(mentionsArray, person, sourceTag);
+
+			if (includeMode === 'scan') {
+				let searchObj = (window.app && window.app.search) ? window.app.search : null;
+				if (!searchObj && typeof Search !== 'undefined') {
+					searchObj = new Search({
+						mentions: mentionsArray,
+						assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
+						match: (window.app && window.app.match) ? window.app.match : null
+					});
+					if (window.app) window.app.search = searchObj;
+				}
+
+				if (searchObj && typeof searchObj.scan === 'function') {
+					const curTree = (window.app && window.app.curTree) ? window.app.curTree : { persons: [], relationships: [] };
+					if (curTree && curTree.persons) {
+						const pList = Array.isArray(curTree.persons) ? curTree.persons : Object.values(curTree.persons);
+						if (person && !pList.some(p => p.person_id === person.person_id)) {
+							pList.push(person);
+						}
+						curTree.persons = pList;
+					}
+					const pid = person ? person.person_id : (curTree.persons && curTree.persons[0] ? curTree.persons[0].person_id : null);
+					try {
+						const scanRes = searchObj.scan(curTree, pid);
+						results = (scanRes && scanRes.sources) ? scanRes.sources.map(s => ({
+							mention_id: s.source,
+							source: s.source,
+							source_type: s.label || s.type || '',
+							full_name: `${s.label || s.source} (${s.year || ''})`,
+							score: s.best_rough != null ? s.best_rough : (s.candidates > 0 ? 0.5 : 0),
+							_score: s.best_rough != null ? s.best_rough : 0,
+							_probability: s.best_rough != null ? s.best_rough : 0,
+							_matchStrength: s.best_rough != null ? s.best_rough : 0,
+							birth_year: s.year,
+							narrative: `Candidates: ${s.candidates} | Best rough score: ${s.best_rough != null ? Math.round(s.best_rough * 100) + '%' : 'N/A'}${s.blocked_reason ? ' | Blocked: ' + s.blocked_reason : ''}`,
+							why: s,
+							factors: s,
+							isScanResult: true
+						})) : [];
+					} catch (err) {
+						console.error('[Scan Search] Error in search.scan:', err);
+						results = [];
+					}
+				} else {
+					console.warn('[Scan Search] searchObj or searchObj.scan not available');
+					results = [];
+				}
+			} else if (includeMode === 'omni') {
+				let searchObj = (window.app && window.app.search) ? window.app.search : null;
+				if (!searchObj && typeof Search !== 'undefined') {
+					searchObj = new Search({
+						mentions: mentionsArray,
+						assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
+						match: (window.app && window.app.match) ? window.app.match : null
+					});
+					if (window.app) window.app.search = searchObj;
+				}
+
+				if (searchObj && typeof searchObj.find === 'function') {
+					const curTree = (window.app && window.app.curTree) ? window.app.curTree : { persons: [], relationships: [] };
+					if (curTree && curTree.persons) {
+						const pList = Array.isArray(curTree.persons) ? curTree.persons : Object.values(curTree.persons);
+						if (person && !pList.some(p => p.person_id === person.person_id)) {
+							pList.push(person);
+						}
+						curTree.persons = pList;
+					}
+					const pid = person ? person.person_id : (curTree.persons && curTree.persons[0] ? curTree.persons[0].person_id : null);
+					let targetSource = search_criteria.source;
+					if (searchObj.sources && !searchObj.sources.has(targetSource)) {
+						for (let k of searchObj.sources.keys()) {
+							if (k === targetSource || k.endsWith('-' + targetSource) || targetSource.endsWith('-' + k)) {
+								targetSource = k;
+								break;
+							}
+						}
+					}
+					try {
+						const findRes = searchObj.find(curTree, pid, { source: targetSource });
+						const buildFactorsFromWhy = (why, score) => {
+							const factors = {};
+							if (!why) return factors;
+							const rung = String(why.rung || '').toUpperCase();
+							const sKind = String(why.surnameKind || '').toUpperCase();
+
+							// First name factor
+							if (rung.includes('EXACT_FIRST')) {
+								factors['exactFirstName'] = { value: why.first_name != null ? why.first_name : 1.0 };
+							} else if (rung.includes('NICKNAME')) {
+								factors['norm_first_name'] = { value: why.first_name != null ? why.first_name : 0.85 };
+							} else if (rung.includes('PHONETIC') || rung.includes('FUZZY')) {
+								factors['fuzzyFirstName'] = { value: why.first_name != null ? why.first_name : 0.7 };
+							} else if (rung.includes('INITIAL')) {
+								factors['fuzzyFirstName'] = { value: why.first_name != null ? why.first_name : 0.55 };
+							} else if (why.first_name > 0) {
+								factors['exactFirstName'] = { value: why.first_name };
+							}
+
+							// Last name factor
+							if (sKind === 'EXACT_LASTNAME' || (rung.includes('SURNAME') && sKind !== 'NONE')) {
+								if (sKind === 'NYSIIS') {
+									factors['exactNysiisLast'] = { value: why.last_name != null ? why.last_name : 0.85 };
+								} else if (sKind === 'SOUNDEX' || sKind === 'METAPHONE') {
+									factors['fuzzyLastName'] = { value: why.last_name != null ? why.last_name : 0.75 };
+								} else {
+									factors['exactLastName'] = { value: why.last_name != null ? why.last_name : 1.0 };
+								}
+							} else if (why.last_name > 0) {
+								factors['exactLastName'] = { value: why.last_name };
+							}
+
+							// Birth Year
+							if (why.birth != null && (typeof why.birth === 'number' ? why.birth > 0 : true)) {
+								const bVal = typeof why.birth === 'object' ? (why.birth.score != null ? why.birth.score : 0.9) : why.birth;
+								if (bVal > 0) factors['birthYear'] = { value: bVal };
+							}
+
+							// Gender
+							if (why.gender != null && why.gender > 0) {
+								factors['gender'] = { value: why.gender };
+							}
+
+							// Race
+							if (why.race != null && why.race > 0) {
+								factors['race'] = { value: why.race };
+							}
+
+							// Family / Household boost
+							const famScore = why.family != null ? why.family : why.household;
+							if (famScore != null && famScore > 0) {
+								factors['familyBoost'] = { value: famScore, matches: why.familyMatches || [] };
+							}
+
+							// Enslaver holding fit
+							if (why.enslaver && why.enslaver.strength > 0) {
+								factors['enslaverHolding'] = { value: why.enslaver.strength };
+							}
+
+							// Proximity fit
+							if (why.proximity && why.proximity.strength > 0) {
+								factors['proximityFit'] = { value: why.proximity.strength };
+							}
+
+							// Cohort fit
+							if (why.cohort && why.cohort.strength > 0) {
+								factors['cohortFit'] = { value: why.cohort.strength };
+							}
+
+							return factors;
+						};
+
+						results = (findRes && findRes.candidates) ? findRes.candidates.map(c => {
+							const mFactors = buildFactorsFromWhy(c.why, c.score);
+							return {
+								...c.mention,
+								score: c.score != null ? c.score : 0,
+								_score: c.score != null ? c.score : 0,
+								_probability: c.probability != null ? c.probability : c.score,
+								_matchStrength: c.score != null ? c.score : 0,
+								why: c.why,
+								factors: mFactors,
+								_factors: mFactors
+							};
+						}) : [];
+					} catch (err) {
+						console.error('[Omni Search] Error in search.find:', err);
+						results = [];
+					}
+				} else {
+					console.warn('[Omni Search] searchObj or searchObj.find not available');
+					results = [];
+				}
 			} else {
-				results = scoreObj.Search(mentionsArray, search_criteria);
+				// 1850/1860 slave schedules can't be matched person-by-person — the
+				// enslaved carry no name at all, only age/sex/race, so field scoring
+				// buries the correct household under name-mismatch penalties. Use the
+				// GroupMatcher family-vs-holding algorithm instead (see GroupMatch.md)
+				// when we have a real tree person to build an 1870 family group from.
+				const scoreObj = window.app.score;
+				const isSlaveSchedule = scoreObj && typeof scoreObj.isSlaveScheduleSource === 'function' && scoreObj.isSlaveScheduleSource(search_criteria.source);
+				if (isSlaveSchedule && person && person.person_id !== -1 && typeof scoreObj.SearchGroupMatch === 'function') {
+					const sourceTag = String(search_criteria.source).toUpperCase().includes('1850') ? 'SS-1850' : 'SS-1860';
+					results = scoreObj.SearchGroupMatch(mentionsArray, person, sourceTag);
+				} else {
+					results = scoreObj.Search(mentionsArray, search_criteria);
+				}
 			}
 
 			if (window.app && window.app.mentionsEditor) {
@@ -1140,8 +1325,7 @@ class PersonEditor {
 		$countyWrap.append($countySelect);
 
 		// Include dropdown
-		const $includeWrap = $('<div class="vpe-include-wrap" style="display: inline-flex; align-items: center; margin-right: 10px;"></div>');
-		const $includeLabel = $('<label style="font-size: 14px; font-weight: 500; color: #555; margin-right: 6px;">Include:</label>');
+		const $includeWrap = $('<div class="vpe-include-wrap" style="display: inline-flex; align-items: center; margin-left: 10px;"></div>');
 		const $includeSelect = $(`
 			<select class="vpe-include-btn" style="
 				display: inline-flex;
@@ -1161,8 +1345,10 @@ class PersonEditor {
 				background-position: right 8px top 50%;
 				background-size: 8px auto;
 			">
-				<option value="all">All terms</option>
-				<option value="any">Any term</option>
+				<option value="all">All</option>
+				<option value="any">Any</option>
+				<option value="omni">Omni</option>
+				<option value="scan">Scan</option>
 			</select>
 		`);
 		$includeSelect.val(state.include || 'all');
@@ -1170,9 +1356,9 @@ class PersonEditor {
 			state.include = $(this).val();
 			PersonEditor.lastIncludeSetting = state.include;
 		});
-		$includeWrap.append($includeLabel, $includeSelect);
+		$includeWrap.append($includeSelect);
 
-		$right.append($countyWrap, $sourcesWrap, $includeWrap, $searchBtn);
+		$right.append($countyWrap, $sourcesWrap, $searchBtn, $includeWrap);
 
 		$footer.append($right);
 	}
@@ -1201,6 +1387,8 @@ class PersonEditor {
 			'CN-1900': '1900 Census',
 			'SS-1860': '1860 Slave Schedule',
 			'SS-1850': '1850 Slave Schedule',
+			'DE': 'Death Records',
+			'DR': 'Death Records',
 			'FG': 'Find A Grave',
 			'VR': 'Vital Records',
 			'CH': 'Church Records',
@@ -1258,6 +1446,7 @@ class PersonEditor {
 			{ value: 'CN-1900', label: '1900 Census' },
 			{ value: 'SS-1860', label: '1860 Slave Schedule' },
 			{ value: 'SS-1850', label: '1850 Slave Schedule' },
+			{ value: 'DE', label: 'Death Records' },
 			{ value: 'FG', label: 'Find A Grave' },
 			{ value: 'VR', label: 'Vital Records' },
 			{ value: 'CH', label: 'Church Records' },
@@ -1273,7 +1462,7 @@ class PersonEditor {
 			}
 		});
 
-		const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'FG', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
+		const preferredOrder = ['CN-1880', 'CN-1870', 'CN-1860', 'CN-1850', 'CN-1900', 'SS-1860', 'SS-1850', 'DE', 'DR', 'FG', 'VR', 'CH', 'FBR', 'FL', 'SB', 'CC', 'CF'];
 		const sortedKeys = Array.from(optionsMap.keys()).sort((a, b) => {
 			let idxA = preferredOrder.indexOf(a);
 			let idxB = preferredOrder.indexOf(b);

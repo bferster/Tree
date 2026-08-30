@@ -622,6 +622,12 @@ class Match {
 		return 'MISMATCH';
 	}
 
+	_hasName(o) {
+		if (!o) return false;
+		return Match.isPresent(o.first_name) || Match.isPresent(o.norm_first_name) ||
+		       Match.isPresent(o.last_name) || Match.isPresent(o.full_name);
+	}
+
 	// =======================================================================
 	// CROSS-CENSUS PERSON MATCHING helpers
 	// =======================================================================
@@ -905,7 +911,7 @@ class Match {
 		const gender = gp || gm, surnameFired = nd.surnameStrength >= 0.8, bothLast = person.last_name && mention.last_name;
 		if (gender === 'F' && surnameFired) A = Math.min(1, A + 0.05);
 		else if (gender === 'M' && !surnameFired && bothLast && nd.surnameStrength === 0) A = Math.min(A, 0.3);
-		const aAvailable = nd.rung !== 'NONE';
+		const aAvailable = this._hasName(person) && this._hasName(mention);
 
 		// ===== LEVER B: profile-aware smooth birth agreement =====
 		const profile = (isSchedule(person, ctx.targetSource) || isSchedule(mention, ctx.candidateSource)) ? 'SCHEDULE_INVOLVED' : 'CENSUS_CENSUS';

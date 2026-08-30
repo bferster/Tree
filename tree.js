@@ -1521,13 +1521,21 @@ class TreeApp {
 			if (!str) return "";
 			return str.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 		};
-		const fn = (d.first_name || "?").split(':')[0];
-		const mn = (d.middle_name || "").split(':')[0];
-		const ln = (d.last_name || "").split(':')[0];
-		let fullName = toTitleCase(fn);
-		if (mn) fullName += " " + toTitleCase(mn);
-		fullName += " " + toTitleCase(ln);
-		return fullName.trim();
+		const clean = (s) => {
+			if (!s) return "";
+			const val = String(s).split(':')[0].trim();
+			return val.toLowerCase() === 'click to set' ? "" : val;
+		};
+		const fn = clean(d.first_name);
+		const mn = clean(d.middle_name);
+		const ln = clean(d.last_name);
+		let parts = [];
+		if (fn) parts.push(toTitleCase(fn));
+		if (mn) parts.push(toTitleCase(mn));
+		if (ln) parts.push(toTitleCase(ln));
+		if (parts.length > 0) return parts.join(" ");
+		const rawFull = clean(d.full_name);
+		return rawFull ? toTitleCase(rawFull) : "?";
 	}
 
 	SyncEditorToNode(node)																		// SYNC PERSON EDITOR FIELDS TO NODE
@@ -1540,7 +1548,10 @@ class TreeApp {
 			const label = $(this).find('.vpe-field-label').text().trim().toLowerCase();
 			const $chip = $(this).find('.vpe-chip').clone();
 			$chip.children('select').remove(); // Exclude the dropdown options text
-			const val = $chip.text().trim() || null;
+			let val = $chip.text().trim() || null;
+			if (val && val.toLowerCase() === 'click to set') {
+				val = null;
+			}
 
 			if (label === 'first name') node.first_name = val || "";
 			else if (label === 'middle name') node.middle_name = val || "";
@@ -1549,8 +1560,8 @@ class TreeApp {
 			else if (label === 'suffix') node.suffix = val || "";
 			else if (label === 'race') node.race = val || "";
 			else if (label === 'gender') node.gender = val || "male";
-			else if (label === 'birth year') node.birth_year = val ? parseInt(val) : null;
-			else if (label === 'death year') node.death_year = val ? parseInt(val) : null;
+			else if (label === 'birth year') node.birth_year = (val && !isNaN(parseInt(val, 10))) ? parseInt(val, 10) : null;
+			else if (label === 'death year') node.death_year = (val && !isNaN(parseInt(val, 10))) ? parseInt(val, 10) : null;
 		});
 
 		// Re-render tree nodes and edges

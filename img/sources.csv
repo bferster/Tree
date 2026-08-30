@@ -9,6 +9,7 @@ ALB-FBR,1800,"https://docs.google.com/spreadsheets/d/1BLkM18o7wF30uoV8j9gerlM9AG
 ALB-SS-1850,1850,"https://docs.google.com/spreadsheets/d/1Jf2zsFW_sh-QVmwhJUD8SNamu-kflhqPONJky04_zmg/export?format=csv","SlaveScheduleFormat.md","ALB","1850 Slave Schedule"
 ALB-SS-1860,1860,"https://docs.google.com/spreadsheets/d/1c4Dn747B-rRbK8_x0H78XmddksnGECLLj_xuaP_6zg8/export?format=csv","SlaveScheduleFormat.md","ALB","1860 Slave Schedule"
 ALB-CH,1851,"https://docs.google.com/spreadsheets/d/1f9A99ZuJHJt8zCakNgLdniIOpiYkf1uIAKmnaJ4Ax40/export?format=csv","ChurchFormat.md","ALB","Church Records"
+ALB-DE,1853,"","DeathRecordsFormat.md","ALB","Death Records"
 
 AUG-CN-1860,1860,"","1860CensusFormat.md","AUG","1860 Census"
 AUG-CN-1870,1870,"https://docs.google.com/spreadsheets/d/1-pJ3MrWWEnPyrSNE8QxVi-EfxyO-oLhlwMudygU3HG8/export?format=csv","1870CensusFormat.md","AUG","1870 Census"
@@ -21,6 +22,7 @@ AUG-CH,1851,"https://docs.google.com/spreadsheets/d/1SEcTFIWiHgFS4G-lMuv0oE0EyWB
 AUG-SB,1853,"https://docs.google.com/spreadsheets/d/1qyowsVe171KUJgJId636dXtBW4i4VeDNcrRMpaygYWE/export?format=csv","SlaveBirthFormat.md","AUG","Slave Births"
 AUG-CC,1866,"https://docs.google.com/spreadsheets/d/1-s92vkRZknCm6EohYFp5smiWlGBH7joDOxQDsu1_IYI/export?format=csv","CohabChildFormat.md","AUG","Cohabitation Children"
 AUG-CF,1866,"https://docs.google.com/spreadsheets/d/1IFgOe5aRjpUGnon4Dw8pdiODx26O8JiDbHkCX7W5WTU/export?format=csv","CohabFamilyFormat.md","AUG","Cohabitation Families"
+AUG-DE,1853,"","DeathRecordsFormat.md","AUG","Death Records"
 
 FAQ-CN-1860,1860,"","1860CensusFormat.md","FAQ","1860 Census"
 FAQ-CN-1870,1870,"https://docs.google.com/spreadsheets/d/1AvfIHKe4KYJ6-5F-VG909466JTj_6zNNISGoQdA0VcQ/export?format=csv","1870CensusFormat.md","FAQ","1870 Census"
@@ -32,10 +34,12 @@ FAQ-FBR,1800,"https://docs.google.com/spreadsheets/d/1IiH40lhT6hm2xMr1g6Qb84LuQO
 FAQ-SS-1850,1850,"https://docs.google.com/spreadsheets/d/1yTWVzj_f9P9FERIv5gAHy7WpmRcvrNJ3zlhBBzn9Zws/export?format=csv","SlaveScheduleFormat.md","FAQ","1850 Slave Schedule"
 FAQ-SS-1860,1860,"https://docs.google.com/spreadsheets/d/1VodM4OJJpltIL5DunebkkOKSjN75WqosA5VKMxwXxHI/export?format=csv","SlaveScheduleFormat.md","FAQ","1860 Slave Schedule"
 FAQ-CH,1851,"/export?format=csv","ChurchFormat.md","FAQ","Church Records"
+FAQ-DE,1853,"","DeathRecordsFormat.md","FAQ","Death Records"
 
 ORF-CN-1860,1860,"https://docs.google.com/spreadsheets/d/1AptRmf8Y6IOVE_hSJ0SHsWY5yqRivIQ1TVLV9HIoKow/export?format=csv","1860CensusFormat.md","ORF","1860 Census"
 ORF-CN-1870,1870,"https://docs.google.com/spreadsheets/d/1iEJVqC_ABb4j8RJxF3FTzv4d4cGBDVB3tDHbuQ_9vAo/export?format=csv","1870CensusFormat.md","ORF","1870 Census"
 ORF-CN-1880,1880,"https://docs.google.com/spreadsheets/d/1IZtRr76Sit83zncPJXT1jc3LLJkkd78fhIcZcSjX44Y/export?format=csv","1880CensusFormat.md","ORF","1880 Census"
 ORF-CN-1900,1900,"https://docs.google.com/spreadsheets/d/1bPdwGVh_9UY7khwPszemlL2-hbnuDP5MmtEiF4o0bCM/export?format=csv","1900CensusFormat.md","ORF","1900 Census"
+ORF-DE,1853,"","DeathRecordsFormat.md","ORF","Death Records"
 
 
