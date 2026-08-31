@@ -55,7 +55,23 @@ class Match {
 		modExtremelyCommon: -15,
 	};
 
-	static DEFAULT_JW_FUZZY_PASS = 0.85;
+	// Given-name fuzzy pass. Lowered from 0.85 to 0.84 so that truncations
+	// sitting just under the old bar are caught - ARCHIBALD/ARCHY is 0.8489,
+	// WASHINGTON/WASHT 0.8457 - without carrying a curated nickname table for
+	// them. This is a deliberate recall-for-precision trade: measured against
+	// the AUG corpus it admits roughly 660 additional cross-name equivalences,
+	// of which only a small fraction are true (ARCHIBALD/ARCHY, SOPHRONIA/SOPHY,
+	// CASSANDRA/CASSY) and the rest are not (HENRY/HENRIETTA, EDWARD/STEWARD,
+	// CHARLES/HARLEY, ELIJAH/DELILAH, LUCINDA/LUCIUS, WILLIS/WILLARD).
+	//
+	// Two things contain the damage, and both matter:
+	//   - a fuzzy given-name hit yields rung NICKNAME_FIRST_SURNAME at base 0.85
+	//     with needsCorroboration set, not an exact-name score; and
+	//   - it still requires the SURNAME to have fired, so these are not loose
+	//     matches on the given name alone.
+	// Raise back to 0.85 via config { jwFuzzyPassThreshold: 0.85 } if false merges show
+	// up in review.
+	static DEFAULT_JW_FUZZY_PASS = 0.84;
 
 	// Surname-distance guard: floor on raw-surname Jaro-Winkler below which a
 	// phonetic / NYSIIS / bridged code match is rejected (falls through to
@@ -568,12 +584,26 @@ class Match {
 		return 0.0;
 	}
 
+	// A compound given name ("MARY FRANCIS", "JAMES F", "WILLIAM ANDERSON")
+	// must compare on its FIRST token. normUpper strips whitespace, so
+	// "MARTHA J" collapses to "MARTHAJ" and never equals "MARTHA" - not on the
+	// nickname table, not on Jaro-Winkler, not on the blocking key. 1,378 AUG
+	// mentions (~1% of the corpus) carry a multi-token norm_first_name, and
+	// 1,343 of them have a first token that already exists as a simple form,
+	// so nearly all of them are silently unreachable today.
+	//
+	// The trailing tokens are not discarded: a single-letter tail is returned
+	// as a middle initial, which the caller can use as corroboration rather
+	// than letting it destroy the given-name comparison.
 	_classifyGiven(o) {
 		const raw = Match.isPresent(o.norm_first_name) ? o.norm_first_name : o.first_name;
-		const n = Match.normUpper(raw);
-		if (!n) return { cls: 'ABSENT', norm: '', initial: '' };
-		if (n.length === 1) return { cls: 'INITIAL', norm: n, initial: n };
-		return { cls: 'FULL', norm: n, initial: n[0] };
+		const parts = String(raw == null ? '' : raw).trim().split(/[\s.]+/).filter(Boolean);
+		const n = Match.normUpper(parts.length ? parts[0] : '');
+		const tail = parts.slice(1).map(t => Match.normUpper(t)).filter(Boolean);
+		const extraInitial = tail.length === 1 && tail[0].length === 1 ? tail[0] : '';
+		if (!n) return { cls: 'ABSENT', norm: '', initial: '', tail: tail, extraInitial: '' };
+		if (n.length === 1) return { cls: 'INITIAL', norm: n, initial: n, tail: tail, extraInitial: extraInitial };
+		return { cls: 'FULL', norm: n, initial: n[0], tail: tail, extraInitial: extraInitial };
 	}
 
 	_normFullName(s) {
@@ -620,6 +650,106 @@ class Match {
 		if (ma === mb) return 'MATCH';
 		if (ma[0] === mb[0] && (ma.length === 1 || mb.length === 1)) return 'MATCH';
 		return 'MISMATCH';
+	}
+
+	// A non-head whose surname differs from the household head's is living in
+	// someone else's household - boarder, servant, farm laborer. Kin absence
+	// from that roster carries no information about identity, so the
+	// corroboration gate must not treat it as a missing corroboration.
+	// Conservative by design: when headship or either surname is unknown it
+	// returns false, leaving the gate's previous behavior in place.
+	// Multiplier on Lever B sigma for a possibly-heaped age. Returns 1 when the
+	// age cannot be computed, is under 20, or does not land on a multiple of 5.
+	static _heapFactor(birthRange, censusYear) {
+		if (!birthRange || !censusYear) return 1;
+		const age = censusYear - Math.round((birthRange[0] + birthRange[1]) / 2);
+		if (!(age >= 20)) return 1;
+		if (age % 10 === 0) return 1.35;   // strongest pile-up
+		if (age % 5 === 0)  return 1.20;
+		return 1;
+	}
+
+	// Does the candidate's household have its spouse slot occupied by someone
+	// who is clearly NOT the person's known spouse? ctx.personKin entries may
+	// carry a _predicate ('isSpouseOf'); without it nothing fires, so callers
+	// that do not label kin are unaffected.
+	_spouseContradiction(ctx, censusYear) {
+		const none = { fired: false, strength: 0 };
+		const kin = Array.isArray(ctx.personKin) ? ctx.personKin : [];
+		const roster = Array.isArray(ctx.candidateHousehold) ? ctx.candidateHousehold : [];
+		if (!kin.length || !roster.length) return none;
+
+		const spouses = kin.filter(k => k && String(k._predicate || '') === 'isSpouseOf');
+		if (!spouses.length) return none;
+
+		// A spouse already dead by this year cannot be expected in the roster,
+		// and remarriage is then the expected outcome rather than a red flag.
+		const alive = spouses.filter(sp => {
+			const d = parseInt(String(sp.death_year || '').match(/\d{4}/) || [], 10);
+			return !(Number.isFinite(d) && censusYear && d < censusYear);
+		});
+		if (!alive.length) return none;
+
+		// The roster's spouse slot: a co-resident adult of the opposite gender
+		// to the candidate, close in age. Relationship-to-head is not in the
+		// data, so this is inferred.
+		let worst = none;
+		for (const sp of alive) {
+			const spg = this._gender(sp), spy = this._birthYear(sp);
+			if (!spg) continue;
+			for (const r of roster) {
+				if (this._gender(r) !== spg) continue;
+				const ry = this._birthYear(r);
+				if (ry == null || censusYear == null) continue;
+				if (censusYear - ry < 16) continue;                 // not an adult
+				if (spy != null && Math.abs(ry - spy) > 15) continue; // wrong generation
+				const ns = this.MatchName(sp, r);
+				if (ns >= 0.6) return none;   // the slot IS our spouse: no contradiction
+				const ageOff = spy != null ? Math.min(1, Math.abs(ry - spy) / 12) : 0.5;
+				const strength = Match.clamp((1 - ns) * (0.5 + 0.5 * ageOff), 0, 1);
+				if (strength > worst.strength) {
+					worst = { fired: true, strength, occupant: r, expected: sp, nameScore: +ns.toFixed(3) };
+				}
+			}
+		}
+		return worst;
+	}
+
+	// 'AGREE' | 'DISAGREE' | 'NA'. Reads an explicit middle_name and the tail of
+	// a compound given name, so "Martha J Crawford" and "Martha Crawford" with
+	// middle_name "J" both yield J.
+	_middleInitial(o) {
+		if (!o) return '';
+		const mid = Match.normUpper(o.middle_name);
+		if (mid) return mid[0];
+		const g = this._classifyGiven(o);
+		return g && g.extraInitial ? g.extraInitial[0] : '';
+	}
+	_middleInitialState(a, b) {
+		const x = this._middleInitial(a), y = this._middleInitial(b);
+		if (!x || !y) return 'NA';
+		return x === y ? 'AGREE' : 'DISAGREE';
+	}
+
+	_sourceYear(o, fallbackSource) {
+		if (!o) return null;
+		const direct = parseInt(o.source_year, 10);
+		if (Number.isFinite(direct)) return direct;
+		const m = String(o.source || fallbackSource || '').match(/(1[6-9]\d{2}|20\d{2})/);
+		return m ? parseInt(m[1], 10) : null;
+	}
+
+	static isBoarder(mention, roster) {
+		if (!mention || !Array.isArray(roster) || !roster.length) return false;
+		const isHead = h => h === true || String(h).trim().toLowerCase() === 't' ||
+		                    String(h).trim().toLowerCase() === 'true';
+		if (isHead(mention.head)) return false;
+		let head = null;
+		for (const r of roster) { if (isHead(r.head)) { head = r; break; } }
+		if (!head) return false;
+		const a = Match.normUpper(mention.last_name), b = Match.normUpper(head.last_name);
+		if (!a || !b) return false;
+		return a !== b;
 	}
 
 	_hasName(o) {
@@ -911,6 +1041,17 @@ class Match {
 		const gender = gp || gm, surnameFired = nd.surnameStrength >= 0.8, bothLast = person.last_name && mention.last_name;
 		if (gender === 'F' && surnameFired) A = Math.min(1, A + 0.05);
 		else if (gender === 'M' && !surnameFired && bothLast && nd.surnameStrength === 0) A = Math.min(A, 0.3);
+
+		// MIDDLE INITIAL. _classifyGiven already extracts a trailing initial
+		// from a compound given name ("MARTHA J" -> MARTHA + J) and middle_name
+		// carries one directly. Two records agreeing on it are more likely the
+		// same person than two agreeing on the given name alone; two that
+		// disagree are weak evidence against, but only weak - enumerators drop
+		// middle initials constantly, and a person may use different ones.
+		// Absence on either side is neutral.
+		const midState = this._middleInitialState(person, mention);
+		if (midState === 'AGREE') A = Math.min(1, A + 0.05);
+		else if (midState === 'DISAGREE') A = Math.max(0, A - 0.05);
 		const aAvailable = this._hasName(person) && this._hasName(mention);
 
 		// ===== LEVER B: profile-aware smooth birth agreement =====
@@ -918,11 +1059,44 @@ class Match {
 		const prof = PROFILES[profile] || PROFILES.CENSUS_CENSUS;
 		const bp = range(person.birth_year), bm = range(mention.birth_year);
 		let bAvailable = false, B = 0, gap = null;
+		let sigma = prof.sigma, knockout = prof.knockout, heaped = null, intervalScale = 1;
 		if (bp && bm) {
 			bAvailable = true;
 			gap = (bm[0] > bp[1]) ? bm[0] - bp[1] : (bp[0] > bm[1]) ? bp[0] - bm[1] : 0;
-			if (gap > prof.knockout) return ko('BIRTH_GAP_' + gap + '(' + profile + ')');
-			B = Math.exp(-(gap * gap) / (2 * prof.sigma * prof.sigma));
+
+			// AGE HEAPING. Self-reported census ages pile up on multiples of 5
+			// and 10. Measured on AUG-CN-1870, ages 20-70, the last digit of the
+			// reported age is 0 for 19.5% of people and 5 for 14.1%, against 10%
+			// expected for each - a Whipple index near 168, "rough" by
+			// demographic standards. An age landing on 0 or 5 is therefore much
+			// more likely to have been rounded, so the birth year it implies
+			// carries more error and Lever B should be correspondingly less
+			// confident. Only adults are affected: children's ages are usually
+			// reported by a parent who knows them, and heaping is negligible
+			// below about 20.
+			heaped = Match._heapFactor(bp, censusYear) * Match._heapFactor(bm, censusYear);
+			sigma = sigma * heaped;
+
+			// INTERVAL SCALING. Reporting drift accumulates with the time
+			// between the two records: Arch Crawford is born 1835 by the 1870
+			// census and 1840 by the 1880 one, five years of drift across one
+			// decade. A single sigma for a 10-year and a 30-year separation
+			// under-forgives the wide one. Grows as sqrt(decades), since the
+			// drift behaves like accumulated independent error rather than a
+			// steady trend.
+			const ySelf = this._sourceYear(person, ctx.targetSource);
+			const yCand = this._sourceYear(mention, ctx.candidateSource) || censusYear;
+			if (ySelf && yCand) {
+				const decades = Math.abs(yCand - ySelf) / 10;
+				intervalScale = Math.max(1, Math.sqrt(Math.max(decades, 1)));
+				sigma = sigma * intervalScale;
+			}
+
+			// The knockout widens with sigma too, or a legitimately drifted pair
+			// is thrown out before it can be scored.
+			knockout = Math.max(prof.knockout, Math.round(prof.knockout * (sigma / prof.sigma)));
+			if (gap > knockout) return ko('BIRTH_GAP_' + gap + '(' + profile + ')');
+			B = Math.exp(-(gap * gap) / (2 * sigma * sigma));
 		}
 
 		// ===== LEVER C: household / family continuity (noisy-OR support) =====
@@ -930,6 +1104,29 @@ class Match {
 		if (ctx.personKin && ctx.personKin.length && ctx.candidateHousehold && this.scoreHousehold) {
 			cAvailable = true;
 			C = this.scoreHousehold(ctx.personKin, ctx.candidateHousehold, ctx.householdOpts);
+		}
+
+		// CONTRADICTION. Lever C only ever adds: a candidate whose household
+		// holds none of the expected kin scores the same as one with no
+		// household at all. But those are different findings. Kin ABSENCE is
+		// usually uninformative - people board out, families split, a wife dies.
+		// Kin CONTRADICTION is not: if this person's wife is Martha b.1840 and
+		// the candidate is a head living with a wife named Sarah b.1852, the
+		// slot is filled by someone else and that is evidence against identity,
+		// not merely evidence missing.
+		//
+		// Only spouse slots are checked. A missing or replaced child is far too
+		// common to read as contradiction (children die, are fostered out, or
+		// were simply born later), whereas a co-resident spouse is a single
+		// occupancy that two different women cannot both hold at one census.
+		// Remarriage after a death is exactly why this is a soft penalty rather
+		// than a knockout, and why it is suppressed when the person's own
+		// records show the spouse could already have died.
+		const contradiction = this._spouseContradiction(ctx, censusYear);
+		if (contradiction.fired) {
+			// Applied to the household term so it cannot fire alongside a
+			// household boost for the same slot.
+			C = Object.assign({}, C, { contradiction: contradiction });
 		}
 		const H = cAvailable ? C.H : 0;
 
@@ -968,14 +1165,50 @@ class Match {
 		else if (placeState === 'DISAGREE') S0 = Math.max(0, S0 - BP_PENALTY);
 		let rawScore = S0 + BETA * H * (1 - S0);
 		if (occState === 'AGREE') rawScore = rawScore + OCC_BOOST * (1 - rawScore);
+		// Soft, proportional to how badly the occupant fits: a wife of the right
+		// name but wrong age is a weaker contradiction than a different name.
+		const CONTRA_PENALTY = ctx.contradictionPenalty != null ? ctx.contradictionPenalty : 0.20;
+		if (C.contradiction && C.contradiction.fired && CONTRA_PENALTY > 0) {
+			rawScore = Math.max(0, rawScore - CONTRA_PENALTY * C.contradiction.strength);
+		}
 		// Corroboration gate (second downward soft signal). Fires only when the name
 		// rung is marked needsCorroboration AND nothing corroborated the pair:
 		// household did not fire, birthplace is not AGREE, occupation is not AGREE.
 		// It never fires for EXACT_FIRST_SURNAME (literal-identical given), and since
 		// it only subtracts when no boost was applied it never interacts with a boost.
-		const corroborated = C.fired || placeState === 'AGREE' || occState === 'AGREE';
+		const corroborated = C.fired || placeState === 'AGREE' || occState === 'AGREE' ||
+		                     midState === 'AGREE';
+		// The gate must only fire when corroboration was POSSIBLE. As written it
+		// never asked, so it subtracted 0.15 whenever a channel was merely
+		// unavailable, which inverts the evidence in two common situations:
+		//
+		//   1. The candidate is a boarder. Arch Crawford in 1870 is a lone Black
+		//      farm laborer inside the white Dalhouse household, so his wife and
+		//      children are correctly absent from that roster - that IS what the
+		//      right record looks like. Penalizing it dropped his true 1870
+		//      record from rank 1 to rank 6, below the default floor.
+		//   2. No kin are known yet. Early in a tree nobody has relatives, so the
+		//      household channel cannot fire for anyone and every
+		//      needsCorroboration rung takes a blanket -0.15.
+		//
+		// A channel counts as available only if it could actually have produced
+		// agreement: household needs kin AND a roster AND a candidate who lives
+		// with their own family; birthplace and occupation need both sides
+		// populated (placeState/occState are 'NA' when they are not).
+		const corroborationChannels = {
+			household:  (Array.isArray(ctx.personKin) && ctx.personKin.length > 0) &&
+			            (Array.isArray(ctx.candidateHousehold) && ctx.candidateHousehold.length > 0) &&
+			            !Match.isBoarder(mention, ctx.candidateHousehold),
+			birthplace: placeState !== 'NA',
+			occupation: occState !== 'NA',
+			middleInitial: midState !== 'NA'
+		};
+		const corroborationPossible = corroborationChannels.household ||
+		                              corroborationChannels.birthplace ||
+		                              corroborationChannels.occupation ||
+		                              corroborationChannels.middleInitial;
 		let corroborationGate = false;
-		if (nd.needsCorroboration && !corroborated && CORROB_PENALTY > 0) {
+		if (nd.needsCorroboration && !corroborated && corroborationPossible && CORROB_PENALTY > 0) {
 			rawScore = Math.max(0, rawScore - CORROB_PENALTY);
 			corroborationGate = true;
 		}
@@ -1008,7 +1241,18 @@ class Match {
 				occupation: occState, occupationAgree: occAgree, occupationBoost: OCC_BOOST,
 				occupationPerson: pOcc || '', occupationMention: mOcc || '',
 				familyMatches: C.matched.map((m) => { const p = m.candidate, yr = (range(p.birth_year) || [''])[0]; return (p.full_name || `${p.first_name || ''} ${p.last_name || ''}`).trim() + (yr ? `-${yr}` : ''); }),
-				corroboration, available: { name: aAvailable, birth: bAvailable, birthplace: pAvailable, occupation: occAvailable, household: cAvailable },
+				middleInitial: midState,
+				contradiction: (C.contradiction && C.contradiction.fired) ? {
+					strength: +C.contradiction.strength.toFixed(3),
+					expected: C.contradiction.expected && C.contradiction.expected.full_name,
+					occupant: C.contradiction.occupant && C.contradiction.occupant.full_name,
+					nameScore: C.contradiction.nameScore
+				} : null,
+				birthSigma: +sigma.toFixed(2), birthKnockout: knockout,
+				heapFactor: heaped != null ? +heaped.toFixed(2) : null,
+				intervalScale: +intervalScale.toFixed(2),
+				corroboration, corroborationPossible, corroborationChannels,
+				available: { name: aAvailable, birth: bAvailable, birthplace: pAvailable, occupation: occAvailable, household: cAvailable },
 			},
 		};
 		if (this._calib && this.probability) { try { out.probability = this.probability([A, B, H, sRel]); } catch (e) { /* feature mismatch */ } }

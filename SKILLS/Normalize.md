@@ -356,7 +356,7 @@
 			"ED": "EDMUND",  // overlaps with Edward — order-dependent; keep Edward last if you split
 
 			// Archibald
-			"ARCH": "ARCHIBALD", "ARCHIE": "ARCHIBALD",
+			"ARCH": "ARCHY", "ARCHIBALD", "ARCHIE": "ARCHIBALD",
 
 			// Augustus
 			"GUS": "AUGUSTUS",

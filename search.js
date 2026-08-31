@@ -70,6 +70,12 @@
 	// before every FIND (Search.md Stage 4) instead of being searched.
 	var CONSTRAINT_TYPES = ['VR', 'DR', 'FG'];
 
+	// Source types whose isSpouseOf start_year is an actual marriage DATE, and
+	// so may exclude a spouse from earlier years (see _marriageYear). A census
+	// or cohabitation-register date is an upper bound on the marriage, not the
+	// marriage itself, so neither belongs here. Vital records do.
+	var MARRIAGE_DATE_TYPES = ['VR'];
+
 	// Kin imputation weights (Search.md Stage 2).
 	var KIN_WEIGHTS = {
 		isSpouseOf:       { hops: 1, weight: 1.0 },
@@ -117,6 +123,10 @@
 		maxMotherAge:      50,
 		minFatherAge:      14,
 		maxFatherAge:      70,
+		provisional:       true, // run the constraint-source pre-pass
+		provisionalFloor:  0.80, // score a constraint hit must clear
+		provisionalMargin: 0.10, // and how far it must beat the runner-up
+		provisionalSpread: 2,    // disagreement (years) that voids the ceiling
 		// Calibration feedback loop (see accept()/reject()/_maybeRefitCalibration).
 		calibMinSamples:   20,  // total labeled pairs required before first fit
 		calibMinPerClass:  5,   // accepts AND rejects required before first fit
@@ -190,6 +200,19 @@
 		return SOURCE_TYPES[type] || { label: type || 'Unknown', reliability: 'MEDIUM', schedule: false, roster: false };
 	}
 
+	// The FB blocking key must use the same given-name token match.js compares
+	// on (_classifyGiven takes the first token). normUpper strips whitespace, so
+	// keying the whole value turns "MARTHA J" into MARTHAJ and it never collides
+	// with MARTHA - the record is unreachable through FB no matter how it is
+	// scored. 1,378 AUG mentions carry a multi-token norm_first_name and 1,343
+	// of those have a first token that already exists as a simple form, so this
+	// is the retrieval half of the same defect. Index and query both use this.
+	function givenKey(v) {
+		if (!isPresent(v)) return '';
+		var parts = String(v).trim().split(/[\s.]+/).filter(Boolean);
+		return parts.length ? upper(parts[0]) : '';
+	}
+
 	function bucketOf(year, size) {
 		if (year == null) return null;
 		return Math.floor(year / size) * size;
@@ -214,6 +237,7 @@
 		this.assertions = config.assertions || [];
 		this.bridges    = config.bridges || null;   // optional precomputed household bridges
 		this.match      = config.match || new MatchCls(config.matchConfig || {});
+		this.MatchClass = MatchCls || this.match.constructor;
 
 		// Calibration feedback loop (Stage 6a below). Rows are either produced
 		// by accept()/reject() during this session or supplied up front via
@@ -312,7 +336,7 @@
 			});
 		}
 
-		var first = upper(isPresent(m.norm_first_name) ? m.norm_first_name : m.first_name);
+		var first = givenKey(isPresent(m.norm_first_name) ? m.norm_first_name : m.first_name);
 		var by = toInt(m.birth_year);
 		if (first && by != null) {
 			add(B.FB, first + '|' + bucketOf(by, self.opts.birthBucket), m);
@@ -435,7 +459,17 @@
 			fields.forEach(function (f) {
 				var v = self._fieldOf(f, m);
 				if (!isPresent(v)) return;
-				var already = attested[f].some(function (r) { return r.source === id; });
+				// Dedupe on source AND value, not source alone. When a tree
+				// field cites a mention ("Arch:AUG-CN-1880-24520") the 1a pass
+				// already registered that source, so a source-only check
+				// discards what the mention actually says ("Archy") and the
+				// second spelling never becomes an attestation. That is the
+				// input _nameVariants needs, and it is also what makes the
+				// CONFLICTING_ATTESTATIONS report below able to see the
+				// disagreement at all.
+				var already = attested[f].some(function (r) {
+					return r.source === id && upper(r.value) === upper(v);
+				});
 				if (already) return;
 				attested[f].push({
 					value: String(v).trim(), source: id, type: m._type,
@@ -560,19 +594,87 @@
 		};
 
 		// Phonetic keys for Match's surname cascade. Reuse a linked mention's
-		// precomputed codes when the surname agrees, rather than recomputing.
+		// precomputed codes, but only from a mention that agrees on the field
+		// being copied. The surname-gated block below must not also carry
+		// norm_first_name: _modal() may pick "Arch" as the given name while the
+		// mention it copies from says "Archy", and the two normalize
+		// differently (ARCHIBALD vs ARCHY), so the normalized given name ends
+		// up describing a spelling the object does not have.
 		var lastRec = attested.last_name[0];
 		if (lastRec && lastRec.source) {
 			var m = this.byId.get(lastRec.source);
 			if (m && upper(m.last_name) === upper(last)) {
 				obj.nysiis_last_name    = m.nysiis_last_name;
 				obj.metaphone_last_name = m.metaphone_last_name;
-				obj.norm_first_name     = m.norm_first_name;
 				obj.norm_race           = m.norm_race;
 				obj.norm_occupation     = m.norm_occupation;
 			}
 		}
+		// norm_first_name comes only from a mention carrying the chosen given name.
+		var firstRec = null;
+		attested.first_name.forEach(function (r) {
+			if (!firstRec && r.source && upper(r.value) === upper(first)) firstRec = r;
+		});
+		if (firstRec) {
+			var fm = this.byId.get(firstRec.source);
+			if (fm && upper(fm.first_name) === upper(first)) obj.norm_first_name = fm.norm_first_name;
+		}
 		return obj;
+	};
+
+	// Every distinct name spelling attested for this person. A person
+	// accumulates spellings across sources ("Arch" in the 1870 census, "Archy"
+	// in 1880) and Normalize.md's nickname table does not always collapse them:
+	// in AUG, Archibald/Arch/Archie all map to ARCHIBALD (166 mentions) but
+	// Archy -> ARCHY, Archd -> ARCHD, Archabald -> ARCHABALD are each left
+	// alone. Two spellings of one man then never compare equal on the given
+	// name, the rung falls to SURNAME_ONLY, and an EXACT_FULLNAME pair scores
+	// as though only the surname matched. Scoring every attested variant and
+	// keeping the best makes the result independent of which spelling happens
+	// to be modal, and of gaps in the nickname table. Fixing the table is still
+	// worth doing; this stops the search depending on it.
+	Search.prototype._nameVariants = function (profile) {
+		var self = this, seen = new Set(), out = [];
+		var base = profile.asMatchObject;
+		var firsts = profile.attested.first_name.map(function (r) { return r.value; });
+		var lasts  = profile.attested.last_name.map(function (r) { return r.value; });
+		if (!firsts.length) firsts = [base.first_name];
+		if (!lasts.length)  lasts  = [base.last_name];
+
+		firsts.forEach(function (f) {
+			lasts.forEach(function (l) {
+				var key = upper(f) + '|' + upper(l);
+				if (seen.has(key)) return;
+				seen.add(key);
+				var v = Object.assign({}, base, {
+					first_name: f, last_name: l,
+					full_name: [f, base.middle_name, l].filter(Boolean).join(' ')
+				});
+				// Re-derive normalized/phonetic keys from a mention that
+				// actually carries this spelling, rather than inheriting the
+				// modal object's keys.
+				delete v.norm_first_name; delete v.nysiis_last_name; delete v.metaphone_last_name;
+				profile.mentions.forEach(function (id) {
+					var m = self.byId.get(id);
+					if (!m) return;
+					if (!v.norm_first_name && upper(m.first_name) === upper(f)) {
+						v.norm_first_name = m.norm_first_name;
+					}
+					if (!v.nysiis_last_name && upper(m.last_name) === upper(l)) {
+						v.nysiis_last_name    = m.nysiis_last_name;
+						v.metaphone_last_name = m.metaphone_last_name;
+					}
+				});
+				out.push(v);
+			});
+		});
+		return out;
+	};
+
+	// Cached per profile object; profiles are rebuilt per find()/round anyway.
+	Search.prototype._variantsFor = function (profile) {
+		if (!profile._variants) profile._variants = this._nameVariants(profile);
+		return profile._variants;
 	};
 
 	// =======================================================================
@@ -784,6 +886,24 @@
 	// found on any assertion linking either side's mentions wins. Returns null
 	// when no such assertion exists, in which case the spouse is never dropped
 	// on marriage-year grounds (curTree carries no marriage date otherwise).
+	//
+	// ONLY assertions from sources that RECORD a marriage date count. A census
+	// isSpouseOf carries start_year = the enumeration year, because that is
+	// when the couple was observed living as married - not when they married.
+	// Of the 4,646 isSpouseOf rows in AUG, every one comes from a census (3,773)
+	// or a cohabitation register (873), so reading start_year as the marriage
+	// date makes every couple look newly wed in whichever year they were first
+	// enumerated. Arch and Martha Crawford are enumerated together in 1880, so
+	// a literal reading drops Martha's spouse from every pre-1880 search - and
+	// with him the household, proximity and Lever C support that finding her in
+	// 1870 depends on. Her true 1870 record fell from rank 1 to rank 2 behind
+	// an unrelated Martha Crawford purely from this.
+	//
+	// An enumeration year is an UPPER bound on the marriage ("married by then"),
+	// so it must not exclude the spouse from earlier years. Cohabitation
+	// registers are worse than neutral here: they record couples formalizing
+	// unions that predate emancipation, so their date is the registration, not
+	// the marriage.
 	Search.prototype._marriageYear = function (egoMentions, spouseMentions) {
 		if (!egoMentions || !spouseMentions || !egoMentions.length || !spouseMentions.length) return null;
 		var a = new Set(egoMentions), b = new Set(spouseMentions);
@@ -792,6 +912,9 @@
 			if (!r || String(r.predicate).trim() !== 'isSpouseOf') return;
 			var hit = (a.has(r.subject_id) && b.has(r.object_id)) || (a.has(r.object_id) && b.has(r.subject_id));
 			if (!hit) return;
+			if (!MARRIAGE_DATE_TYPES.length) return;
+			var src = parseId(r.subject_id) || parseId(r.object_id);
+			if (!src || MARRIAGE_DATE_TYPES.indexOf(src.type) < 0) return;
 			var y = toInt(r.start_year);
 			if (y != null && (best == null || y < best)) best = y;
 		});
@@ -876,6 +999,124 @@
 		};
 	};
 
+	// -----------------------------------------------------------------------
+	// PROVISIONAL CONSTRAINTS
+	// _fetchConstraints below only reads mentions the researcher has ALREADY
+	// accepted, so an unlinked record constrains nothing: AUG-VR-1162 (Martha
+	// Crawford, b.1840 d.1883) sits in the corpus scoring 0.857 against her
+	// with no rival, and until someone links it by hand it has no effect on any
+	// search. This pre-pass searches the constraint sources (VR / DR / FG)
+	// directly and returns an unambiguous top hit.
+	//
+	// Provisional constraints WARN; they never knock out. A death ceiling only
+	// ever REMOVES candidates, so acting on an unconfirmed one makes the true
+	// match disappear with no explanation the researcher can see. Confirmed
+	// evidence closes a search; provisional evidence flags it and returns the
+	// candidates anyway, with the offending mention_id and score attached so it
+	// can be accepted or rejected - at which point it becomes a real constraint
+	// through the ordinary path.
+	//
+	// Cached per (person, tree-state) for the life of one scan/find/findBatch
+	// call; findBatch re-scores the same people over several rounds and must
+	// not re-run this each time.
+	Search.prototype.provisionalConstraints = function (curTree, personId, opts) {
+		opts = opts || {};
+		if (this._inProvisional) return null;                    // recursion guard
+		if (opts.provisional === false || !this.opts.provisional) return null;
+
+		if (this._provCache && this._provCache.has(personId)) return this._provCache.get(personId);
+
+		var self = this;
+		var floor  = opts.provisionalFloor  != null ? opts.provisionalFloor  : this.opts.provisionalFloor;
+		var margin = opts.provisionalMargin != null ? opts.provisionalMargin : this.opts.provisionalMargin;
+
+		var result = null;
+		try {
+			var profile = this.buildProfile(curTree, personId);
+			var held = new Set();
+			profile.mentions.forEach(function (id) {
+				var m = self.byId.get(id);
+				if (m) held.add(m.source);
+			});
+
+			var found = [];
+			this._inProvisional = true;
+			try {
+				this.sources.forEach(function (info) {
+					if (CONSTRAINT_TYPES.indexOf(info.type) < 0) return;
+					if (held.has(info.source)) return;   // accepted already: not provisional
+					var r;
+					try {
+						r = self.find(curTree, personId, {
+							source: info.source, floor: floor, limit: 2, provisional: false
+						});
+					} catch (e) { return; }
+					if (r.closed || !r.candidates.length) return;
+					var top = r.candidates[0];
+					if (top.score < floor) return;
+					// Unambiguous only. Two close candidates means neither is usable.
+					if (r.candidates.length > 1 && (top.score - r.candidates[1].score) < margin) return;
+					var d = toInt(top.mention.death_year);
+					if (d == null) return;
+					found.push({
+						deathYear: d, source: info.source, mention_id: top.mention_id,
+						name: top.mention.full_name, score: +top.score.toFixed(3),
+						margin: top.margin, provisional: true
+					});
+				});
+			} finally {
+				this._inProvisional = false;
+			}
+
+			if (found.length) {
+				found.sort(function (a, b) { return a.deathYear - b.deathYear; });
+				var spread = found[found.length - 1].deathYear - found[0].deathYear;
+				result = (found.length > 1 && spread > this.opts.provisionalSpread)
+					? { conflict: true, candidates: found }
+					: found[0];
+			}
+		} catch (err) { result = null; }
+
+		if (this._provCache) this._provCache.set(personId, result);
+		return result;
+	};
+
+	// Provisional lookups are cached only for the duration of one public call,
+	// so an accept() between calls is always reflected.
+	Search.prototype._beginProvCache = function () {
+		if (this._provDepth == null) this._provDepth = 0;
+		if (this._provDepth === 0) this._provCache = new Map();
+		this._provDepth++;
+	};
+	Search.prototype._endProvCache = function () {
+		this._provDepth = Math.max(0, (this._provDepth || 1) - 1);
+		if (this._provDepth === 0) this._provCache = null;
+	};
+
+	// Build the warning a provisional ceiling produces for one target year.
+	Search.prototype._provisionalWarning = function (provisional, year) {
+		if (!provisional) return null;
+		if (provisional.conflict) {
+			return {
+				type: 'PROVISIONAL_DEATH_CONFLICT',
+				candidates: provisional.candidates,
+				note: 'Constraint sources disagree on death year; no provisional ceiling applied.'
+			};
+		}
+		if (provisional.deathYear >= year) return null;
+		return {
+			type: 'PROVISIONAL_DEATH_BEFORE_SOURCE',
+			deathYear: provisional.deathYear,
+			mention_id: provisional.mention_id,
+			source: provisional.source,
+			score: provisional.score,
+			note: 'An unaccepted ' + provisional.source + ' record (' + provisional.mention_id +
+			      ', score ' + provisional.score + ') puts death at ' + provisional.deathYear +
+			      ', before ' + year + '. Candidates below are still shown. Accept or reject ' +
+			      'that record to make this a real constraint.'
+		};
+	};
+
 	Search.prototype._fetchConstraints = function (profile) {
 		var self = this, out = { deathYear: null, deathSource: null };
 		profile.mentions.forEach(function (id) {
@@ -896,6 +1137,177 @@
 		if (s === 'W' || s === 'WHITE') return 'W';
 		if (['B', 'BLACK', 'M', 'MU', 'MULATTO', 'NEGRO', 'COLORED'].indexOf(s) >= 0) return 'BLACK';
 		return s;
+	};
+
+	// =======================================================================
+	// HOUSEHOLD BRIDGES (batch, precomputed)
+	// Maps source household -> target household across an adjacent census pair,
+	// as WEIGHTED EDGES rather than an assignment. Seeded only from
+	// conservative person-level anchors; the edges are hypotheses with
+	// provenance, never isSameAs claims.
+	//
+	// Deliberately many-to-many. Households are not stable objects across ten
+	// years: they split when children marry, merge when a widow moves in with a
+	// son, and dissolve on death. Forcing one-to-one would destroy exactly the
+	// cases most worth seeing, and asymmetric coverage is the signature of those
+	// events rather than a defect.
+	//
+	// The output feeds retrieve()'s BRIDGE path. Set search.bridges to the
+	// returned Map, or pass it as config.bridges.
+	// =======================================================================
+	Search.prototype.buildBridges = function (sourceA, sourceB, opts) {
+		opts = opts || {};
+		var self = this;
+		var minSupport = opts.minSupport != null ? opts.minSupport : 1;
+		var seedFloor  = opts.seedFloor  != null ? opts.seedFloor  : 0.80;
+		var seedMargin = opts.seedMargin != null ? opts.seedMargin : 0.10;
+		var edgeFloor  = opts.edgeFloor  != null ? opts.edgeFloor  : 0.25;
+
+		var infoA = this.sources.get(sourceA), infoB = this.sources.get(sourceB);
+		if (!infoA || !infoB) throw new Error('buildBridges: unknown source');
+
+		var listA = this.bySource.get(sourceA) || [];
+		var listB = this.bySource.get(sourceB) || [];
+
+		// --- 1. household objects -------------------------------------------
+		function rosters(list, src) {
+			var map = new Map();
+			list.forEach(function (m) {
+				var hh = self.hhKey(m);
+				if (!hh) return;
+				if (!map.has(hh)) map.set(hh, []);
+				map.get(hh).push(m);
+			});
+			return map;
+		}
+		var hhA = rosters(listA, sourceA), hhB = rosters(listB, sourceB);
+
+		// --- 2. seed anchors, strict only -----------------------------------
+		// Precision matters far more than recall here: two or three good anchors
+		// establish a household, and one bad anchor drags a whole family to the
+		// wrong place. Anchors are tagged seed-tier and are the ONLY thing that
+		// may rebuild bridges (see the circularity note at the end).
+		var indexB = new Map();   // "NYSIIS|bucket" -> [mentions]
+		listB.forEach(function (m) {
+			var ny = upper(m.nysiis_last_name) || upper(m.last_name);
+			var by = toInt(m.birth_year);
+			if (!ny || by == null) return;
+			var k = ny + '|' + bucketOf(by, self.opts.birthBucket);
+			if (!indexB.has(k)) indexB.set(k, []);
+			indexB.get(k).push(m);
+		});
+
+		var anchors = [];
+		listA.forEach(function (a) {
+			var ny = upper(a.nysiis_last_name) || upper(a.last_name);
+			var by = toInt(a.birth_year);
+			if (!ny || by == null) return;
+			var pool = [];
+			for (var d = -1; d <= 1; d++) {
+				var k = ny + '|' + (bucketOf(by, self.opts.birthBucket) + d * self.opts.birthBucket);
+				(indexB.get(k) || []).forEach(function (m) { pool.push(m); });
+			}
+			if (!pool.length) return;
+
+			var best = null, second = 0;
+			pool.forEach(function (b) {
+				if (Math.abs((toInt(b.birth_year) || 0) - by) > 2) return;   // strict
+				var r = self.match.MatchPerson(a, b, {
+					censusYear: infoB.year,
+					targetSource: sourceA, candidateSource: sourceB
+				});
+				if (r.tier === 'KNOCKOUT') return;
+				if (!best || r.score > best.score) { second = best ? best.score : second; best = { m: b, score: r.score }; }
+				else if (r.score > second) second = r.score;
+			});
+			if (!best || best.score < seedFloor) return;
+			if (best.score - second < seedMargin) return;      // ambiguous, discard
+			anchors.push({ a: a, b: best.m, score: best.score, tier: 'SEED' });
+		});
+
+		// --- 3. tally votes --------------------------------------------------
+		var votes = new Map();   // "hhA|hhB" -> { support, pairs[] }
+		anchors.forEach(function (an) {
+			var ka = self.hhKey(an.a), kb = self.hhKey(an.b);
+			if (!ka || !kb) return;
+			var key = ka + '||' + kb;
+			if (!votes.has(key)) votes.set(key, { sourceHh: ka, targetHh: kb, support: 0, pairs: [] });
+			var v = votes.get(key);
+			v.support++;
+			v.pairs.push({ from: an.a.mention_id, to: an.b.mention_id, score: +an.score.toFixed(3) });
+		});
+
+		// --- 4/5. score edges, keep above floor, many-to-many ----------------
+		var bySrc = new Map();
+		votes.forEach(function (v) {
+			if (v.support < minSupport) return;
+			if (!bySrc.has(v.sourceHh)) bySrc.set(v.sourceHh, []);
+			bySrc.get(v.sourceHh).push(v);
+		});
+
+		var bridges = new Map();   // "sourceA|hhA" -> [edge]
+		var edgeCount = 0;
+		bySrc.forEach(function (list, ka) {
+			var rosterA = hhA.get(ka) || [];
+			var scored = list.map(function (v) {
+				var rosterB = hhB.get(v.targetHh) || [];
+				var covA = rosterA.length ? v.support / rosterA.length : 0;
+				var covB = rosterB.length ? v.support / rosterB.length : 0;
+				var headA = rosterA.filter(function (m) { return String(m.head).toLowerCase() === 't'; })[0];
+				var headB = rosterB.filter(function (m) { return String(m.head).toLowerCase() === 't'; })[0];
+				var headAgree = (headA && headB) ? self.match.MatchName(headA, headB) : 0;
+				var score = clamp(
+					0.45 * clamp(v.support / 3, 0, 1) +
+					0.20 * covA + 0.20 * covB +
+					0.15 * headAgree, 0, 1);
+				return {
+					sourceSource: sourceA, sourceHh: ka,
+					targetSource: sourceB, targetHh: v.targetHh,
+					support: v.support,
+					coverageSource: +covA.toFixed(3), coverageTarget: +covB.toFixed(3),
+					headAgree: +headAgree.toFixed(3),
+					score: +score.toFixed(3),
+					anchors: v.pairs, seedTier: 'SEED'
+				};
+			}).filter(function (e) { return e.score >= edgeFloor; });
+
+			if (!scored.length) return;
+			scored.sort(function (x, y) { return y.score - x.score; });
+			var runnerUp = scored.length > 1 ? scored[1].score : 0;
+			scored[0].margin = +(scored[0].score - runnerUp).toFixed(3);
+			bridges.set(sourceA + '|' + ka, scored);
+			edgeCount += scored.length;
+		});
+
+		// CIRCULARITY. Bridges are built from person matches and then used to
+		// retrieve person matches. If a bridge-derived match were ever fed back
+		// into step 2, one wrong seed would recruit the rest of a household,
+		// which would then look like strong support for itself. Only SEED-tier
+		// anchors (strict name, birth gap <= 2, clear margin, no bridge input)
+		// are used here, and the anchor list is stored on every edge so a bridge
+		// can be invalidated cheaply when a human rejects one of its anchors.
+		bridges._meta = {
+			sourceA: sourceA, sourceB: sourceB,
+			households: hhA.size, anchors: anchors.length,
+			bridged: bridges.size, edges: edgeCount, builtAt: Date.now()
+		};
+		return bridges;
+	};
+
+	// Build every adjacent census pair at once and merge into one Map.
+	Search.prototype.buildAllBridges = function (opts) {
+		var self = this, census = [];
+		this.sources.forEach(function (i) { if (i.type === 'CN') census.push(i); });
+		census.sort(function (a, b) { return a.year - b.year; });
+		var all = new Map(), meta = [];
+		for (var i = 0; i + 1 < census.length; i++) {
+			var m = this.buildBridges(census[i].source, census[i + 1].source, opts);
+			m.forEach(function (v, k) { all.set(k, (all.get(k) || []).concat(v)); });
+			meta.push(m._meta);
+		}
+		all._meta = meta;
+		this.bridges = all;
+		return all;
 	};
 
 	// =======================================================================
@@ -942,14 +1354,28 @@
 			(self.block.L.get(alt) || []).forEach(function (m) { add(m, 'BLOCK_VARIANT'); });
 		});
 
-		// FB — the only retrieval path that survives a surname change.
-		var first = upper(o.norm_first_name || o.first_name);
-		if (first && profile.birthWindow) {
+		// FB — the only retrieval path that survives a surname change. Run it
+		// for EVERY attested given-name spelling, not just the modal one: the
+		// FB index is keyed on norm_first_name, so a person attested as both
+		// "Arch" (-> ARCHIBALD) and "Archy" (-> ARCHY) is reachable under two
+		// different keys and searching one of them silently drops the other.
+		// This matters most for exactly the case FB exists to cover, a woman
+		// whose surname changed, where FB is the only path left.
+		if (profile.birthWindow) {
+			var firstKeys = new Set();
+			this._variantsFor(profile).forEach(function (v) {
+				var k = givenKey(v.norm_first_name || v.first_name);
+				if (k) firstKeys.add(k);
+			});
+			var k0 = givenKey(o.norm_first_name || o.first_name);
+			if (k0) firstKeys.add(k0);
 			var lo = profile.birthWindow[0] - this.opts.birthTolerance;
 			var hi = profile.birthWindow[1] + this.opts.birthTolerance;
-			for (var b = bucketOf(lo, this.opts.birthBucket); b <= hi; b += this.opts.birthBucket) {
-				(this.block.FB.get(first + '|' + b) || []).forEach(function (m) { add(m, 'BLOCK_FB'); });
-			}
+			firstKeys.forEach(function (fk) {
+				for (var b = bucketOf(lo, self.opts.birthBucket); b <= hi; b += self.opts.birthBucket) {
+					(self.block.FB.get(fk + '|' + b) || []).forEach(function (m) { add(m, 'BLOCK_FB'); });
+				}
+			});
 		}
 
 		// SCAN wants blocking-key retrieval only (Search.md Stage 5 intro / "SCAN
@@ -1051,9 +1477,19 @@
 		var o = profile.asMatchObject;
 
 		// Kin objects for Lever C, dereferenced and Match-ready.
+		// Kin objects are tagged with _predicate so match.js can tell a spouse
+		// from a child. Without it Match._spouseContradiction never fires, since
+		// only a spouse slot is single-occupancy enough to treat a different
+		// occupant as evidence against.
 		var personKin = kin
 			.filter(function (k) { return k.coresidence !== 'NOT_EXPECTED'; })
-			.map(function (k) { return k.profile.asMatchObject; });
+			.map(function (k) {
+				return Object.assign({}, k.profile.asMatchObject, {
+					_predicate: k.predicate,
+					_person_id: k.person_id,
+					death_year: k.profile.deathCeiling != null ? String(k.profile.deathCeiling) : ''
+				});
+			});
 
 		// Candidate's household roster.
 		var hh = this.hhKey(m);
@@ -1065,17 +1501,39 @@
 			? candRel : profile.birthReliability;
 		var prof = BIRTH_PROFILES[rel] || BIRTH_PROFILES.SOFT;
 
-		var res = this.match.MatchPerson(o, m, {
-			censusYear:        target.year,
-			personKin:         personKin,
-			candidateHousehold: roster,
-			householdBoost:    this.opts.householdBoost,
-			birthProfiles:     { CENSUS_CENSUS: prof, SCHEDULE_INVOLVED: prof },
-			targetSource:      profile.mentions.length ? (this.byId.get(profile.mentions[0]) || {}).source : '',
-			candidateSource:   m.source
-		});
+		// BOARDER.
+		// match.js now decides this itself: its corroboration gate only fires
+		// when corroboration was POSSIBLE, and Match.isBoarder marks a
+		// candidate living in someone else's household as a case where kin
+		// absence carries no information. So no corroborationPenalty override
+		// is passed from here any more - two places deciding the same thing
+		// would drift. This call is for reporting in `why` only, and delegates
+		// to the same static so the two can never disagree.
+		var boarder = this.MatchClass && typeof this.MatchClass.isBoarder === 'function'
+			? this.MatchClass.isBoarder(m, roster)
+			: this._isBoarder(m, roster);
 
-		if (res.tier === 'KNOCKOUT') return { knockout: res.reason || 'KNOCKOUT' };
+		// Score every attested name spelling and keep the best (see
+		// _nameVariants). Usually one or two variants, so the cost is small.
+		var variants = this._variantsFor(profile);
+		var res = null, chosen = null, ko = null;
+		for (var vi = 0; vi < variants.length; vi++) {
+			var r = this.match.MatchPerson(variants[vi], m, {
+				censusYear:        target.year,
+				personKin:         personKin,
+				candidateHousehold: roster,
+				householdBoost:    this.opts.householdBoost,
+				birthProfiles:     { CENSUS_CENSUS: prof, SCHEDULE_INVOLVED: prof },
+				targetSource:      profile.mentions.length ? (this.byId.get(profile.mentions[0]) || {}).source : '',
+				candidateSource:   m.source
+			});
+			if (r.tier === 'KNOCKOUT') { if (!ko) ko = r; continue; }
+			if (!res || r.score > res.score) { res = r; chosen = variants[vi]; }
+		}
+		// Knockouts are demographic (gender, race, birth gap) and identical
+		// across spellings, so a knockout on every variant is a real knockout.
+		if (!res) return { knockout: (ko && ko.reason) || 'KNOCKOUT' };
+		o = chosen;
 
 		// NAME-DISAGREEMENT GUARD.
 		// MatchPerson sets aAvailable = (rung !== 'NONE') and redistributes the
@@ -1129,6 +1587,9 @@
 		}
 
 		var why = Object.assign({}, res.why, extras, {
+			variant: variants.length > 1 ? o.full_name : undefined,
+			contradiction: (res.why && res.why.contradiction) || undefined,
+			boarder: boarder || undefined,
 			paths: Array.from(entry.paths),
 			birthReliability: rel,
 			sigma: prof.sigma
@@ -1199,6 +1660,22 @@
 		});
 
 		return best;
+	};
+
+	// Fallback only, for a match.js predating Match.isBoarder. Kept so this file
+	// still runs against an older match.js; scoreCandidate prefers the static.
+	Search.prototype._isBoarder = function (m, roster) {
+		if (m.head === true || String(m.head).toLowerCase() === 't') return false;
+		var head = null;
+		for (var i = 0; i < roster.length; i++) {
+			if (roster[i].head === true || String(roster[i].head).toLowerCase() === 't') {
+				head = roster[i]; break;
+			}
+		}
+		if (!head) return false;
+		var a = upper(m.last_name), b = upper(head.last_name);
+		if (!a || !b) return false;
+		return a !== b;
 	};
 
 	// Enumeration proximity to any grounded kin mention in the same source.
@@ -1322,6 +1799,86 @@
 		} catch (err) { /* keep the previous fit (if any); try again next label */ }
 	};
 
+	// Turn a tree whose links a researcher has already confirmed into labeled
+	// pairs. Every accepted mention is a positive; the candidates that lost to
+	// it in the same source are negatives, and they are the useful ones - a
+	// runner-up that scored 0.81 against a winner's 0.84 teaches the model far
+	// more than a random non-match at 0.05 ever could.
+	//
+	// This is the bootstrap for calibration: fitCalibration needs both classes
+	// and this file ships with an empty log, so probability is null and floor /
+	// ceiling / margin stay hand-picked constants until something fills it.
+	Search.prototype.buildCalibrationFromTree = function (curTree, opts) {
+		opts = opts || {};
+		var self = this, rows = [], negPer = opts.negativesPerPositive != null ? opts.negativesPerPositive : 3;
+
+		(curTree.persons || []).forEach(function (person) {
+			(person.mentions || []).forEach(function (mid) {
+				var m = self.byId.get(mid);
+				if (!m) return;
+
+				// Positive: the confirmed pair.
+				var pos = self._scorePair(curTree, person.person_id, mid);
+				if (pos && !pos.knockout && pos.why) {
+					rows.push({
+						features: self.match._calibFeatures(pos), label: true,
+						person_id: person.person_id, mention_id: mid, kind: 'CONFIRMED'
+					});
+				}
+
+				// Negatives: near-misses in the same source. Temporarily drop
+				// the accepted mention so the source reopens and its rivals can
+				// be scored.
+				var idx = person.mentions.indexOf(mid);
+				person.mentions.splice(idx, 1);
+				try {
+					var r = self.find(curTree, person.person_id, {
+						source: m.source, limit: negPer + 1, provisional: false
+					});
+					(r.candidates || []).forEach(function (c) {
+						if (c.mention_id === mid || rows.length > 100000) return;
+						if (rows.filter(function (x) { return x.label === false; }).length >= negPer * (rows.length + 1)) return;
+						rows.push({
+							features: self.match._calibFeatures(c), label: false,
+							person_id: person.person_id, mention_id: c.mention_id, kind: 'RUNNER_UP'
+						});
+					});
+				} catch (e) { /* skip */ }
+				person.mentions.splice(idx, 0, mid);
+			});
+		});
+
+		// Explicit rejections are the highest-value negatives: a human looked at
+		// that exact pair and said no.
+		(curTree.persons || []).forEach(function (person) {
+			(person.rejected || []).forEach(function (mid) {
+				var r = self._scorePair(curTree, person.person_id, mid);
+				if (r && !r.knockout && r.why) {
+					rows.push({
+						features: self.match._calibFeatures(r), label: false,
+						person_id: person.person_id, mention_id: mid, kind: 'REJECTED'
+					});
+				}
+			});
+		});
+		return rows;
+	};
+
+	// Add labeled rows without going through accept()/reject(). Use for a
+	// genealogist-reviewed sample or the output of buildCalibrationFromTree.
+	Search.prototype.seedCalibration = function (rows, opts) {
+		opts = opts || {};
+		this._calibLog = (this._calibLog || []).concat(rows || []);
+		if (opts.fit !== false) { try { return this.fitCalibration(); } catch (e) { return null; } }
+		this._maybeRefitCalibration();
+		return null;
+	};
+
+	// Persist the log between sessions; feed back via config.calibrationSeed.
+	Search.prototype.exportCalibrationLog = function () {
+		return (this._calibLog || []).slice();
+	};
+
 	// Force a fit right now regardless of the auto-refit thresholds. Useful
 	// after bulk-seeding config.calibrationSeed or for a manual "recalibrate"
 	// action in the UI. Throws if match.fitCalibration's own minimums aren't met.
@@ -1356,6 +1913,12 @@
 		var profile = this.buildProfile(curTree, personId);
 		var kin = this.buildKin(curTree, personId);
 
+		// Once per scan, not once per source.
+		this._beginProvCache();
+		var provisional;
+		try { provisional = this.provisionalConstraints(curTree, personId, opts); }
+		finally { this._endProvCache(); }
+
 		var results = [];
 		this.sources.forEach(function (info) {
 			var target = { source: info.source, year: info.year, type: info.type };
@@ -1379,6 +1942,13 @@
 				return;
 			}
 
+			// A provisional ceiling greys a source out; it never blocks it.
+			var provWarn = null;
+			if (provisional && !provisional.conflict && info.year > provisional.deathYear) {
+				provWarn = 'PROVISIONAL_DIED_BEFORE:' + provisional.deathYear +
+				           ' (' + provisional.mention_id + ')';
+			}
+
 			var pool = self.retrieve(profile, sliced, constraints, target, { blockingOnly: true });
 
 			// Rough score: name only, no household, no birth profile work.
@@ -1392,6 +1962,7 @@
 				source: info.source, year: info.year, label: info.label, type: info.type,
 				candidates: pool.length,
 				best_rough: best != null ? +best.toFixed(3) : null,
+				provisional_warning: provWarn,
 				constraint_source: info.type && CONSTRAINT_TYPES.indexOf(info.type) >= 0,
 				blocked_reason: null
 			});
@@ -1406,6 +1977,7 @@
 			person_id: personId,
 			name: profile.asMatchObject.full_name,
 			issues: profile.issues,
+			provisional_constraint: provisional || null,
 			kin: kin.map(function (k) {
 				return { person_id: k.person_id, predicate: k.predicate, hops: k.hops, imputed: k.imputed };
 			}),
@@ -1427,6 +1999,19 @@
 		var limit   = opts.limit   != null ? opts.limit   : this.opts.limit;
 
 		var target  = { source: info.source, year: info.year, type: info.type };
+
+		// opts.provisionalConstraint lets findBatch pass a value it already
+		// computed; opts.provisional === false is how the pre-pass calls back
+		// into find() without recursing.
+		this._beginProvCache();
+		var provisional;
+		try {
+			provisional = opts.provisionalConstraint !== undefined
+				? opts.provisionalConstraint
+				: this.provisionalConstraints(curTree, personId, opts);
+		} finally { this._endProvCache(); }
+		var warning = this._provisionalWarning(provisional, info.year);
+
 		var profile = this.buildProfile(curTree, personId);
 		var kin     = this.timeSlice(this.buildKin(curTree, personId), info.year, info.source, profile.mentions);
 		var constraints = this.buildConstraints(curTree, profile, kin, target);
@@ -1440,6 +2025,9 @@
 				(constraints.deathSource ? ' (' + constraints.deathSource + ')' : ''));
 		}
 		applied.push('excluded=' + constraints.excluded.size);
+		if (warning && warning.type === 'PROVISIONAL_DEATH_BEFORE_SOURCE') {
+			applied.push('provisionalDeath=' + warning.deathYear + ' (WARNING, not applied)');
+		}
 
 		if (constraints.closedBy) {
 			return {
@@ -1447,7 +2035,8 @@
 				closed: true, closed_by: constraints.closedBy,
 				note: 'A person appears once per source-year and this one already holds ' +
 				      constraints.closedBy + '.',
-				constraints_applied: applied, candidates: [], issues: profile.issues
+				constraints_applied: applied, candidates: [], issues: profile.issues,
+				warning: warning, provisional_constraint: provisional || null
 			};
 		}
 		if (constraints.deathCeiling != null && info.year > constraints.deathCeiling) {
@@ -1455,7 +2044,8 @@
 				person_id: personId, source: info.source, year: info.year,
 				closed: true, closed_by: constraints.deathSource,
 				note: 'Death recorded ' + constraints.deathCeiling + ', before ' + info.year + '.',
-				constraints_applied: applied, candidates: [], issues: profile.issues
+				constraints_applied: applied, candidates: [], issues: profile.issues,
+				warning: warning, provisional_constraint: provisional || null
 			};
 		}
 
@@ -1496,6 +2086,8 @@
 			year:       info.year,
 			label:      info.label,
 			closed:     false,
+			warning:    warning,
+			provisional_constraint: provisional || null,
 			retrieved:  pool.length,
 			// An empty candidate list should explain itself. All 34 retrieved
 			// for Arch Crawford against AUG-SS-1860 knock out: the enslaved
@@ -1557,6 +2149,19 @@
 		var tentative = new Map();     // person_id -> mention, cross-support hypothesis
 		var perPerson = {};            // person_id -> working state for this round
 		var claimedBy = new Map();     // mention_id -> person_id (last round's assignment)
+
+		// One provisional pre-pass per person for the WHOLE call. findBatch
+		// re-scores the same people over several rounds, and the pre-pass runs
+		// a find() against every constraint source, so computing it per round
+		// would multiply that cost by `rounds` for no new information - the
+		// tree does not change between rounds.
+		this._beginProvCache();
+		var provisionals = {};
+		try {
+			ids.forEach(function (pid) {
+				provisionals[pid] = self.provisionalConstraints(curTree, pid, opts) || null;
+			});
+		} finally { this._endProvCache(); }
 
 		for (var round = 1; round <= rounds; round++) {
 			perPerson = {};
@@ -1627,7 +2232,9 @@
 			if (pp.closed) {
 				out[pid] = {
 					person_id: pid, source: info.source, year: info.year, label: info.label,
-					closed: true, closed_by: pp.closedBy, candidates: []
+					closed: true, closed_by: pp.closedBy, candidates: [],
+					warning: self._provisionalWarning(provisionals[pid], info.year),
+					provisional_constraint: provisionals[pid]
 				};
 				return;
 			}
@@ -1650,6 +2257,8 @@
 			out[pid] = {
 				person_id: pid, name: pp.profile.asMatchObject.full_name,
 				source: info.source, year: info.year, label: info.label, closed: false,
+				warning: self._provisionalWarning(provisionals[pid], info.year),
+				provisional_constraint: provisionals[pid],
 				candidates: scored.slice(0, limit)
 			};
 		});
@@ -1673,6 +2282,8 @@
 		if (!a) return;
 		this.assertions = this.assertions || [];
 		this.assertions.push(a);
+		// Any cached provisional lookup is stale once the evidence changes.
+		this._provCache = null; this._provDepth = 0;
 		if (String(a.predicate || '').trim() === 'hasNameVariant') this.refreshSurnameBridge();
 	};
 
@@ -1754,6 +2365,7 @@
 	Search.DEFAULTS       = DEFAULTS;
 	Search.deref          = deref;
 	Search.parseId        = parseId;
+	Search.givenKey       = givenKey;
 
 	if (typeof window !== 'undefined') window.Search = Search;
 	if (typeof module !== 'undefined' && module.exports) module.exports = { Search: Search };
