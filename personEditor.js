@@ -49,7 +49,7 @@ class PersonEditor {
 	static STAR_FILL = '#EF9F27';
 	static STAR_EMPTY = '#9e9e9e';
 	static STAR_PATH = "M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.7-6.2 3.7 1.6-7L2 9.2l7.1-.6z";
-	static lastIncludeSetting = 'auto';
+	static lastIncludeSetting = 'wide';
 
 	/* ----------------------------------------------------------
 	   FIELD CONFIG
@@ -401,7 +401,7 @@ class PersonEditor {
 			fields,
 			verity: person.verity,
 			sources,
-			include: PersonEditor.lastIncludeSetting || 'auto',
+			include: PersonEditor.lastIncludeSetting || 'wide',
 			editing: false
 		};
 	}
@@ -713,9 +713,80 @@ class PersonEditor {
 	static renderLinkedRow(person, cfg) {
 		const ramp_ = PersonEditor.RAMP[PersonEditor.COLORS.linked_persons];
 
-		let rels = [];
+		const uniqueRelsMap = new Map();
+
+		const priority = (pred) => {
+			if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf', 'isCousinOf', 'isEnslaverOf', 'wasEnslavedBy', 'enslaves'].includes(pred)) return 3;
+			if (pred === 'inFamilyOf') return 2;
+			if (pred === 'inHouseholdOf') return 1;
+			return 0;
+		};
+
+		// 1. Gather relationships from Tree state (triplets and curTree.relationships)
+		const allTriplets = [];
+		if (window.treeApp && window.treeApp.state && Array.isArray(window.treeApp.state.triplets)) {
+			window.treeApp.state.triplets.forEach(t => allTriplets.push({ subject_id: t.subject, predicate: t.predicate, object_id: t.object }));
+		}
+		if (window.app && window.app.curTree && Array.isArray(window.app.curTree.relationships)) {
+			window.app.curTree.relationships.forEach(r => allTriplets.push(r));
+		}
+
+		allTriplets.forEach(r => {
+			if (!r || !r.predicate) return;
+			let targetPid = null;
+			let effectivePred = null;
+
+			if (r.subject_id === person.person_id) {
+				targetPid = r.object_id;
+				// From person's perspective:
+				if (r.predicate === 'isChildOf') effectivePred = 'isChildOf'; // person is child of target -> target is PARENT
+				else if (r.predicate === 'isParentOf') effectivePred = 'isParentOf'; // person is parent of target -> target is CHILD
+				else if (r.predicate === 'isEnslaverOf') effectivePred = 'enslaves'; // person enslaver of target -> target is ENSLAVED
+				else if (r.predicate === 'wasEnslavedBy') effectivePred = 'isEnslaverOf'; // person enslaved by target -> target is ENSLAVER
+				else effectivePred = r.predicate; // isSpouseOf, isSiblingOf, isCousinOf
+			} else if (r.object_id === person.person_id) {
+				targetPid = r.subject_id;
+				// From person's perspective:
+				if (r.predicate === 'isChildOf') effectivePred = 'isParentOf'; // subject is child of person -> target is CHILD of person
+				else if (r.predicate === 'isParentOf') effectivePred = 'isChildOf'; // subject is parent of person -> target is PARENT of person
+				else if (r.predicate === 'isEnslaverOf') effectivePred = 'isEnslaverOf'; // subject is enslaver -> target is ENSLAVER of person
+				else if (r.predicate === 'wasEnslavedBy') effectivePred = 'enslaves'; // subject enslaved by person -> target is ENSLAVED
+				else effectivePred = r.predicate; // isSpouseOf, isSiblingOf, isCousinOf
+			}
+
+			if (targetPid && targetPid !== person.person_id && effectivePred) {
+				let targetPerson = null;
+				if (window.app && window.app.curTree && window.app.curTree.persons) {
+					const pList = window.app.curTree.persons;
+					targetPerson = Array.isArray(pList) ? pList.find(p => p.person_id === targetPid) : pList[targetPid];
+				}
+				if (!targetPerson && window.treeApp && typeof window.treeApp.GetNode === 'function') {
+					targetPerson = window.treeApp.GetNode(targetPid);
+				}
+
+				let displayName = targetPid;
+				if (targetPerson) {
+					const fn = (targetPerson.first_name || '').split(':')[0];
+					const mn = (targetPerson.middle_name || '').split(':')[0];
+					const ln = (targetPerson.last_name || '').split(':')[0];
+					const fullName = [fn, mn, ln].filter(Boolean).join(' ').trim();
+					if (fullName) displayName = fullName;
+				}
+
+				const key = `pid_${targetPid}`;
+				const existing = uniqueRelsMap.get(key);
+				if (!existing || priority(effectivePred) > priority(existing.predicate)) {
+					uniqueRelsMap.set(key, {
+						predicate: effectivePred,
+						target_pid: targetPid,
+						displayName: displayName
+					});
+				}
+			}
+		});
+
+		// 2. Gather mention assertions from ExpandAssertions
 		if (window.app && window.app.expand && person.mentions) {
-			const uniqueRelsMap = new Map();
 			person.mentions.forEach(mid => {
 				const view = window.app.expand.viewFor(mid);
 				if (view && view.results) {
@@ -723,26 +794,51 @@ class PersonEditor {
 						if (res.predicate === 'isNeighborOf') return;
 						if (person.mentions.includes(res.mention_id)) return; // Don't list as a relative if already merged into this person
 
-						const existing = uniqueRelsMap.get(res.mention_id);
-						// Priority order for predicates: specific kinship > inFamilyOf > inHouseholdOf
-						const priority = (pred) => {
-							if (['isChildOf', 'isParentOf', 'isSiblingOf', 'isSpouseOf', 'isCousinOf', 'isEnslaverOf', 'wasEnslavedBy', 'enslaves'].includes(pred)) return 3;
-							if (pred === 'inFamilyOf') return 2;
-							if (pred === 'inHouseholdOf') return 1;
-							return 0;
-						};
+						let treePid = null;
+						if (window.app && window.app.curTree && window.app.curTree.persons) {
+							const pList = Array.isArray(window.app.curTree.persons) ? window.app.curTree.persons : Object.values(window.app.curTree.persons);
+							const matchP = pList.find(p => p.mentions && p.mentions.includes(res.mention_id));
+							if (matchP) treePid = matchP.person_id;
+						}
+
+						const key = treePid ? `pid_${treePid}` : `mid_${res.mention_id}`;
+						const existing = uniqueRelsMap.get(key);
 
 						if (!existing || priority(res.predicate) > priority(existing.predicate)) {
-							uniqueRelsMap.set(res.mention_id, {
+							let displayName = null;
+							if (treePid) {
+								let pObj = window.app.curTree.persons.find ? window.app.curTree.persons.find(p => p.person_id === treePid) : window.app.curTree.persons[treePid];
+								if (pObj) {
+									const fn = (pObj.first_name || '').split(':')[0];
+									const mn = (pObj.middle_name || '').split(':')[0];
+									const ln = (pObj.last_name || '').split(':')[0];
+									displayName = [fn, mn, ln].filter(Boolean).join(' ').trim();
+								}
+							}
+							if (!displayName && window.app.expand.mentionsMap) {
+								const m = window.app.expand.mentionsMap.get(res.mention_id);
+								if (m) {
+									const fn = (m.first_name || '').split(':')[0];
+									const mn = (m.middle_name || '').split(':')[0];
+									const ln = (m.last_name || '').split(':')[0];
+									displayName = [fn, mn, ln].filter(Boolean).join(' ').trim();
+								}
+							}
+							if (!displayName) displayName = `Mention ${res.mention_id}`;
+
+							uniqueRelsMap.set(key, {
 								predicate: res.predicate,
-								target_mention: res.mention_id
+								target_pid: treePid || (existing && existing.target_pid),
+								target_mention: res.mention_id,
+								displayName: displayName
 							});
 						}
 					});
 				}
 			});
-			rels = Array.from(uniqueRelsMap.values());
 		}
+
+		const rels = Array.from(uniqueRelsMap.values());
 
 		const $row = $(`<div class="vpe-row vpe-row-linked"></div>`);
 		$row.append(`<div class="vpe-field-label">${PersonEditor.escapeHtml(cfg.label)}</div>`);
@@ -755,17 +851,7 @@ class PersonEditor {
 
 		const $sel = $(`<select style="opacity:0; position:absolute; left:0; top:0; width:100%; height:100%; cursor:pointer; z-index:10;" title="${PersonEditor.escapeHtml(linkedTooltip)}"><option value="" selected disabled>Select to jump...</option></select>`);
 		rels.forEach((r, i) => {
-			let linkedName = `Mention ${r.target_mention}`;
-			if (window.app && window.app.expand && window.app.expand.mentionsMap) {
-				const m = window.app.expand.mentionsMap.get(r.target_mention);
-				if (m) {
-					const fn = (m.first_name || '').split(':')[0];
-					const mn = (m.middle_name || '').split(':')[0];
-					const ln = (m.last_name || '').split(':')[0];
-					linkedName = [fn, mn, ln].filter(Boolean).join(' ').trim();
-				}
-			}
-			if (!linkedName) linkedName = r.target_mention;
+			const linkedName = r.displayName || `Person ${r.target_pid || r.target_mention}`;
 
 			const predLabelMap = {
 				'isChildOf': 'PARENT',
@@ -777,7 +863,7 @@ class PersonEditor {
 				'isCousinOf': 'COUSIN',
 				'isEnslaverOf': 'ENSLAVER',
 				'wasEnslavedBy': 'ENSLAVED',
-				'enslaves': 'ENSLAVER'
+				'enslaves': 'ENSLAVED'
 			};
 			let predRaw = predLabelMap[r.predicate];
 			if (!predRaw) {
@@ -795,10 +881,14 @@ class PersonEditor {
 			if (val && val.startsWith('rel_')) {
 				const idx = parseInt(val.split('_')[1], 10);
 				const rel = rels[idx];
-				if (rel && rel.target_mention && window.app && typeof window.app.editMention === 'function') {
-					window.app.curRelation = rel.predicate;
-					window.app.targetPerson = person;
-					window.app.editMention(rel.target_mention);
+				if (rel) {
+					if (rel.target_pid && window.treeApp && typeof window.treeApp.SelectNodeAndShowEditor === 'function') {
+						window.treeApp.SelectNodeAndShowEditor(rel.target_pid);
+					} else if (rel.target_mention && window.app && typeof window.app.editMention === 'function') {
+						window.app.curRelation = rel.predicate;
+						window.app.targetPerson = person;
+						window.app.editMention(rel.target_mention);
+					}
 				}
 				$(this).val(''); // Reset
 			}
@@ -1124,7 +1214,7 @@ class PersonEditor {
 					console.warn('[Scan Search] searchObj or searchObj.scan not available');
 					results = [];
 				}
-			} else if (includeMode === 'auto' || includeMode === 'omni') {
+			} else if (includeMode === 'wide') {
 				let searchObj = (window.app && window.app.search) ? window.app.search : null;
 				if (!searchObj && typeof Search !== 'undefined') {
 					searchObj = new Search({
@@ -1242,11 +1332,9 @@ class PersonEditor {
 							};
 						}) : [];
 					} catch (err) {
-						console.error('[Auto Search] Error in search.find:', err);
 						results = [];
 					}
 				} else {
-					console.warn('[Auto Search] searchObj or searchObj.find not available');
 					results = [];
 				}
 			} else {
@@ -1348,11 +1436,11 @@ class PersonEditor {
 			">
 				<option value="all">All</option>
 				<option value="any">Any</option>
-				<option value="auto">Auto</option>
+				<option value="wide">Wide</option>
 				<option value="scan">Scan</option>
 			</select>
 		`);
-		$includeSelect.val(state.include || PersonEditor.lastIncludeSetting || 'auto');
+		$includeSelect.val(state.include || PersonEditor.lastIncludeSetting || 'wide');
 		$includeSelect.on('change', function () {
 			state.include = $(this).val();
 			PersonEditor.lastIncludeSetting = state.include;
@@ -1588,7 +1676,7 @@ class PersonEditor {
 		return {
 			source: source,
 			max_results: 80,
-			include: state.include || PersonEditor.lastIncludeSetting || 'auto',
+			include: state.include || PersonEditor.lastIncludeSetting || 'wide',
 			fields: fields
 		};
 	}

@@ -1002,9 +1002,35 @@ class TreeApp {
 								parents.add(t.subject);
 							}
 						});
+						if (window.app && window.app.curTree && Array.isArray(window.app.curTree.relationships)) {
+							window.app.curTree.relationships.forEach(r => {
+								if (r.predicate === 'isChildOf' && r.subject_id === sourcePid) parents.add(r.object_id);
+								if (r.predicate === 'isParentOf' && r.object_id === sourcePid) parents.add(r.subject_id);
+							});
+						}
+						if (sourceNode && sourceNode.anchor && sourceNode.anchor.startsWith('isChildOf:')) {
+							parents.add(sourceNode.anchor.split(':')[1]);
+						}
+
 						parents.forEach(parentPid => {
 							this.AddTriplet(newPid, 'isChildOf', parentPid, true);
+							if (window.app && window.app.curTree && Array.isArray(window.app.curTree.relationships)) {
+								const pRel = { subject_id: newPid, predicate: 'isChildOf', object_id: parentPid };
+								if (!window.app.curTree.relationships.some(r => r.subject_id === pRel.subject_id && r.predicate === pRel.predicate && r.object_id === pRel.object_id)) {
+									window.app.curTree.relationships.push(pRel);
+								}
+							}
+
+							const spouses = this.state.triplets.filter(t => t.predicate === 'isSpouseOf' && (t.subject === parentPid || t.object === parentPid));
+							spouses.forEach(t => {
+								const spousePid = t.subject === parentPid ? t.object : t.subject;
+								this.AddTriplet(newPid, 'isChildOf', spousePid, true);
+							});
 						});
+
+						if (parents.size > 0 && newNode) {
+							newNode.anchor = `isChildOf:${Array.from(parents)[0]}`;
+						}
 					} else if (relation === 'isSpouseOf') {
 						this.AddTriplet(newPid, 'isSpouseOf', sourcePid, true);
 					} else if (relation === 'isCousinOf') {
@@ -1027,6 +1053,9 @@ class TreeApp {
 						);
 						if (!exists) {
 							window.app.curTree.relationships.push(relObj);
+						}
+						if (typeof window.app.rebuildAllRelationships === 'function') {
+							window.app.rebuildAllRelationships();
 						}
 					}
 

@@ -271,6 +271,62 @@ class App {
 			});
 		});
 
+		// Ensure siblings inherit isChildOf to each other's parents
+		const siblingPairs = newRelationships.filter(r => r.predicate === 'isSiblingOf');
+		siblingPairs.forEach(sb => {
+			const p1 = sb.subject_id;
+			const p2 = sb.object_id;
+			newRelationships.filter(cr => cr.predicate === 'isChildOf' && cr.subject_id === p1).forEach(cr => {
+				const parentPid = cr.object_id;
+				const key = `${p2}|isChildOf|${parentPid}`;
+				if (!added.has(key) && p2 !== parentPid) {
+					added.add(key);
+					newRelationships.push({
+						subject_id: p2,
+						predicate: 'isChildOf',
+						object_id: parentPid
+					});
+				}
+			});
+			newRelationships.filter(cr => cr.predicate === 'isChildOf' && cr.subject_id === p2).forEach(cr => {
+				const parentPid = cr.object_id;
+				const key = `${p1}|isChildOf|${parentPid}`;
+				if (!added.has(key) && p1 !== parentPid) {
+					added.add(key);
+					newRelationships.push({
+						subject_id: p1,
+						predicate: 'isChildOf',
+						object_id: parentPid
+					});
+				}
+			});
+		});
+
+		// Children of the same parent are siblings
+		const parentToChildren = new Map();
+		newRelationships.filter(r => r.predicate === 'isChildOf').forEach(cr => {
+			if (!parentToChildren.has(cr.object_id)) parentToChildren.set(cr.object_id, []);
+			parentToChildren.get(cr.object_id).push(cr.subject_id);
+		});
+		parentToChildren.forEach((children) => {
+			for (let i = 0; i < children.length; i++) {
+				for (let j = i + 1; j < children.length; j++) {
+					const c1 = children[i];
+					const c2 = children[j];
+					const key1 = `${c1}|isSiblingOf|${c2}`;
+					const key2 = `${c2}|isSiblingOf|${c1}`;
+					if (!added.has(key1) && !added.has(key2)) {
+						added.add(key1);
+						newRelationships.push({
+							subject_id: c1,
+							predicate: 'isSiblingOf',
+							object_id: c2
+						});
+					}
+				}
+			}
+		});
+
 		// Fail-safe birth year check on all isChildOf relationships: child (subject_id) must be younger than parent (object_id)
 		const personMap = new Map(persons.map(p => [p.person_id, p]));
 		newRelationships.forEach(r => {

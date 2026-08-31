@@ -538,7 +538,7 @@ class SearchBox {
 			} else {
 				results = window.app.score.Search(mentionsArray, search_criteria);
 			}
-		} else if (search_criteria.include === 'auto' || search_criteria.include === 'omni') {
+		} else if (search_criteria.include === 'wide') {
 			let searchObj = (window.app && window.app.search) ? window.app.search : null;
 			if (!searchObj && typeof Search !== 'undefined') {
 				searchObj = new Search({

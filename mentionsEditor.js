@@ -818,7 +818,7 @@ class MentionsEditor {
 			`;
 		}
 
-		// Why / Evidence Breakdown panel (from search.js / Omni search)
+		// Why / Evidence Breakdown panel (from search.js)
 		let whyHtml = '';
 		const whyData = match.mention.why || match.why || (match.factors && match.factors.rung ? match.factors : null);
 		if (whyData && typeof whyData === 'object') {
@@ -1031,7 +1031,7 @@ class MentionsEditor {
 		}
 		globalApp.source = core;
 		if (window.PersonEditor) {
-			window.PersonEditor.lastIncludeSetting = 'auto';
+			window.PersonEditor.lastIncludeSetting = 'wide';
 		}
 		$('.vpe-sources-btn').val(core);
 
