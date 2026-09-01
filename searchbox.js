@@ -499,19 +499,18 @@ class SearchBox {
 	handleFormSubmit() {
 		const search_criteria = this.buildSearchCriteria();
 		const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
-		if (window.app && !window.app.score && window.Score) new window.Score();
+		let searchObj = (window.app && window.app.search) ? window.app.search : null;
+		if (!searchObj && typeof Search !== 'undefined') {
+			searchObj = new Search({
+				mentions: mentionsArray,
+				assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
+				match: (window.app && window.app.match) ? window.app.match : null
+			});
+			if (window.app) window.app.search = searchObj;
+		}
 
 		let results;
 		if (search_criteria.include === 'scan') {
-			let searchObj = (window.app && window.app.search) ? window.app.search : null;
-			if (!searchObj && typeof Search !== 'undefined') {
-				searchObj = new Search({
-					mentions: mentionsArray,
-					assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
-					match: (window.app && window.app.match) ? window.app.match : null
-				});
-				if (window.app) window.app.search = searchObj;
-			}
 			const curTree = (window.app && window.app.curTree) ? window.app.curTree : { persons: [], relationships: [] };
 			let personId = (this.targetPerson && this.targetPerson.person_id) || (window.app && window.app.curPerson !== -1 ? window.app.curPerson : null);
 			if (searchObj && typeof searchObj.scan === 'function' && personId) {
@@ -536,7 +535,7 @@ class SearchBox {
 					results = [];
 				}
 			} else {
-				results = window.app.score.Search(mentionsArray, search_criteria);
+				results = (searchObj && typeof searchObj.searchCriteria === 'function') ? searchObj.searchCriteria(mentionsArray, search_criteria) : [];
 			}
 		} else if (search_criteria.include === 'wide') {
 			let searchObj = (window.app && window.app.search) ? window.app.search : null;
@@ -651,10 +650,10 @@ class SearchBox {
 					results = [];
 				}
 			} else {
-				results = window.app.score.Search(mentionsArray, search_criteria);
+				results = (searchObj && typeof searchObj.searchCriteria === 'function') ? searchObj.searchCriteria(mentionsArray, search_criteria) : [];
 			}
 		} else {
-			results = window.app.score.Search(mentionsArray, search_criteria);
+			results = (searchObj && typeof searchObj.searchCriteria === 'function') ? searchObj.searchCriteria(mentionsArray, search_criteria) : [];
 		}
 
 		if (typeof this.onSearchCallback === 'function') {

@@ -289,6 +289,103 @@ class Match {
 		return Math.max(lo, Math.min(hi, x));
 	}
 
+	static jaro(s1, s2) {
+		if (!s1 || !s2) return 0.0;
+		s1 = String(s1).toUpperCase();
+		s2 = String(s2).toUpperCase();
+		if (s1 === s2) return 1.0;
+		const len1 = s1.length, len2 = s2.length;
+		const matchDistance = Math.max(0, Math.floor(Math.max(len1, len2) / 2) - 1);
+		const s1Matches = new Array(len1).fill(false);
+		const s2Matches = new Array(len2).fill(false);
+		let matches = 0;
+		for (let i = 0; i < len1; i++) {
+			const start = Math.max(0, i - matchDistance);
+			const end = Math.min(i + matchDistance + 1, len2);
+			for (let j = start; j < end; j++) {
+				if (s2Matches[j]) continue;
+				if (s1[i] !== s2[j]) continue;
+				s1Matches[i] = true; s2Matches[j] = true; matches++; break;
+			}
+		}
+		if (matches === 0) return 0.0;
+		let transpositions = 0, k = 0;
+		for (let i = 0; i < len1; i++) {
+			if (!s1Matches[i]) continue;
+			while (!s2Matches[k]) k++;
+			if (s1[i] !== s2[k]) transpositions++;
+			k++;
+		}
+		transpositions /= 2;
+		return (matches / len1 + matches / len2 + (matches - transpositions) / matches) / 3;
+	}
+
+	static jaroWinkler(s1, s2, prefixScale = 0.1, boostThreshold = 0.7) {
+		if (!s1 || !s2) return 0.0;
+		s1 = String(s1).toUpperCase();
+		s2 = String(s2).toUpperCase();
+		if (s1 === s2) return 1.0;
+		const j = Match.jaro(s1, s2);
+		if (j < boostThreshold) return j;
+		const maxPrefix = Math.min(4, s1.length, s2.length);
+		let prefix = 0;
+		while (prefix < maxPrefix && s1[prefix] === s2[prefix]) prefix++;
+		return j + prefix * prefixScale * (1 - j);
+	}
+
+	static doubleMetaphoneScore(codeA, codeB) {
+		if (!Match.isPresent(codeA) || !Match.isPresent(codeB)) return null;
+		const parse = (c) => {
+			const parts = String(c).toUpperCase().split(':').map((x) => x.trim().replace(/[^A-Z]/g, ''));
+			const primary = parts[0] || '';
+			const secondary = parts[1] || primary;
+			return { primary, secondary };
+		};
+		const A = parse(codeA);
+		const B = parse(codeB);
+		if (!A.primary || !B.primary) return 0.0;
+		if (A.primary === B.primary) return 1.0;
+		if (A.primary === B.secondary || A.secondary === B.primary) return 0.8;
+		if (A.secondary && A.secondary === B.secondary) return 0.6;
+		return 0.0;
+	}
+
+	static buildNameFrequencies(mentions) {
+		const firstNameFreq = new Map();
+		const lastNameFreq = new Map();
+		if (Array.isArray(mentions)) {
+			for (const m of mentions) {
+				if (!m) continue;
+				const fk = Match.normUpper(m.first_name || m.norm_first_name);
+				if (fk) firstNameFreq.set(fk, (firstNameFreq.get(fk) || 0) + 1);
+				const lk = Match.normUpper(m.last_name);
+				if (lk) lastNameFreq.set(lk, (lastNameFreq.get(lk) || 0) + 1);
+			}
+		}
+		return { firstNameFreq, lastNameFreq };
+	}
+
+	static nameWeightModifier(value, freqMap, rarityConfig = Match.DEFAULT_RARITY) {
+		const r = rarityConfig || Match.DEFAULT_RARITY;
+		const key = Match.normUpper(value);
+		if (!key || !freqMap || typeof freqMap.get !== 'function' || !freqMap.has(key)) return 0;
+		const count = freqMap.get(key) || 0;
+		if (count <= r.veryRareMax) return r.modVeryRare;
+		if (count <= r.uncommonMax) return r.modUncommon;
+		if (count <= r.averageMax) return r.modAverage;
+		if (count <= r.commonMax) return r.modCommon;
+		return r.modExtremelyCommon;
+	}
+
+	static nickname(name) {
+		if (!Match._defaultInstance) Match._defaultInstance = new Match();
+		return Match._defaultInstance.nickname(name);
+	}
+
+	static canonical(name) {
+		return Match.nickname(name);
+	}
+
 	constructor(config = {}) {
 		this.rarity = { ...Match.DEFAULT_RARITY, ...(config.rarity || {}) };
 
@@ -314,7 +411,7 @@ class Match {
 	}
 
 	// -----------------------------------------------------------------------
-	// 1. NICKNAME
+	// 1. NICKNAME & PHONETICS
 	// -----------------------------------------------------------------------
 	nickname(name) {
 		const key = Match.normUpper(name);
@@ -326,6 +423,18 @@ class Match {
 		const ca = this.nickname(a);
 		const cb = this.nickname(b);
 		return !!ca && ca === cb;
+	}
+
+	getNYSIIS(name) {
+		return Match.normUpper(name);
+	}
+
+	getMetaphone(name) {
+		return Match.normUpper(name);
+	}
+
+	doubleMetaphoneMatchScore(codeA, codeB) {
+		return Match.doubleMetaphoneScore(codeA, codeB);
 	}
 
 	// -----------------------------------------------------------------------
@@ -568,20 +677,7 @@ class Match {
 	}
 
 	_doubleMetaphoneScore(codeA, codeB) {
-		if (!Match.isPresent(codeA) || !Match.isPresent(codeB)) return null;
-		const parse = (c) => {
-			const parts = String(c).toUpperCase().split(':').map((x) => x.trim().replace(/[^A-Z]/g, ''));
-			const primary = parts[0] || '';
-			const secondary = parts[1] || primary;
-			return { primary, secondary };
-		};
-		const A = parse(codeA);
-		const B = parse(codeB);
-		if (!A.primary || !B.primary) return 0.0;
-		if (A.primary === B.primary) return 1.0;
-		if (A.primary === B.secondary || A.secondary === B.primary) return 0.8;
-		if (A.secondary && A.secondary === B.secondary) return 0.6;
-		return 0.0;
+		return Match.doubleMetaphoneScore(codeA, codeB);
 	}
 
 	// A compound given name ("MARY FRANCIS", "JAMES F", "WILLIAM ANDERSON")

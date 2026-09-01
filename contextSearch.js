@@ -716,9 +716,15 @@ function highlightMostLikelyMatch() {
 		const byear = (person.birth_year ? String(person.birth_year) : '').split(':')[0].trim();
 		const gender = (person.gender ? String(person.gender) : '').split(':')[0].trim();
 
-		if (globalApp && !globalApp.score && window.Score) new window.Score();
+		if (globalApp && !globalApp.search && typeof Search !== 'undefined') {
+			globalApp.search = new Search({
+				mentions: mentionsArray,
+				assertions: (globalApp && globalApp.assertions) ? globalApp.assertions : [],
+				match: (globalApp && globalApp.match) ? globalApp.match : null
+			});
+		}
 
-		if (globalApp && globalApp.score && typeof globalApp.score.Search === 'function') {
+		if (globalApp && globalApp.search && typeof globalApp.search.searchCriteria === 'function') {
 			const sourceSelect = document.getElementById('cs-source-select');
 			const activeSource = sourceSelect ? sourceSelect.value : (currentGrid.labelText || '');
 
@@ -735,7 +741,7 @@ function highlightMostLikelyMatch() {
 					fields: fields
 				};
 
-				const results = globalApp.score.Search(mentionsArray, criteria);
+				const results = globalApp.search.searchCriteria(mentionsArray, criteria);
 				if (results && results.length > 0) {
 					const firstRes = results[0];
 					const topMentionId = (firstRes.mention && firstRes.mention.mention_id) ? firstRes.mention.mention_id : (firstRes.mention_id || firstRes.id);

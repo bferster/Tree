@@ -560,8 +560,12 @@ class App {
 
 		const mentionsContainer = document.getElementById('mentions-editor-container');
 
-		if (!this.score && window.Score) {
-			new window.Score();
+		if (!this.search && window.Search) {
+			this.search = new window.Search({
+				mentions: this.mentions || [],
+				assertions: this.assertions || [],
+				match: this.match || null
+			});
 		}
 
 		if (window.MentionsEditor && !mEditor) {

@@ -218,6 +218,24 @@
 		return Math.floor(year / size) * size;
 	}
 
+	var GroupMatcherClass = (typeof globalThis !== 'undefined' && globalThis.GroupMatcher)
+		? globalThis.GroupMatcher
+		: (typeof require !== 'undefined' ? (require('./groupMatcher').GroupMatcher || require('./groupMatcher')) : null);
+
+	var DEFAULT_CRITERIA_CONFIG = {
+		jwFuzzyPassThreshold: 0.85,
+		birthYearWindows: {
+			Exact: 0,
+			"±1": 1,
+			"±2": 2,
+			"±3": 3,
+			"±5": 5,
+			"±10": 10
+		},
+		softmaxTemperature: 1.0,
+		debug: false
+	};
+
 	// =======================================================================
 	// SEARCH
 	// =======================================================================
@@ -230,6 +248,10 @@
 			(typeof Match !== 'undefined' ? Match : null);
 		if (!MatchCls && !config.match) {
 			throw new Error('search.js requires match.js (class Match) to be loaded first');
+		}
+
+		if (typeof app !== 'undefined') {
+			app.search = this;
 		}
 
 		this.opts       = Object.assign({}, DEFAULTS, config.opts || {});
@@ -2354,6 +2376,819 @@
 			assertion: assertion
 		};
 	};
+
+	// -----------------------------------------------------------------------
+	// FORM / FIELD-CRITERIA SEARCH (Migrated from former score.js)
+	// -----------------------------------------------------------------------
+
+	Search.prototype.isSlaveScheduleSource = function (source) {
+		if (!source) return false;
+		var s = String(source).toUpperCase();
+		return s.includes('SS-') || s.includes('SLAVE') || s.includes('SS1850') || s.includes('SS1860');
+	};
+
+	Search.prototype._getFamilyIndex = function (mentions) {
+		if (!this._familyIndexCache || this._familyIndexCache.mentions !== mentions) {
+			var idx = new Map();
+			if (Array.isArray(mentions)) {
+				for (var i = 0; i < mentions.length; i++) {
+					var m = mentions[i];
+					var famId = m ? ((m.household_id !== null && m.household_id !== undefined && String(m.household_id).trim() !== '') ? m.household_id : m.family_id) : null;
+					if (m && m.source && famId) {
+						var key = m.source + '|F|' + famId;
+						var list = idx.get(key);
+						if (!list) {
+							list = [];
+							idx.set(key, list);
+						}
+						list.push(m);
+					}
+				}
+			}
+			this._familyIndexCache = { mentions: mentions, index: idx };
+		}
+		return this._familyIndexCache.index;
+	};
+
+	Search.prototype._getMentionIndex = function (mentions) {
+		if (!this._mentionIndexCache || this._mentionIndexCache.mentions !== mentions) {
+			var idx = new Map();
+			if (Array.isArray(mentions)) {
+				for (var i = 0; i < mentions.length; i++) {
+					var m = mentions[i];
+					if (m && m.mention_id !== undefined && m.mention_id !== null) {
+						idx.set(String(m.mention_id), m);
+					}
+				}
+			}
+			this._mentionIndexCache = { mentions: mentions, index: idx };
+		}
+		return this._mentionIndexCache.index;
+	};
+
+	Search.prototype._calculateFamilyBoost = function (anchorPerson, candidateMention, familyIndex) {
+		var candidateFamId = candidateMention ? ((candidateMention.household_id !== null && candidateMention.household_id !== undefined && String(candidateMention.household_id).trim() !== '') ? candidateMention.household_id : candidateMention.family_id) : null;
+		if (!candidateMention || !candidateMention.source || !candidateFamId) return null;
+
+		var globalApp = (typeof window !== 'undefined' && window.app) || (typeof app !== 'undefined' ? app : null);
+		if (!globalApp || !globalApp.mentions) return null;
+
+		if (!anchorPerson && globalApp.curTree) {
+			var treeAppState = typeof window !== 'undefined' && window.treeApp && window.treeApp.state;
+			var pid = treeAppState && treeAppState.selectedPid;
+			if (!pid && typeof globalApp.curPerson === 'number' && globalApp.curPerson >= 0 && treeAppState && treeAppState.nodes) {
+				var idxNode = treeAppState.nodes[globalApp.curPerson];
+				pid = idxNode ? idxNode.person_id : null;
+			}
+			if (pid && globalApp.curTree.persons) {
+				anchorPerson = Array.isArray(globalApp.curTree.persons)
+					? globalApp.curTree.persons.find(function (p) { return p.person_id === pid; })
+					: globalApp.curTree.persons[pid];
+			}
+		}
+
+		if (!anchorPerson) return null;
+
+		if (!familyIndex) {
+			familyIndex = this._getFamilyIndex(globalApp.mentions);
+		}
+
+		var relSignature = (globalApp.curTree && globalApp.curTree.relationships)
+			? globalApp.curTree.relationships
+				.filter(function (r) { return r.subject_id === anchorPerson.person_id || r.object_id === anchorPerson.person_id; })
+				.map(function (r) { return (r.subject_id + '>' + (r.predicate || '') + '>' + r.object_id); })
+				.sort()
+				.join(',')
+			: '';
+		var mentionsHash = (anchorPerson.mentions || []).map(function (m) { return (typeof m === 'object' ? m.mention_id : m); }).join(',') + '_' + relSignature;
+		var anchorRoster = anchorPerson._cachedFamilyRoster;
+		if (!anchorRoster || anchorPerson._cachedMentionsHash !== mentionsHash) {
+			anchorRoster = [];
+			var seenNames = new Set();
+
+			if (globalApp.curTree && globalApp.curTree.relationships && globalApp.curTree.persons) {
+				var personsList = Array.isArray(globalApp.curTree.persons) ? globalApp.curTree.persons : Object.values(globalApp.curTree.persons);
+				var rels = globalApp.curTree.relationships.filter(function (r) { return r.subject_id === anchorPerson.person_id || r.object_id === anchorPerson.person_id; });
+
+				var seenPids = new Set([anchorPerson.person_id]);
+				rels.forEach(function (r) {
+					var relPid = r.subject_id === anchorPerson.person_id ? r.object_id : r.subject_id;
+					if (!seenPids.has(relPid)) {
+						seenPids.add(relPid);
+						var relP = personsList.find(function (p) { return p.person_id === relPid; });
+						if (relP && (relP.first_name || relP.norm_first_name)) {
+							var fname = (relP.first_name || relP.norm_first_name).split(':')[0].trim();
+							seenNames.add(fname.toLowerCase());
+							anchorRoster.push({
+								person_id: relP.person_id,
+								first_name: fname,
+								norm_first_name: relP.norm_first_name || fname,
+								last_name: relP.last_name,
+								gender: relP.gender,
+								norm_race: relP.race,
+								birth_year: relP.birth_year,
+								source: 'TREE',
+								family_id: 'TREE'
+							});
+						}
+					}
+				});
+			}
+
+			var self = this;
+			var anchorLastName = (anchorPerson.last_name || '').split(':')[0].trim().toLowerCase();
+			var anchorMentions = (anchorPerson.mentions || []).map(function (mid) {
+				if (typeof mid === 'object') return mid;
+				return globalApp.mentions.find(function (m) { return m.mention_id === mid; });
+			}).filter(Boolean);
+
+			anchorMentions.forEach(function (anchorM) {
+				var anchorFamId = (anchorM.household_id !== null && anchorM.household_id !== undefined && String(anchorM.household_id).trim() !== '') ? anchorM.household_id : anchorM.family_id;
+				if (anchorM.source && anchorFamId) {
+					var key = anchorM.source + '|F|' + anchorFamId;
+					var fullGroup = familyIndex.get(key) || [];
+					fullGroup.forEach(function (m) {
+						if (m.mention_id !== anchorM.mention_id && (m.first_name || m.norm_first_name)) {
+							var mLastName = (m.last_name || '').split(':')[0].trim().toLowerCase();
+							if (anchorLastName && mLastName && anchorLastName !== mLastName && self.match.jaroWinkler(anchorLastName, mLastName) < 0.80) {
+								return;
+							}
+							var fname = (m.first_name || m.norm_first_name).split(':')[0].trim().toLowerCase();
+							if (!seenNames.has(fname)) {
+								seenNames.add(fname);
+								anchorRoster.push(m);
+							}
+						}
+					});
+				}
+			});
+
+			Object.defineProperty(anchorPerson, '_cachedFamilyRoster', {
+				value: anchorRoster,
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
+			Object.defineProperty(anchorPerson, '_cachedMentionsHash', {
+				value: mentionsHash,
+				writable: true,
+				configurable: true,
+				enumerable: false
+			});
+		}
+
+		if (!anchorRoster || anchorRoster.length === 0) return null;
+
+		var candKey = candidateMention.source + '|F|' + candidateFamId;
+		var fullCandGroup = familyIndex.get(candKey);
+		if (!fullCandGroup || fullCandGroup.length <= 1) return null;
+
+		var candRoster = fullCandGroup.filter(function (m) { return m.mention_id !== candidateMention.mention_id; });
+		if (candRoster.length === 0) return null;
+
+		var usedCandPids = new Set();
+		var code = function (val) { return String(val == null ? '' : val).split(':')[0].trim().toUpperCase(); };
+		var candidatePairs = [];
+
+		for (var ai = 0; ai < anchorRoster.length; ai++) {
+			var aM = anchorRoster[ai];
+			var aFirst = (aM.norm_first_name || aM.first_name || '').toLowerCase().trim().split(':')[0];
+			var aLast = (aM.last_name || '').toLowerCase().trim().split(':')[0];
+			var aGender = code(aM.gender);
+			var aRace = code(aM.norm_race || aM.race);
+			var aBY = aM.birth_year ? parseInt(aM.birth_year, 10) : null;
+			var aKey = aM.person_id || aM.mention_id;
+
+			if (!aFirst || !aKey) continue;
+
+			for (var ci = 0; ci < candRoster.length; ci++) {
+				var cM = candRoster[ci];
+				var cFirst = (cM.norm_first_name || cM.first_name || '').toLowerCase().trim().split(':')[0];
+				var cLast = (cM.last_name || '').toLowerCase().trim().split(':')[0];
+
+				if (!cFirst) continue;
+				var cGender = code(cM.gender);
+				if (aGender && cGender && aGender !== cGender) continue;
+
+				var cRace = code(cM.norm_race || cM.race);
+				if (aRace && cRace && aRace !== cRace && !(aRace.startsWith('B') && cRace.startsWith('M')) && !(aRace.startsWith('M') && cRace.startsWith('B'))) continue;
+
+				var cBY = cM.birth_year ? parseInt(cM.birth_year, 10) : null;
+				if (aBY && cBY && Math.abs(aBY - cBY) > 3) continue;
+
+				if (aLast && cLast && aLast !== cLast) {
+					var lastSim = this.match.jaroWinkler(aLast, cLast);
+					if (lastSim < 0.80) continue;
+				}
+
+				var firstSim = this.match.jaroWinkler(aFirst, cFirst);
+				var isNick = this.match.sameNickname(aFirst, cFirst);
+				var isStem = (aFirst.length >= 3 && cFirst.length >= 3 && (aFirst.startsWith(cFirst) || cFirst.startsWith(aFirst)));
+
+				if (firstSim >= 0.85 || isNick || isStem) {
+					var cKey = cM.mention_id;
+					var score = isNick ? 0.95 : (isStem ? 0.90 : firstSim);
+					if (aBY && cBY) {
+						var gap = Math.abs(aBY - cBY);
+						score += (gap === 0 ? 0.2 : (gap === 1 ? 0.1 : 0.05));
+					}
+					candidatePairs.push({
+						anchor: aM,
+						cand: cM,
+						aKey: aKey,
+						cKey: cKey,
+						score: score,
+						aName: aFirst,
+						cName: cFirst,
+						by: cM.birth_year || aM.birth_year || null
+					});
+				}
+			}
+		}
+
+		candidatePairs.sort(function (a, b) { return b.score - a.score; });
+
+		var matchedKin = [];
+		var usedAnchors = new Set();
+		for (var pi = 0; pi < candidatePairs.length; pi++) {
+			var pair = candidatePairs[pi];
+			if (!usedAnchors.has(pair.aKey) && !usedCandPids.has(pair.cKey)) {
+				usedAnchors.add(pair.aKey);
+				usedCandPids.add(pair.cKey);
+				var dispName = (pair.cand.full_name || pair.cand.first_name || pair.aName || 'Family Member').split(':')[0].trim();
+				matchedKin.push({
+					name: dispName,
+					birth_year: pair.by,
+					relation: pair.anchor.source === 'TREE' ? 'Tree Relative' : 'Household Member'
+				});
+			}
+		}
+
+		if (matchedKin.length === 0) return null;
+
+		var boostVal = 0;
+		if (matchedKin.length === 1) boostVal = 0.40;
+		else if (matchedKin.length === 2) boostVal = 0.70;
+		else if (matchedKin.length >= 3) boostVal = 1.00;
+
+		return {
+			value: boostVal,
+			matches: matchedKin,
+			count: matchedKin.length
+		};
+	};
+
+	Search.prototype._buildFamily1870FromPerson = function (targetPerson) {
+		var globalApp = (typeof window !== 'undefined' && window.app) || (typeof app !== 'undefined' ? app : null);
+		var strip = function (v) { return (v == null ? '' : String(v).split(':')[0].trim()); };
+		var toMember = function (p) {
+			var byRaw = strip(p.birth_year);
+			var by = byRaw ? Number(byRaw) : NaN;
+			return {
+				personId: p.person_id,
+				firstName: strip(p.first_name) || undefined,
+				lastName: strip(p.last_name) || undefined,
+				birthYear: !isNaN(by) ? by : undefined,
+				gender: strip(p.gender) || undefined,
+				race: strip(p.race) || undefined,
+			};
+		};
+
+		var members = [toMember(targetPerson)];
+		var familyPredicates = new Set(['isChildOf', 'isParentOf', 'isSpouseOf', 'isSiblingOf']);
+		if (globalApp && globalApp.curTree && globalApp.curTree.relationships && globalApp.curTree.persons) {
+			var personsList = Array.isArray(globalApp.curTree.persons) ? globalApp.curTree.persons : Object.values(globalApp.curTree.persons);
+			var seenPids = new Set([targetPerson.person_id]);
+			globalApp.curTree.relationships.forEach(function (r) {
+				if (!familyPredicates.has(r.predicate)) return;
+				if (r.subject_id !== targetPerson.person_id && r.object_id !== targetPerson.person_id) return;
+				var relPid = r.subject_id === targetPerson.person_id ? r.object_id : r.subject_id;
+				if (seenPids.has(relPid)) return;
+				seenPids.add(relPid);
+				var relP = personsList.find(function (p) { return p.person_id === relPid; });
+				if (relP) members.push(toMember(relP));
+			});
+		}
+
+		return {
+			familyId: 'FC1870-' + targetPerson.person_id,
+			county: (globalApp && globalApp.county) || undefined,
+			members: members,
+		};
+	};
+
+	Search.prototype._findKnownEnslaverHolding = function (targetPerson, mentions, sourceTag) {
+		var globalApp = (typeof window !== 'undefined' && window.app) || (typeof app !== 'undefined' ? app : null);
+		if (!globalApp || !globalApp.curTree || !Array.isArray(globalApp.curTree.relationships)) return null;
+
+		var enslaverPid = null;
+		for (var i = 0; i < globalApp.curTree.relationships.length; i++) {
+			var r = globalApp.curTree.relationships[i];
+			if (r.predicate === 'wasEnslavedBy' && r.subject_id === targetPerson.person_id) { enslaverPid = r.object_id; break; }
+			if ((r.predicate === 'isEnslaverOf' || r.predicate === 'enslaves') && r.object_id === targetPerson.person_id) { enslaverPid = r.subject_id; break; }
+		}
+		if (!enslaverPid) return null;
+
+		var personsList = Array.isArray(globalApp.curTree.persons) ? globalApp.curTree.persons : Object.values(globalApp.curTree.persons || {});
+		var enslaverPerson = personsList.find(function (p) { return p.person_id === enslaverPid; });
+		if (!enslaverPerson || !Array.isArray(enslaverPerson.mentions)) return null;
+
+		var mIndex = this._getMentionIndex(mentions);
+		for (var mi = 0; mi < enslaverPerson.mentions.length; mi++) {
+			var mid = enslaverPerson.mentions[mi];
+			var mentionId = typeof mid === 'object' ? mid.mention_id : mid;
+			var m = mIndex.get(String(mentionId));
+			if (m && m.source && m.source.indexOf(sourceTag) !== -1) {
+				var famId = (m.household_id !== null && m.household_id !== undefined && String(m.household_id).trim() !== '') ? m.household_id : m.family_id;
+				return { holdingKey: famId, mention: m };
+			}
+		}
+		return null;
+	};
+
+	Search.prototype._holdingToDisplayMention = function (matchResult, holding, isKnownLink) {
+		var enslaverRow = holding && holding.enslaverRow;
+		var base = enslaverRow ? Object.assign({}, enslaverRow) : {
+			mention_id: matchResult.id,
+			full_name: holding && holding.enslaverName
+				? [holding.enslaverName.firstName, holding.enslaverName.lastName].filter(Boolean).join(' ')
+				: 'Unknown enslaver',
+		};
+		var pct = Math.round(matchResult.probability * 100);
+		base.score = matchResult.probability * 10;
+		base._matchStrength = matchResult.probability;
+		base._probability = matchResult.probability;
+		base.factors = {};
+		base._factors = {};
+		base.groupMatch = matchResult;
+		base._knownLink = Boolean(isKnownLink);
+		var holdingSize = (holding && holding.members && holding.members.length) || matchResult.holdingSize || '?';
+		base.narrative = isKnownLink
+			? ('Already linked in the tree — ' + matchResult.components.matchedPairs + ' of ' + holdingSize + ' household members matched (' + pct + '% group match).')
+			: ('Group match: ' + matchResult.components.matchedPairs + ' of ' + holdingSize + ' household members matched, ' + pct + '% probability.');
+		return base;
+	};
+
+	Search.prototype.searchGroupMatch = function (mentions, targetPerson, sourceTag) {
+		if (typeof GroupMatcherClass !== 'function') {
+			console.error('GroupMatcher is not loaded — cannot run group match search.');
+			return [];
+		}
+		if (!targetPerson || !targetPerson.person_id) return [];
+
+		var family1870 = this._buildFamily1870FromPerson(targetPerson);
+		var matcher = new GroupMatcherClass();
+		var holdings = matcher.extractHoldings(mentions, { sourceTag: sourceTag });
+		var holdingByKey = new Map(holdings.map(function (h) { return [h.familyId, h]; }));
+		var holdingResults = matcher.matchAll(mentions, family1870, { sourceTag: sourceTag });
+
+		var known = this._findKnownEnslaverHolding(targetPerson, mentions, sourceTag);
+
+		var self = this;
+		var rows = holdingResults.map(function (r) {
+			return self._holdingToDisplayMention(r, holdingByKey.get(r.holdingId), known && known.holdingKey === r.holdingId);
+		});
+
+		if (known && !rows.some(function (row) { return row.mention_id === known.mention.mention_id; })) {
+			var h = holdingByKey.get(known.holdingKey);
+			if (h) {
+				var r = Object.assign({
+					id: family1870.familyId + '::' + h.familyId,
+					holdingId: h.familyId,
+					enslaverName: h.enslaverName,
+					county: h.county,
+					holdingSize: h.members.length,
+				}, matcher.match(h, family1870));
+				rows.push(this._holdingToDisplayMention(r, h, true));
+			}
+		}
+
+		rows.sort(function (a, b) {
+			if (a._knownLink !== b._knownLink) return a._knownLink ? -1 : 1;
+			return b.groupMatch.probability - a.groupMatch.probability;
+		});
+		return rows;
+	};
+	Search.prototype.SearchGroupMatch = Search.prototype.searchGroupMatch;
+
+	Search.prototype._scoreFirstName = function (mention, field, nameFreq, cfg) {
+		if (!isPresent(field.value)) return 0;
+
+		var searchNorm = upper(field.value);
+		var searchCanonical = upper(this.match.nickname(field.value));
+
+		var firstNorm = isPresent(mention.first_name) ? upper(mention.first_name) : "";
+		var normNorm = isPresent(mention.norm_first_name) ? upper(mention.norm_first_name) : "";
+		var candCanonical = (normNorm && this.match.nickname(normNorm))
+			|| (firstNorm ? upper(this.match.nickname(firstNorm)) : normNorm);
+
+		if (!firstNorm && !normNorm && !candCanonical) return 0;
+
+		var isPrefixOrStem = function (a, b) { return a && b && a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a)); };
+
+		var base = 0.0;
+		switch (field.match) {
+			case "Exact": {
+				if (searchNorm === firstNorm || searchNorm === normNorm || (searchCanonical && searchCanonical === candCanonical)) {
+					base = 1.0;
+				} else if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = 0.95;
+				}
+				break;
+			}
+			case "Fuzzy": {
+				var jw1 = firstNorm ? this.match.jaroWinkler(searchNorm, firstNorm) : 0;
+				var jw2 = normNorm ? this.match.jaroWinkler(searchNorm, normNorm) : 0;
+				var jw3 = (searchCanonical && candCanonical) ? this.match.jaroWinkler(searchCanonical, candCanonical) : 0;
+				var maxJw = Math.max(jw1, jw2, jw3);
+				if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = Math.max(maxJw, 0.95);
+				} else {
+					base = maxJw >= cfg.jwFuzzyPassThreshold ? maxJw : 0.0;
+				}
+				break;
+			}
+			case "Nickname": {
+				if (searchCanonical && candCanonical && searchCanonical === candCanonical) {
+					base = 1.0;
+				} else if (searchNorm === firstNorm || searchNorm === normNorm) {
+					base = 1.0;
+				} else if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = 0.95;
+				} else {
+					var jw = this.match.jaroWinkler(searchCanonical, candCanonical);
+					base = jw >= cfg.jwFuzzyPassThreshold ? jw * 0.9 : 0.0;
+				}
+				break;
+			}
+			default: {
+				if (searchNorm === firstNorm || searchNorm === normNorm || (searchCanonical && searchCanonical === candCanonical)) {
+					base = 1.0;
+				} else if (isPrefixOrStem(searchNorm, firstNorm) || isPrefixOrStem(searchNorm, normNorm) || isPrefixOrStem(searchCanonical, candCanonical)) {
+					base = 0.95;
+				}
+			}
+		}
+
+		if (field.rare && base > 0) {
+			var modifier = this.match.nameWeightModifier(field.value, nameFreq.firstNameFreq) / 100;
+			base = clamp(base + modifier, 0, 1);
+		}
+		return base;
+	};
+
+	Search.prototype._scoreLastName = function (mention, field, nameFreq, cfg) {
+		if (!isPresent(mention.last_name) && !isPresent(mention.full_name)) return 0;
+
+		var searchNorm = upper(field.value);
+		var candLast = upper(mention.last_name || '');
+		var candFullWords = isPresent(mention.full_name)
+			? String(mention.full_name).trim().toUpperCase().replace(/[^A-Z\s]/g, "").replace(/\s+/g, " ").split(" ").filter(Boolean)
+			: [];
+		var candFull = upper(mention.full_name || '');
+		var candNorm = candLast || candFull;
+		var fullContainsWord = function (token) { return candFullWords.includes(token); };
+
+		var isPrefixOrStem = function (a, b) { return a && b && a.length >= 2 && b.length >= 2 && (a.startsWith(b) || b.startsWith(a)); };
+
+		var base = 0.0;
+		switch (field.match) {
+			case "Exact": {
+				if (searchNorm === candLast || searchNorm === candNorm || fullContainsWord(searchNorm)) {
+					base = 1.0;
+				} else if (isPrefixOrStem(searchNorm, candLast) || isPrefixOrStem(searchNorm, candNorm)) {
+					base = 0.95;
+				} else {
+					base = 0.0;
+				}
+				break;
+			}
+			case "Fuzzy": {
+				var jw1 = candLast ? this.match.jaroWinkler(searchNorm, candLast) : 0;
+				var jw2 = candFull ? this.match.jaroWinkler(searchNorm, candFull) : 0;
+				var jw = Math.max(jw1, jw2);
+				if (isPrefixOrStem(searchNorm, candLast) || fullContainsWord(searchNorm)) {
+					base = Math.max(jw, 0.95);
+				} else {
+					base = jw >= cfg.jwFuzzyPassThreshold ? jw : 0.0;
+				}
+				break;
+			}
+			case "NYSIIS": {
+				if (isPresent(mention.nysiis_last_name)) {
+					var searchCode = this.match.getNYSIIS(field.value);
+					base = searchCode === mention.nysiis_last_name ? 0.85 : 0.0;
+				} else {
+					base = (searchNorm === candLast || fullContainsWord(searchNorm)) ? 0.85 : 0.0;
+				}
+				break;
+			}
+			case "Metaphone": {
+				if (isPresent(mention.metaphone_last_name)) {
+					base = this.match.doubleMetaphoneMatchScore(field.value, mention.metaphone_last_name);
+				} else {
+					base = (searchNorm === candLast || fullContainsWord(searchNorm)) ? 1.0 : 0.0;
+				}
+				break;
+			}
+			default:
+				base = 0;
+		}
+
+		if (field.rare && base > 0) {
+			var modifier = this.match.nameWeightModifier(field.value, nameFreq.lastNameFreq) / 100;
+			base = clamp(base + modifier, 0, 1);
+		}
+		return base;
+	};
+
+	Search.prototype._scoreBirthYear = function (mention, field, window) {
+		if (!isPresent(mention.birth_year)) return null;
+		var diff = Math.abs(Number(mention.birth_year) - Number(field.value));
+		if (window === 0) return diff === 0 ? 1.0 : 0.0;
+		var sigma = window / 2;
+		return Math.exp(-(diff * diff) / (2 * sigma * sigma));
+	};
+
+	Search.prototype._scoreDeathYear = function (mention, field, window) {
+		if (!isPresent(mention.death_year)) return null;
+		var diff = Math.abs(Number(mention.death_year) - Number(field.value));
+		if (window === 0) return diff === 0 ? 1.0 : 0.0;
+		var sigma = window / 2;
+		return Math.exp(-(diff * diff) / (2 * sigma * sigma));
+	};
+
+	Search.prototype.searchCriteria = function (mentions, search_criteria) {
+		var cfg = Object.assign({}, DEFAULT_CRITERIA_CONFIG, this.opts || {});
+		var fields = (search_criteria && search_criteria.fields) || [];
+		var maxResults = (search_criteria && search_criteria.max_results) || 80;
+
+		var self = this;
+		var formattedSearchTerms = fields
+			.filter(function (f) { return f && isPresent(f.value) && f.match !== 'Ignore' && f.value !== 'Ignore'; })
+			.map(function (f) {
+				var termName = f.term || f.field || 'field';
+				var origValue = String(f.value).trim();
+				var matchMode = f.match || f.compare || 'Exact';
+
+				var computedTerm = origValue;
+
+				if (termName === 'first_name' || termName === 'norm_first_name') {
+					if (matchMode === 'Nickname' || matchMode === 'Canonical') {
+						var nick = self.match.nickname(origValue);
+						computedTerm = nick ? String(nick).toUpperCase() : upper(origValue);
+					}
+				} else if (termName === 'last_name' || termName === 'nysiis_last_name' || termName === 'metaphone_last_name') {
+					if (matchMode === 'NYSIIS') {
+						var nysiis = self.match.getNYSIIS(origValue);
+						computedTerm = nysiis || upper(origValue);
+					} else if (matchMode === 'Metaphone') {
+						var meta = self.match.getMetaphone(origValue);
+						computedTerm = meta ? (Array.isArray(meta) ? meta.join('/') : meta) : upper(origValue);
+					}
+				} else if (termName === 'birth_year') {
+					var win = cfg.birthYearWindows[matchMode] !== undefined ? cfg.birthYearWindows[matchMode] : 0;
+					var yearNum = Number(origValue);
+					if (!isNaN(yearNum) && win > 0) {
+						computedTerm = (yearNum - win) + '-' + (yearNum + win);
+					}
+				} else if (termName === 'gender' || termName === 'norm_race') {
+					var s = origValue.toUpperCase();
+					if (s === 'MALE' || s === 'M') computedTerm = 'M';
+					else if (s === 'FEMALE' || s === 'F') computedTerm = 'F';
+					else if (s === 'BLACK' || s === 'B') computedTerm = 'B';
+					else if (s === 'WHITE' || s === 'W') computedTerm = 'W';
+					else if (s === 'MULATTO' || s === 'MUL') computedTerm = 'M';
+				}
+
+				return termName + ' is ' + origValue + ' -> ' + computedTerm + ' (' + matchMode + ')';
+			});
+
+		if (formattedSearchTerms.length > 0) {
+			var traceFn = (typeof window !== 'undefined' && typeof window.trace === 'function') ? window.trace : (typeof console !== 'undefined' && console.trace ? console.trace.bind(console) : console.log.bind(console));
+			traceFn('-------------- SEARCH TERMS ---------------\n' + formattedSearchTerms.join('\n') + '\n-------------------------------------------\n');
+		}
+
+		var sourceMatch = function (src1, src2) {
+			if (!src1 || !src2) return true;
+			var s1 = String(src1).toUpperCase().replace(/[^A-Z0-9]/g, "");
+			var s2 = String(src2).toUpperCase().replace(/[^A-Z0-9]/g, "");
+			return s1.includes(s2) || s2.includes(s1) || s1.endsWith(s2) || s2.endsWith(s1);
+		};
+
+		var candidates = (mentions || []).filter(function (m) { return sourceMatch(m.source, search_criteria.source); });
+		var isAnyTerm = Boolean(search_criteria && search_criteria.include && String(search_criteria.include).toLowerCase().includes('any'));
+
+		var normalizeVal = function (val) {
+			if (!val) return "";
+			var s = String(val).split(':')[0].trim().toUpperCase();
+			if (s === 'MALE' || s === 'M') return 'M';
+			if (s === 'FEMALE' || s === 'F') return 'F';
+			if (s === 'BLACK' || s === 'B') return 'B';
+			if (s === 'WHITE' || s === 'W') return 'W';
+			if (s === 'MULATTO' || s === 'MUL') return 'M';
+			return s;
+		};
+
+		var fieldByTerm = function (flds, term) { return (flds || []).find(function (f) { return f.term === term; }); };
+
+		var raceField = fieldByTerm(fields, "norm_race");
+		var raceActive = Boolean(raceField && isPresent(raceField.value) && raceField.match !== "Ignore" && raceField.value !== "Ignore");
+		var targetRace = raceActive ? normalizeVal(raceField.value) : null;
+
+		var genderField = fieldByTerm(fields, "gender");
+		var genderActive = Boolean(genderField && isPresent(genderField.value) && genderField.match !== "Ignore" && genderField.value !== "Ignore");
+		var targetGender = genderActive ? normalizeVal(genderField.value) : null;
+
+		var birthField = fieldByTerm(fields, "birth_year");
+		var birthActive = Boolean(birthField && birthField.match !== "Ignore" && isPresent(birthField.value));
+		var birthWindow = null;
+		if (birthActive) {
+			birthWindow = cfg.birthYearWindows[birthField.match];
+			if (birthWindow === undefined) birthWindow = 0;
+		}
+
+		var deathField = fieldByTerm(fields, "death_year");
+		var deathActive = Boolean(deathField && deathField.match !== "Ignore" && isPresent(deathField.value));
+		var deathWindow = null;
+		if (deathActive) {
+			deathWindow = cfg.birthYearWindows[deathField.match];
+			if (deathWindow === undefined) deathWindow = 0;
+		}
+
+		var firstField = fieldByTerm(fields, "first_name");
+		var firstActive = Boolean(firstField && firstField.match !== "Ignore" && isPresent(firstField.value));
+
+		var lastField = fieldByTerm(fields, "last_name");
+		var lastActive = Boolean(lastField && lastField.match !== "Ignore" && isPresent(lastField.value));
+
+		var nameFreq = this.match.buildNameFrequencies(candidates);
+
+		if (isAnyTerm) {
+			var hasAnyActive = firstActive || lastActive || birthActive || deathActive || raceActive || genderActive;
+			if (hasAnyActive) {
+				candidates = candidates.filter(function (m) {
+					if (firstActive && self._scoreFirstName(m, firstField, nameFreq, cfg) > 0) return true;
+					if (lastActive && self._scoreLastName(m, lastField, nameFreq, cfg) > 0) return true;
+					if (birthActive && isPresent(m.birth_year) && Math.abs(Number(m.birth_year) - Number(birthField.value)) <= birthWindow) return true;
+					if (deathActive && isPresent(m.death_year) && Math.abs(Number(m.death_year) - Number(deathField.value)) <= deathWindow) return true;
+					if (raceActive && isPresent(m.norm_race) && normalizeVal(m.norm_race) === targetRace) return true;
+					if (genderActive && isPresent(m.gender) && normalizeVal(m.gender) === targetGender) return true;
+					return false;
+				});
+			}
+		} else {
+			if (raceActive) {
+				candidates = candidates.filter(function (m) {
+					if (!isPresent(m.norm_race)) return true;
+					var candRace = normalizeVal(m.norm_race);
+					return !candRace || candRace === targetRace;
+				});
+			}
+			if (genderActive) {
+				candidates = candidates.filter(function (m) {
+					if (!isPresent(m.gender)) return true;
+					var candGender = normalizeVal(m.gender);
+					return !candGender || candGender === targetGender;
+				});
+			}
+			if (birthActive) {
+				candidates = candidates.filter(function (m) {
+					if (!isPresent(m.birth_year)) return true;
+					var diff = Math.abs(Number(m.birth_year) - Number(birthField.value));
+					return diff <= birthWindow;
+				});
+			}
+			if (deathActive) {
+				candidates = candidates.filter(function (m) {
+					if (!isPresent(m.death_year)) return true;
+					var diff = Math.abs(Number(m.death_year) - Number(deathField.value));
+					return diff <= deathWindow;
+				});
+			}
+		}
+
+		var famField = fieldByTerm(fields, "family_boost");
+		var isFamBoostActive = !famField || famField.match !== "Ignore";
+		var globalApp = (typeof window !== 'undefined' && window.app) || (typeof app !== 'undefined' ? app : null);
+		var activePerson = null;
+		var familyIndex = null;
+
+		if (isFamBoostActive && globalApp) {
+			if (globalApp.curTree) {
+				var treeAppState = typeof window !== 'undefined' && window.treeApp && window.treeApp.state;
+				var pid = treeAppState && treeAppState.selectedPid;
+				if (!pid && typeof globalApp.curPerson === 'number' && globalApp.curPerson >= 0 && treeAppState && treeAppState.nodes) {
+					var idxNode = treeAppState.nodes[globalApp.curPerson];
+					pid = idxNode ? idxNode.person_id : null;
+				}
+				if (pid && globalApp.curTree.persons) {
+					activePerson = Array.isArray(globalApp.curTree.persons)
+						? globalApp.curTree.persons.find(function (p) { return p.person_id === pid; })
+						: globalApp.curTree.persons[pid];
+				}
+			}
+			familyIndex = this._getFamilyIndex(globalApp.mentions);
+		}
+
+		var scored = candidates.map(function (m) {
+			var mFactors = {};
+			var levers = [];
+
+			if (firstActive) {
+				var fnScore = self._scoreFirstName(m, firstField, nameFreq, cfg);
+				levers.push(fnScore);
+				var key = "exactFirstName";
+				if (firstField.match === "Fuzzy") key = "fuzzyFirstName";
+				else if (firstField.match === "Nickname") key = "norm_first_name";
+				mFactors[key] = { value: fnScore };
+
+				if (firstField.rare && fnScore > 0) {
+					var mod = self.match.nameWeightModifier(firstField.value, nameFreq.firstNameFreq) / 100;
+					if (mod !== 0) mFactors['rarityFirstName'] = { value: mod };
+				}
+			}
+
+			if (lastActive) {
+				var lnScore = self._scoreLastName(m, lastField, nameFreq, cfg);
+				levers.push(lnScore);
+				var key = "exactLastName";
+				if (lastField.match === "Fuzzy") key = "fuzzyLastName";
+				else if (lastField.match === "NYSIIS") key = "exactNysiisLast";
+				else if (lastField.match === "Metaphone") key = "exactSoundexLast";
+				mFactors[key] = { value: lnScore };
+
+				if (lastField.rare && lnScore > 0) {
+					var mod = self.match.nameWeightModifier(lastField.value, nameFreq.lastNameFreq) / 100;
+					if (mod !== 0) mFactors['rarityLastName'] = { value: mod };
+				}
+			}
+
+			if (birthActive) {
+				var byScore = self._scoreBirthYear(m, birthField, birthWindow);
+				levers.push(byScore);
+				if (byScore !== null) mFactors['birthYear'] = { value: byScore };
+			}
+
+			if (deathActive) {
+				var dyScore = self._scoreDeathYear(m, deathField, deathWindow);
+				levers.push(dyScore);
+				if (dyScore !== null) mFactors['deathYear'] = { value: dyScore };
+			}
+
+			var hasBaselineMatch = true;
+			if (firstActive) {
+				var fnScore = mFactors['exactFirstName'] ? mFactors['exactFirstName'].value : (mFactors['fuzzyFirstName'] ? mFactors['fuzzyFirstName'].value : (mFactors['norm_first_name'] ? mFactors['norm_first_name'].value : 0));
+				if (fnScore <= 0) hasBaselineMatch = false;
+			}
+			if (lastActive) {
+				var lnScore = mFactors['exactLastName'] ? mFactors['exactLastName'].value : (mFactors['fuzzyLastName'] ? mFactors['fuzzyLastName'].value : (mFactors['exactNysiisLast'] ? mFactors['exactNysiisLast'].value : (mFactors['exactSoundexLast'] ? mFactors['exactSoundexLast'].value : 0)));
+				if (lnScore <= 0) hasBaselineMatch = false;
+			}
+
+			var candFamId = (m.household_id !== null && m.household_id !== undefined && String(m.household_id).trim() !== '') ? m.household_id : m.family_id;
+			if (hasBaselineMatch && isFamBoostActive && candFamId && activePerson) {
+				var fRes = self._calculateFamilyBoost(activePerson, m, familyIndex);
+				if (fRes && fRes.value > 0) {
+					mFactors['familyBoost'] = { value: fRes.value, matches: fRes.matches };
+				}
+			}
+
+			if (levers.length === 0 && !mFactors['familyBoost']) {
+				return { mention: m, rawScore: 0.5, matchStrength: 0.5, factors: mFactors };
+			}
+
+			var present = levers.filter(function (v) { return v !== null; });
+			var total = present.length
+				? (present.reduce(function (a, b) { return a + b; }, 0) / present.length) * levers.length
+				: 0;
+			if (mFactors['familyBoost']) {
+				total += mFactors['familyBoost'].value;
+			}
+			var rawScore = Math.max(0, total);
+			var matchStrength = clamp(total / levers.length, 0, 1);
+			return { mention: m, rawScore: rawScore, matchStrength: matchStrength, factors: mFactors };
+		});
+
+		var temp = cfg.softmaxTemperature || 1.0;
+		var exps = scored.map(function (s) { return Math.exp(s.rawScore / temp); });
+		var sumExp = exps.reduce(function (a, b) { return a + b; }, 0) || 1;
+
+		var results = scored.map(function (s, i) {
+			return Object.assign({}, s.mention, {
+				score: s.rawScore,
+				_score: s.rawScore,
+				_probability: exps[i] / sumExp,
+				_matchStrength: s.matchStrength,
+				factors: s.factors,
+				_factors: s.factors
+			});
+		});
+
+		results.sort(function (a, b) { return b._probability - a._probability; });
+		return results.slice(0, maxResults);
+	};
+	Search.prototype.Search = Search.prototype.searchCriteria;
 
 	// =======================================================================
 	// EXPORT

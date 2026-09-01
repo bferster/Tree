@@ -1163,21 +1163,20 @@ class PersonEditor {
 		$searchBtn.on('click', function () {
 			const search_criteria = PersonEditor.buildSearchCriteriaFromState(person, state);
 			const mentionsArray = (window.app && window.app.mentions) ? window.app.mentions : [];
-			if (window.app && !window.app.score && window.Score) new window.Score();
+			let searchObj = (window.app && window.app.search) ? window.app.search : null;
+			if (!searchObj && typeof Search !== 'undefined') {
+				searchObj = new Search({
+					mentions: mentionsArray,
+					assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
+					match: (window.app && window.app.match) ? window.app.match : null
+				});
+				if (window.app) window.app.search = searchObj;
+			}
 
 			const includeMode = String(state.include || search_criteria.include || '').toLowerCase();
 			let results;
 
 			if (includeMode === 'scan') {
-				let searchObj = (window.app && window.app.search) ? window.app.search : null;
-				if (!searchObj && typeof Search !== 'undefined') {
-					searchObj = new Search({
-						mentions: mentionsArray,
-						assertions: (window.app && window.app.assertions) ? window.app.assertions : [],
-						match: (window.app && window.app.match) ? window.app.match : null
-					});
-					if (window.app) window.app.search = searchObj;
-				}
 
 				if (searchObj && typeof searchObj.scan === 'function') {
 					const curTree = (window.app && window.app.curTree) ? window.app.curTree : { persons: [], relationships: [] };
@@ -1343,13 +1342,14 @@ class PersonEditor {
 				// buries the correct household under name-mismatch penalties. Use the
 				// GroupMatcher family-vs-holding algorithm instead (see GroupMatch.md)
 				// when we have a real tree person to build an 1870 family group from.
-				const scoreObj = window.app.score;
-				const isSlaveSchedule = scoreObj && typeof scoreObj.isSlaveScheduleSource === 'function' && scoreObj.isSlaveScheduleSource(search_criteria.source);
-				if (isSlaveSchedule && person && person.person_id !== -1 && typeof scoreObj.SearchGroupMatch === 'function') {
+				const isSlaveSchedule = searchObj && typeof searchObj.isSlaveScheduleSource === 'function' && searchObj.isSlaveScheduleSource(search_criteria.source);
+				if (isSlaveSchedule && person && person.person_id !== -1 && searchObj && typeof searchObj.searchGroupMatch === 'function') {
 					const sourceTag = String(search_criteria.source).toUpperCase().includes('1850') ? 'SS-1850' : 'SS-1860';
-					results = scoreObj.SearchGroupMatch(mentionsArray, person, sourceTag);
+					results = searchObj.searchGroupMatch(mentionsArray, person, sourceTag);
+				} else if (searchObj && typeof searchObj.searchCriteria === 'function') {
+					results = searchObj.searchCriteria(mentionsArray, search_criteria);
 				} else {
-					results = scoreObj.Search(mentionsArray, search_criteria);
+					results = [];
 				}
 			}
 
